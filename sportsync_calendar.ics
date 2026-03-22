@@ -1,0 +1,30 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//SportSync//SportSync Calendar//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:sportsync-event-0@sportsync.com
+SUMMARY:test sportsync hoy - Jornada 7
+DTSTART:20261012T190000Z
+DTEND:20261012T210000Z
+DESCRIPTION:Venue: Santiago Bernabéu | Competition: laliga
+LOCATION:Santiago Bernabéu
+END:VEVENT
+BEGIN:VEVENT
+UID:sportsync-event-1@sportsync.com
+SUMMARY:Atletico Madrid vs Sevilla - Jornada 7
+DTSTART:20261012T173000Z
+DTEND:20261012T193000Z
+DESCRIPTION:Venue: Metropolitano | Competition: laliga
+LOCATION:Metropolitano
+END:VEVENT
+BEGIN:VEVENT
+UID:sportsync-event-2@sportsync.com
+SUMMARY:Valencia vs Real Sociedad - Jornada 7
+DTSTART:20261013T200000Z
+DTEND:20261013T220000Z
+DESCRIPTION:Venue: Mestalla | Competition: laliga
+LOCATION:Mestalla
+END:VEVENT
+END:VCALENDAR

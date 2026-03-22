@@ -1,0 +1,30 @@
+[
+  {
+    "id": 10,
+    "sport": "football",
+    "slug": "laliga",
+    "name": "La Liga",
+    "season": "2025-2026"
+  },
+  {
+    "id": 11,
+    "sport": "football",
+    "slug": "champions",
+    "name": "UEFA Champions League",
+    "season": "2025-2026"
+  },
+  {
+    "id": 12,
+    "sport": "f1",
+    "slug": "f1-2026",
+    "name": "Formula 1 World Championship",
+    "season": "2026"
+  },
+  {
+    "id": 13,
+    "sport": "tennis",
+    "slug": "atp",
+    "name": "ATP Tour",
+    "season": "2026"
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "name": "sportsync",
+  "version": "1.0.0",
+  "description": "",
+  "main": "generate_calendar.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js",
+    "build-calendar": "node generate_calendar.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}

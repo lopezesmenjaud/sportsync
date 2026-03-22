@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "slug": "football",
+    "name": "Fútbol"
+  },
+  {
+    "id": 2,
+    "slug": "f1",
+    "name": "Formula 1"
+  },
+  {
+    "id": 3,
+    "slug": "tennis",
+    "name": "Tenis"
+  }
+]
