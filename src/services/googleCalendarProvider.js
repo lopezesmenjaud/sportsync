@@ -1,13 +1,25 @@
 const { google } = require("googleapis");
+const fs = require("fs");
+const path = require("path");
 const { googleAccountRepository } = require("../repositories/googleAccountRepositorySqlite");
 
-// Lee credenciales OAuth una sola vez
-const credentials = require("../config/google-oauth.json");
-const { client_id, client_secret, redirect_uris } = credentials.web;
+// Lee credenciales OAuth: archivo local o variables de entorno
+let client_id, client_secret, redirect_uri;
+const credentialsPath = path.join(__dirname, "../config/google-oauth.json");
+if (fs.existsSync(credentialsPath)) {
+  const credentials = JSON.parse(fs.readFileSync(credentialsPath, "utf8"));
+  client_id = credentials.web.client_id;
+  client_secret = credentials.web.client_secret;
+  redirect_uri = credentials.web.redirect_uris[0];
+} else {
+  client_id = process.env.GOOGLE_CLIENT_ID;
+  client_secret = process.env.GOOGLE_CLIENT_SECRET;
+  redirect_uri = process.env.GOOGLE_REDIRECT_URI;
+}
 
 // Crea un OAuth2Client dedicado por usuario (evita race conditions)
 function createOAuth2Client() {
-  return new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
+  return new google.auth.OAuth2(client_id, client_secret, redirect_uri);
 }
 
 async function getCalendarClientForUser(userId) {
