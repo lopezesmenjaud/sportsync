@@ -1,6 +1,8 @@
 const Database = require("better-sqlite3");
 const path = require("path");
-const dbPath = path.resolve(__dirname, "../../sportsync.db");
+const dbPath = process.env.NODE_ENV === 'production'
+  ? '/var/data/sportsync.db'
+  : path.resolve(__dirname, "../../sportsync.db");
 const betterDb = new Database(dbPath);
 
 // Enable WAL mode for better concurrent performance
