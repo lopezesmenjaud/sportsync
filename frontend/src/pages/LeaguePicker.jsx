@@ -237,7 +237,7 @@ export default function LeaguePicker() {
       await fetch(`${API_BASE}/subscriptions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: userId, sport, competitionKey: league.id, teamName: null })
+        body: JSON.stringify({ userId: userId, sport, competitionKey: league.id, competitionName: league.name, teamName: null })
       })
       setSubscribedIds(prev => [...prev, league.id])
     } catch (e) { console.error(e) }
@@ -251,7 +251,7 @@ export default function LeaguePicker() {
       await fetch(`${API_BASE}/subscriptions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: userId, sport, competitionKey: `national_${nationalMode}`, teamName: selectedCountry.name })
+        body: JSON.stringify({ userId: userId, sport, competitionKey: `national_${nationalMode}`, competitionName: `Selección ${selectedCountry.name}`, teamName: selectedCountry.name })
       })
       setSubscribedNational(prev => [...prev, selectedCountry.name])
       setSelectedCountry(null); setNationalMode(null); setCountrySearch('')
