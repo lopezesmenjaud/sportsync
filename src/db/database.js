@@ -1,7 +1,53 @@
-const sqlite3 = require("sqlite3").verbose();
+const Database = require("better-sqlite3");
 const path = require("path");
 const dbPath = path.resolve(__dirname, "../../sportsync.db");
-const db = new sqlite3.Database(dbPath);
+const betterDb = new Database(dbPath);
+
+// Enable WAL mode for better concurrent performance
+betterDb.pragma("journal_mode = WAL");
+
+// Compatibility layer: emulate sqlite3's callback API so repositories & server.js work unchanged
+const db = {
+  run(sql, params, callback) {
+    if (typeof params === "function") { callback = params; params = []; }
+    try {
+      const stmt = betterDb.prepare(sql);
+      const result = stmt.run(...(Array.isArray(params) ? params : []));
+      if (callback) callback.call({ lastID: result.lastInsertRowid, changes: result.changes }, null);
+    } catch (err) {
+      if (callback) callback.call({}, err);
+      else throw err;
+    }
+  },
+
+  get(sql, params, callback) {
+    if (typeof params === "function") { callback = params; params = []; }
+    try {
+      const stmt = betterDb.prepare(sql);
+      const row = stmt.get(...(Array.isArray(params) ? params : []));
+      if (callback) callback(null, row || undefined);
+    } catch (err) {
+      if (callback) callback(err);
+      else throw err;
+    }
+  },
+
+  all(sql, params, callback) {
+    if (typeof params === "function") { callback = params; params = []; }
+    try {
+      const stmt = betterDb.prepare(sql);
+      const rows = stmt.all(...(Array.isArray(params) ? params : []));
+      if (callback) callback(null, rows);
+    } catch (err) {
+      if (callback) callback(err);
+      else throw err;
+    }
+  },
+
+  close() {
+    betterDb.close();
+  }
+};
 
 function runAsync(sql, params = []) {
   return new Promise((resolve, reject) => {
@@ -13,14 +59,15 @@ function runAsync(sql, params = []) {
 }
 
 async function addColumnIfNotExists(table, column, definition) {
-  return new Promise((resolve) => {
-    db.all(`PRAGMA table_info(${table})`, (err, rows) => {
-      if (err || !rows) return resolve();
-      const exists = rows.some(r => r.name === column);
-      if (exists) return resolve();
-      db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`, () => resolve());
-    });
-  });
+  try {
+    const rows = betterDb.prepare(`PRAGMA table_info(${table})`).all();
+    const exists = rows.some(r => r.name === column);
+    if (!exists) {
+      betterDb.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
+    }
+  } catch (err) {
+    // ignore errors silently
+  }
 }
 
 let initializationPromise = null;
@@ -29,7 +76,7 @@ async function initializeDatabase() {
   if (initializationPromise) return initializationPromise;
 
   initializationPromise = (async () => {
-    console.log("✅ Connected to SQLite database");
+    console.log("✅ Connected to SQLite database (better-sqlite3)");
 
     await runAsync(`
       CREATE TABLE IF NOT EXISTS matches (
@@ -121,7 +168,6 @@ async function initializeDatabase() {
     `);
     console.log("✅ Google accounts table ready");
 
-    // Nueva tabla: caché de broadcasting por competición + país
     await runAsync(`
       CREATE TABLE IF NOT EXISTS broadcasting_cache (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
