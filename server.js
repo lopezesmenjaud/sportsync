@@ -263,7 +263,8 @@ function getOriginInfo(req) {
   const isLan = host !== "localhost" && host !== "127.0.0.1";
   const backendBase = isLan ? `http://${host}:${PORT}` : `http://localhost:${PORT}`;
   const frontendBase = process.env.FRONTEND_URL || (isLan ? `http://${host}:5173` : "http://localhost:5173");
-  return { backendBase, frontendBase, redirectUri: `${backendBase}/auth/google/callback` };
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${backendBase}/auth/google/callback`;
+  return { backendBase, frontendBase, redirectUri };
 }
 
 app.get("/auth/google", (req, res) => {
