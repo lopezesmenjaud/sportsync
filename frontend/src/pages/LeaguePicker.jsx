@@ -23,33 +23,33 @@ const LEAGUES_BY_SPORT = {
       id: 'europa_ligas',
       title: 'Europa — Ligas nacionales',
       leagues: [
-        { id: '4335', name: 'La Liga',          country: 'España',     type: 'league' },
+        { id: '4335', name: 'La Liga',          apiName: 'Spanish La Liga',          country: 'España',     type: 'league' },
         { id: '4400', name: 'Segunda División',  apiName: 'Spanish La Liga 2',  country: 'España',     type: 'league' },
-        { id: '4483', name: 'Copa del Rey',      country: 'España',     type: 'cup'    },
-        { id: '4328', name: 'Premier League',    country: 'Inglaterra', type: 'league' },
-        { id: '4329', name: 'Championship',      country: 'Inglaterra', type: 'league' },
-        { id: '4482', name: 'FA Cup',            country: 'Inglaterra', type: 'cup'    },
-        { id: '4331', name: 'Bundesliga',        country: 'Alemania',   type: 'league' },
+        { id: '4483', name: 'Copa del Rey',      apiName: 'Copa del Rey',             country: 'España',     type: 'cup'    },
+        { id: '4328', name: 'Premier League',    apiName: 'English Premier League',   country: 'Inglaterra', type: 'league' },
+        { id: '4329', name: 'Championship',      apiName: 'English League Championship', country: 'Inglaterra', type: 'league' },
+        { id: '4482', name: 'FA Cup',            apiName: 'English FA Cup',           country: 'Inglaterra', type: 'cup'    },
+        { id: '4331', name: 'Bundesliga',        apiName: 'German Bundesliga',        country: 'Alemania',   type: 'league' },
         { id: '4399', name: '2. Bundesliga',     apiName: 'German 2. Bundesliga',  country: 'Alemania',   type: 'league' },
-        { id: '4485', name: 'DFB Pokal',         country: 'Alemania',   type: 'cup'    },
-        { id: '4332', name: 'Serie A',           country: 'Italia',     type: 'league' },
+        { id: '4485', name: 'DFB Pokal',         apiName: 'German DFB-Pokal',         country: 'Alemania',   type: 'cup'    },
+        { id: '4332', name: 'Serie A',           apiName: 'Italian Serie A',          country: 'Italia',     type: 'league' },
         { id: '4394', name: 'Serie B',           apiName: 'Italian Serie B',  country: 'Italia',     type: 'league' },
-        { id: '4506', name: 'Coppa Italia',      country: 'Italia',     type: 'cup'    },
-        { id: '4334', name: 'Ligue 1',           country: 'Francia',    type: 'league' },
+        { id: '4506', name: 'Coppa Italia',      apiName: 'Italian Coppa Italia',     country: 'Italia',     type: 'cup'    },
+        { id: '4334', name: 'Ligue 1',           apiName: 'French Ligue 1',           country: 'Francia',    type: 'league' },
         { id: '4401', name: 'Ligue 2',           apiName: 'French Ligue 2',  country: 'Francia',    type: 'league' },
-        { id: '4484', name: 'Coupe de France',   country: 'Francia',    type: 'cup'    },
-        { id: '4344', name: 'Primeira Liga',     country: 'Portugal',   type: 'league' },
+        { id: '4484', name: 'Coupe de France',   apiName: 'French Coupe de France',   country: 'Francia',    type: 'cup'    },
+        { id: '4344', name: 'Primeira Liga',     apiName: 'Portuguese Primeira Liga', country: 'Portugal',   type: 'league' },
         { id: '4662', name: 'Liga Portugal 2',   apiName: 'Portuguese LigaPro',  country: 'Portugal',   type: 'league' },
-        { id: '4510', name: 'Taça de Portugal',  country: 'Portugal',   type: 'cup'    },
+        { id: '4510', name: 'Taça de Portugal',  apiName: 'Portuguese Taca de Portugal', country: 'Portugal',   type: 'cup'    },
       ]
     },
     {
       id: 'europa_continental',
       title: 'Europa — Competiciones continentales',
       leagues: [
-        { id: '4480', name: 'Champions League',  country: 'Europa', type: 'cup' },
-        { id: '4481', name: 'Europa League',     country: 'Europa', type: 'cup' },
-        { id: '5071', name: 'Conference League', country: 'Europa', type: 'cup' },
+        { id: '4480', name: 'Champions League',  apiName: 'UEFA Champions League',       country: 'Europa', type: 'cup' },
+        { id: '4481', name: 'Europa League',     apiName: 'UEFA Europa League',          country: 'Europa', type: 'cup' },
+        { id: '5071', name: 'Conference League', apiName: 'UEFA Europa Conference League', country: 'Europa', type: 'cup' },
       ]
     },
     {
@@ -79,7 +79,7 @@ const LEAGUES_BY_SPORT = {
       id: 'latam_segunda',
       title: 'América Latina — Segunda División',
       leagues: [
-        { id: '4654', name: 'Expansión MX',     country: 'México',    type: 'cup'    },
+        { id: '4654', name: 'Expansión MX',     apiName: 'Mexican Liga de Expansion MX', country: 'México',    type: 'cup'    },
         { id: '4616', name: 'Primera Nacional', apiName: 'Argentinian Primera B Nacional', country: 'Argentina', type: 'league' },
         { id: '4404', name: 'Série B',          apiName: 'Brazilian Serie B',              country: 'Brasil',    type: 'league' },
         { id: '4951', name: 'Primera B',        apiName: 'Colombian Categoría Primera B',  country: 'Colombia',  type: 'league' },
@@ -93,9 +93,9 @@ const LEAGUES_BY_SPORT = {
       id: 'americas_continental',
       title: 'Américas — Competiciones continentales',
       leagues: [
-        { id: '4501', name: 'Copa Libertadores',      country: 'CONMEBOL', type: 'cup' },
-        { id: '4724', name: 'Copa Sudamericana',      country: 'CONMEBOL', type: 'cup' },
-        { id: '4721', name: 'CONCACAF Champions Cup', country: 'CONCACAF', type: 'cup' },
+        { id: '4501', name: 'Copa Libertadores',      apiName: 'CONMEBOL Libertadores',       country: 'CONMEBOL', type: 'cup' },
+        { id: '4724', name: 'Copa Sudamericana',      apiName: 'CONMEBOL Sudamericana',       country: 'CONMEBOL', type: 'cup' },
+        { id: '4721', name: 'CONCACAF Champions Cup', apiName: 'CONCACAF Champions League',    country: 'CONCACAF', type: 'cup' },
       ]
     },
     {
@@ -107,9 +107,9 @@ const LEAGUES_BY_SPORT = {
   ],
   basketball: [
     { id: 'basket_americas', title: 'Américas', leagues: [
-      { id: '4387', name: 'NBA',           country: 'Estados Unidos', type: 'league' },
-      { id: '4516', name: 'WNBA',          country: 'Estados Unidos', type: 'league' },
-      { id: '4607', name: 'NCAA',          country: 'Estados Unidos', type: 'cup'    },
+      { id: '4387', name: 'NBA',           apiName: 'NBA',  country: 'Estados Unidos', type: 'league' },
+      { id: '4516', name: 'WNBA',          apiName: 'WNBA', country: 'Estados Unidos', type: 'league' },
+      { id: '4607', name: 'NCAA',          apiName: 'NCAA Men\'s Basketball', country: 'Estados Unidos', type: 'cup'    },
       { id: '4434', name: 'NBL Australia', apiName: 'Australian NBL', country: 'Australia', type: 'league' },
     ]},
     { id: 'basket_europa', title: 'Europa', leagues: [
@@ -119,9 +119,9 @@ const LEAGUES_BY_SPORT = {
   ],
   futbol_americano: [
     { id: 'americano_all', title: 'Ligas', leagues: [
-      { id: '4391', name: 'NFL',           country: 'Estados Unidos', type: 'league' },
-      { id: '4479', name: 'NCAA Football', country: 'Estados Unidos', type: 'cup'    },
-      { id: '4405', name: 'CFL',           country: 'Canadá',         type: 'league' },
+      { id: '4391', name: 'NFL',           apiName: 'NFL',              country: 'Estados Unidos', type: 'league' },
+      { id: '4479', name: 'NCAA Football', apiName: 'NCAA Football',   country: 'Estados Unidos', type: 'cup'    },
+      { id: '4405', name: 'CFL',           apiName: 'CFL',             country: 'Canadá',         type: 'league' },
     ]},
   ],
   automovilismo: [
@@ -129,44 +129,44 @@ const LEAGUES_BY_SPORT = {
       { id: '4370', name: 'Fórmula 1',  apiName: 'Formula 1',        country: 'Internacional',  type: 'cup' },
       { id: '4373', name: 'IndyCar',    apiName: 'IndyCar Series',   country: 'Estados Unidos', type: 'cup' },
       { id: '4393', name: 'NASCAR',     apiName: 'NASCAR Cup Series',country: 'Estados Unidos', type: 'cup' },
-      { id: '4407', name: 'MotoGP',     country: 'Internacional',  type: 'cup' },
-      { id: '4409', name: 'WRC',        country: 'Internacional',  type: 'cup' },
+      { id: '4407', name: 'MotoGP',     apiName: 'MotoGP',         country: 'Internacional',  type: 'cup' },
+      { id: '4409', name: 'WRC',        apiName: 'World Rally Championship', country: 'Internacional',  type: 'cup' },
     ]},
   ],
   baseball: [
     { id: 'baseball_all', title: 'Ligas', leagues: [
-      { id: '4424', name: 'MLB',           country: 'Estados Unidos', type: 'league' },
+      { id: '4424', name: 'MLB',           apiName: 'MLB',  country: 'Estados Unidos', type: 'league' },
       { id: '5064', name: 'Liga Mexicana', apiName: 'Liga Mexicana de Beisbol', country: 'México', type: 'league' },
-      { id: '4591', name: 'NPB',           country: 'Japón',          type: 'cup'    },
+      { id: '4591', name: 'NPB',           apiName: 'Japanese Nippon Baseball', country: 'Japón',          type: 'cup'    },
     ]},
   ],
   tenis: [
     { id: 'tenis_all', title: 'Circuitos', leagues: [
       { id: '4464', name: 'ATP Tour', apiName: 'ATP World Tour', country: 'Internacional', type: 'league' },
-      { id: '4517', name: 'WTA Tour', country: 'Internacional', type: 'league' },
+      { id: '4517', name: 'WTA Tour', apiName: 'WTA Tour', country: 'Internacional', type: 'league' },
     ]},
   ],
   combate: [
     { id: 'combate_all', title: 'Organizaciones', leagues: [
-      { id: '4443', name: 'UFC',   country: 'Internacional', type: 'cup' },
+      { id: '4443', name: 'UFC',   apiName: 'UFC', country: 'Internacional', type: 'cup' },
       { id: '4445', name: 'Boxeo', apiName: 'Boxing', country: 'Internacional', type: 'cup' },
     ]},
   ],
   rugby: [
     { id: 'rugby_all', title: 'Competiciones', leagues: [
       { id: '4714', name: 'Six Nations',     apiName: 'Six Nations Championship', country: 'Europa',        type: 'cup' },
-      { id: '4574', name: 'Rugby World Cup', country: 'Internacional', type: 'cup' },
+      { id: '4574', name: 'Rugby World Cup', apiName: 'Rugby World Cup', country: 'Internacional', type: 'cup' },
     ]},
   ],
   hockey: [
     { id: 'hockey_all', title: 'Ligas', leagues: [
-      { id: '4380', name: 'NHL', country: 'Estados Unidos / Canadá', type: 'league' },
-      { id: '4920', name: 'KHL', country: 'Rusia',                   type: 'cup'    },
+      { id: '4380', name: 'NHL', apiName: 'NHL', country: 'Estados Unidos / Canadá', type: 'league' },
+      { id: '4920', name: 'KHL', apiName: 'KHL', country: 'Rusia',                   type: 'cup'    },
     ]},
   ],
   voleibol: [
     { id: 'voleibol_all', title: 'Ligas y competiciones', leagues: [
-      { id: '5083', name: 'FIVB Nations League', country: 'Internacional', type: 'cup'    },
+      { id: '5083', name: 'FIVB Nations League', apiName: 'FIVB Volleyball Nations League', country: 'Internacional', type: 'cup'    },
       { id: '4544', name: 'Lega Volley',         apiName: 'Italian Volleyball League', country: 'Italia', type: 'league' },
     ]},
   ],
