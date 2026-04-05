@@ -3,5 +3,7 @@ node_modules/
 .env
 token.json
 sportsync.db
+sportsync.db-shm
+sportsync.db-wal
 .claude/
 frontend/dist/
