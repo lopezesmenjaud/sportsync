@@ -20,7 +20,14 @@ const PORT = process.env.PORT || 3000;
 const SPORTSDB_KEY = process.env.THE_SPORTS_DB_API_KEY || process.env.SPORTSDB_API_KEY || "123";
 
 app.use(cors({
-  origin: ["http://localhost:5173", "http://192.168.1.101:5173"],
+  origin: [
+    "http://localhost:5173",
+    "http://192.168.1.101:5173",
+    "https://fanschedule.vercel.app",
+    "https://fanschedule.com",
+    "https://www.fanschedule.com"
+  ],
+  credentials: true
 }));
 app.use(express.json());
 
