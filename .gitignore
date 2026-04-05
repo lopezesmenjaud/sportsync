@@ -1,0 +1,7 @@
+src/config/google-oauth.json
+node_modules/
+.env
+token.json
+sportsync.db
+.claude/
+frontend/dist/
