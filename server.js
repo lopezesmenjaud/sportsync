@@ -493,7 +493,7 @@ app.get("/api/teams/:leagueId", async (req, res) => {
       }
     }
 
-    // Intento 2: buscar por ID (funciona bien con key premium)
+    // Intento 2: buscar por ID
     if (teams.length === 0) {
       const url  = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/lookup_all_teams.php?id=${leagueId}`;
       const data = await safeFetchJson(url);
@@ -504,12 +504,14 @@ app.get("/api/teams/:leagueId", async (req, res) => {
           country: t.strCountry || "", badge: t.strBadge || null
         }));
         console.log(`[teams] Found ${teams.length} teams by ID: ${leagueId}`);
+      } else {
+        console.log(`[teams] Intento 2 failed for ID ${leagueId} (data=${data === null ? 'null/HTML' : 'empty'})`);
       }
     }
 
     // Intento 3: buscar por nombre con prefijo del país (ej: "Spanish La Liga")
     if (teams.length === 0 && leagueName) {
-      const prefixes = ["Spanish ", "English ", "Italian ", "German ", "French ", "Mexican "];
+      const prefixes = ["Spanish ", "English ", "Italian ", "German ", "French ", "Mexican ", "American ", "Brazilian ", "Portuguese ", "Dutch ", "Belgian ", "Scottish ", "Turkish ", "Japanese ", "Australian "];
       for (const prefix of prefixes) {
         const url  = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/search_all_teams.php?l=${encodeURIComponent(prefix + leagueName)}`;
         const data = await safeFetchJson(url);
