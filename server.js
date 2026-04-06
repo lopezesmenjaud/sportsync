@@ -1044,6 +1044,25 @@ app.post("/subscriptions/sync", async (req, res) => {
   }
 });
 
+app.get("/debug/status", async (req, res) => {
+  try {
+    const matchCount = await new Promise((resolve, reject) => {
+      db.get("SELECT COUNT(*) as count FROM matches", [], (err, row) => {
+        if (err) reject(err); else resolve(row?.count || 0);
+      });
+    });
+    const subs = await new Promise((resolve, reject) => {
+      db.all("SELECT * FROM subscriptions LIMIT 10", [], (err, rows) => {
+        if (err) reject(err); else resolve(rows);
+      });
+    });
+    const dbPath = process.env.NODE_ENV === 'production' ? '/var/data/sportsync.db' : 'local';
+    res.json({ dbPath, matchCount, subscriptions: subs });
+  } catch(e) {
+    res.json({ error: e.message });
+  }
+});
+
 app.get("/matches/:userId", async (req, res) => {
   try {
     const { userId }      = req.params;
