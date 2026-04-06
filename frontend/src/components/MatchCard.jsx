@@ -49,6 +49,7 @@ export default function MatchCard({ match, showDate = true }) {
   const startDate    = new Date(match.currentStartUtc)
   const timeStr      = startDate.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })
   const dateStr      = startDate.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Mexico_City' })
+  const isTeamVsTeam = match.homeParticipantName && match.awayParticipantName
   const homeInitials = match.homeParticipantName?.split(' ').map(w => w[0]).join('').slice(0, 3) || '?'
   const awayInitials = match.awayParticipantName?.split(' ').map(w => w[0]).join('').slice(0, 3) || '?'
 
@@ -65,22 +66,30 @@ export default function MatchCard({ match, showDate = true }) {
         </span>
       </div>
 
-      {/* Equipos */}
-      <div style={{ padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flex: 1 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 12, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, color: '#374151' }}>
-            {homeInitials}
+      {/* Equipos o nombre de evento */}
+      {isTeamVsTeam ? (
+        <div style={{ padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flex: 1 }}>
+            <div style={{ width: 48, height: 48, borderRadius: 12, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, color: '#374151' }}>
+              {homeInitials}
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: '#111827', textAlign: 'center' }}>{match.homeParticipantName}</div>
           </div>
-          <div style={{ fontSize: 14, fontWeight: 500, color: '#111827', textAlign: 'center' }}>{match.homeParticipantName}</div>
-        </div>
-        <div style={{ padding: '0 16px', fontSize: 20, fontWeight: 500, color: '#d1d5db' }}>vs</div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flex: 1 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 12, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, color: '#374151' }}>
-            {awayInitials}
+          <div style={{ padding: '0 16px', fontSize: 20, fontWeight: 500, color: '#d1d5db' }}>vs</div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flex: 1 }}>
+            <div style={{ width: 48, height: 48, borderRadius: 12, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, color: '#374151' }}>
+              {awayInitials}
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: '#111827', textAlign: 'center' }}>{match.awayParticipantName}</div>
           </div>
-          <div style={{ fontSize: 14, fontWeight: 500, color: '#111827', textAlign: 'center' }}>{match.awayParticipantName}</div>
         </div>
-      </div>
+      ) : (
+        <div style={{ padding: '24px 20px', textAlign: 'center' }}>
+          <div style={{ fontSize: 16, fontWeight: 500, color: '#111827', lineHeight: 1.4 }}>
+            {match.eventName || match.competitionName}
+          </div>
+        </div>
+      )}
 
       {/* Estadio */}
       {match.venueName && (

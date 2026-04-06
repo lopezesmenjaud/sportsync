@@ -850,6 +850,7 @@ app.post("/api/nearby", async (req, res) => {
         sport: normalizeSportName(e.strSport),
         competitionKey: e.idLeague || "unknown",
         competitionName: e.strLeague || "Unknown",
+        eventName: e.strEvent || null,
         homeParticipantName: e.strHomeTeam || null,
         awayParticipantName: e.strAwayTeam || null,
         scheduledStartUtc,

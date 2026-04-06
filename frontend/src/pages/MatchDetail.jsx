@@ -63,6 +63,7 @@ export default function MatchDetail() {
   const startDate = new Date(match.currentStartUtc)
   const timeStr = startDate.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })
   const dateStr = startDate.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Mexico_City' })
+  const isTeamVsTeam = match.homeParticipantName && match.awayParticipantName
   const homeInitials = match.homeParticipantName?.split(' ').map(w => w[0]).join('').slice(0, 3) || '?'
   const awayInitials = match.awayParticipantName?.split(' ').map(w => w[0]).join('').slice(0, 3) || '?'
 
@@ -88,22 +89,30 @@ export default function MatchDetail() {
             </span>
           </div>
 
-          {/* VS */}
-          <div style={{ padding: '32px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flex: 1 }}>
-              <div style={{ width: 64, height: 64, borderRadius: 16, background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 500, color: '#666666' }}>
-                {homeInitials}
+          {/* VS o nombre de evento */}
+          {isTeamVsTeam ? (
+            <div style={{ padding: '32px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flex: 1 }}>
+                <div style={{ width: 64, height: 64, borderRadius: 16, background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 500, color: '#666666' }}>
+                  {homeInitials}
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 500, color: '#1C2430', textAlign: 'center' }}>{match.homeParticipantName}</div>
               </div>
-              <div style={{ fontSize: 16, fontWeight: 500, color: '#1C2430', textAlign: 'center' }}>{match.homeParticipantName}</div>
-            </div>
-            <div style={{ padding: '0 20px', fontSize: 24, fontWeight: 600, color: '#d1d5db' }}>vs</div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flex: 1 }}>
-              <div style={{ width: 64, height: 64, borderRadius: 16, background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 500, color: '#666666' }}>
-                {awayInitials}
+              <div style={{ padding: '0 20px', fontSize: 24, fontWeight: 600, color: '#d1d5db' }}>vs</div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flex: 1 }}>
+                <div style={{ width: 64, height: 64, borderRadius: 16, background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 500, color: '#666666' }}>
+                  {awayInitials}
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 500, color: '#1C2430', textAlign: 'center' }}>{match.awayParticipantName}</div>
               </div>
-              <div style={{ fontSize: 16, fontWeight: 500, color: '#1C2430', textAlign: 'center' }}>{match.awayParticipantName}</div>
             </div>
-          </div>
+          ) : (
+            <div style={{ padding: '32px 24px', textAlign: 'center' }}>
+              <div style={{ fontSize: 20, fontWeight: 500, color: '#1C2430', lineHeight: 1.4 }}>
+                {match.eventName || match.competitionName}
+              </div>
+            </div>
+          )}
 
           {/* Estadio */}
           {(match.venueName || match.city) && (

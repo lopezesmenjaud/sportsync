@@ -110,6 +110,7 @@ class TheSportsDbProvider {
     const sport                = this.normalizeSport(rawEvent.strSport);
     const competitionKey       = rawEvent.idLeague || "unknown";
     const competitionName      = rawEvent.strLeague || "Unknown Competition";
+    const eventName            = rawEvent.strEvent || null;
     const homeParticipantName  = rawEvent.strHomeTeam || null;
     const awayParticipantName  = rawEvent.strAwayTeam || null;
     const scheduledStartUtc    = this.buildScheduledStartUtc(rawEvent);
@@ -129,6 +130,7 @@ class TheSportsDbProvider {
       sport,
       competitionKey,
       competitionName,
+      eventName,
       homeParticipantName,
       awayParticipantName,
       scheduledStartUtc,
