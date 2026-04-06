@@ -129,45 +129,45 @@ export default function TeamPicker() {
 
       <Sidebar activePath="/dashboard" />
 
-      <div style={{ flex: 1, background: '#0F1A2E', padding: '32px 28px', overflowY: 'auto' }}>
+      <div style={{ flex: 1, background: '#faf9f7', padding: '32px 28px', overflowY: 'auto' }}>
 
-        <button onClick={() => navigate(`/dashboard/${sport}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#8899AA', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 24, padding: 0 }}>
+        <button onClick={() => navigate(`/dashboard/${sport}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#666666', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 24, padding: 0 }}>
           ← Volver a {sportInfo.name}
         </button>
 
-        <div style={{ fontSize: 13, color: '#8899AA', marginBottom: 20 }}>
-          Mis favoritos → {sportInfo.emoji} {sportInfo.name} → <strong style={{ color: '#FFFFFF' }}>{league.name}</strong>
+        <div style={{ fontSize: 13, color: '#666666', marginBottom: 20 }}>
+          Mis favoritos → {sportInfo.emoji} {sportInfo.name} → <strong style={{ color: '#1C2430' }}>{league.name}</strong>
         </div>
 
         {/* Seguir liga completa */}
-        <div style={{ background: '#142238', border: '0.5px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ background: '#ffffff', border: '1px solid #e8e8e8', borderRadius: 14, padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 500, color: '#FFFFFF' }}>{isTennis ? 'Seguir todo el circuito' : 'Seguir toda la liga'}</div>
-            <div style={{ fontSize: 12, color: '#8899AA', marginTop: 2 }}>{isTennis ? `Recibe todos los torneos de ${league.name}` : `Recibe todos los partidos de ${league.name}`}</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: '#1C2430' }}>{isTennis ? 'Seguir todo el circuito' : 'Seguir toda la liga'}</div>
+            <div style={{ fontSize: 12, color: '#666666', marginTop: 2 }}>{isTennis ? `Recibe todos los torneos de ${league.name}` : `Recibe todos los partidos de ${league.name}`}</div>
           </div>
           <button
             onClick={() => handleConfirm({ team: { id: leagueId, name: league.name, initials: '🏆' }, league, mode: 'all' })}
-            style={{ background: '#F18006', color: '#1C2430', border: 'none', borderRadius: 20, padding: '8px 18px', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
+            style={{ background: '#F18006', color: '#fff', border: 'none', borderRadius: 20, padding: '8px 18px', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
             {isTennis ? '+ Seguir circuito completo' : '+ Seguir liga completa'}
           </button>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-          <div style={{ flex: 1, height: '0.5px', background: 'rgba(255,255,255,0.08)' }} />
-          <span style={{ fontSize: 12, color: '#8899AA' }}>{isTennis ? 'o elige jugadores específicos' : 'o elige equipos específicos'}</span>
-          <div style={{ flex: 1, height: '0.5px', background: 'rgba(255,255,255,0.08)' }} />
+          <div style={{ flex: 1, height: '1px', background: '#e8e8e8' }} />
+          <span style={{ fontSize: 12, color: '#666666' }}>{isTennis ? 'o elige jugadores específicos' : 'o elige equipos específicos'}</span>
+          <div style={{ flex: 1, height: '1px', background: '#e8e8e8' }} />
         </div>
 
         {/* Buscador */}
         {!loadingTeams && !teamsError && teams.length > 0 && (
-          <div style={{ background: '#1E3A5F', border: '0.5px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-            <span style={{ fontSize: 16, color: '#8899AA' }}>🔍</span>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder={isTennis ? 'Buscar jugador...' : 'Buscar equipo...'} style={{ border: 'none', outline: 'none', fontSize: 14, color: '#FFFFFF', flex: 1, background: 'transparent' }} />
+          <div style={{ background: '#f0f0f0', border: '1px solid #e8e8e8', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <span style={{ fontSize: 16, color: '#666666' }}>🔍</span>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder={isTennis ? 'Buscar jugador...' : 'Buscar equipo...'} style={{ border: 'none', outline: 'none', fontSize: 14, color: '#1C2430', flex: 1, background: 'transparent' }} />
           </div>
         )}
 
         {/* Contador */}
-        <div style={{ fontSize: 13, fontWeight: 500, color: '#8899AA', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: '#666666', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 14 }}>
           {loadingTeams ? (isTennis ? 'Cargando jugadores...' : 'Cargando equipos...') : teamsError ? 'Error' : `${filtered.length} ${isTennis ? 'jugadores' : 'equipos'}`}
         </div>
 
@@ -175,10 +175,10 @@ export default function TeamPicker() {
         {loadingTeams && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
             {[1,2,3,4,5,6,7,8].map(i => (
-              <div key={i} style={{ background: '#142238', border: '0.5px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: '#1E3A5F', flexShrink: 0 }} />
+              <div key={i} style={{ background: '#ffffff', border: '1px solid #e8e8e8', borderRadius: 12, padding: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: '#f0f0f0', flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ width: '80%', height: 13, background: '#1E3A5F', borderRadius: 4 }} />
+                  <div style={{ width: '80%', height: 13, background: '#f0f0f0', borderRadius: 4 }} />
                 </div>
               </div>
             ))}
@@ -187,11 +187,11 @@ export default function TeamPicker() {
 
         {/* Error */}
         {teamsError && (
-          <div style={{ background: '#142238', border: '0.5px solid rgba(255,92,0,0.2)', borderRadius: 12, padding: '20px 24px', textAlign: 'center' }}>
+          <div style={{ background: '#ffffff', border: '1px solid #fecaca', borderRadius: 12, padding: '20px 24px', textAlign: 'center' }}>
             <div style={{ fontSize: 28, marginBottom: 8 }}>⚠️</div>
-            <div style={{ fontSize: 14, fontWeight: 500, color: '#FFFFFF', marginBottom: 4 }}>{teamsError}</div>
-            <div style={{ fontSize: 12, color: '#8899AA', marginBottom: 16 }}>Verifica que el backend esté corriendo en el puerto 3001</div>
-            <button onClick={reloadTeams} style={{ background: '#10B1C7', color: '#fff', border: 'none', borderRadius: 20, padding: '8px 20px', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+            <div style={{ fontSize: 14, fontWeight: 500, color: '#1C2430', marginBottom: 4 }}>{teamsError}</div>
+            <div style={{ fontSize: 12, color: '#666666', marginBottom: 16 }}>Verifica que el backend esté corriendo en el puerto 3001</div>
+            <button onClick={reloadTeams} style={{ background: '#F18006', color: '#fff', border: 'none', borderRadius: 20, padding: '8px 20px', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
               Reintentar
             </button>
           </div>
@@ -199,14 +199,14 @@ export default function TeamPicker() {
 
         {/* Sin resultados */}
         {!loadingTeams && !teamsError && filtered.length === 0 && teams.length > 0 && (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: '#8899AA', fontSize: 14 }}>
+          <div style={{ textAlign: 'center', padding: '40px 0', color: '#666666', fontSize: 14 }}>
             No hay {isTennis ? 'jugadores' : 'equipos'} que coincidan con "{search}"
           </div>
         )}
 
         {/* Sin equipos */}
         {!loadingTeams && !teamsError && teams.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: '#8899AA', fontSize: 14 }}>
+          <div style={{ textAlign: 'center', padding: '40px 0', color: '#666666', fontSize: 14 }}>
             {isTennis ? 'No se encontraron jugadores para este circuito.' : 'Esta liga no tiene equipos registrados en TheSportsDB.'}
             <br />
             <span style={{ fontSize: 12 }}>Puedes seguir {isTennis ? 'el circuito completo' : 'la liga completa'} usando el botón de arriba.</span>
@@ -221,29 +221,29 @@ export default function TeamPicker() {
               return (
                 <div key={team.id}
                   onClick={() => !already && setSelectedTeam(team)}
-                  style={{ background: already ? 'rgba(16,177,199,0.04)' : '#142238', border: `0.5px solid ${already ? '#10B1C7' : 'rgba(255,255,255,0.08)'}`, borderRadius: 12, padding: isTennis ? '14px 16px' : 16, display: 'flex', alignItems: 'center', gap: 10, cursor: already ? 'default' : 'pointer' }}
-                  onMouseEnter={e => { if (!already) e.currentTarget.style.borderColor = '#10B1C7' }}
-                  onMouseLeave={e => { if (!already) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}
+                  style={{ background: already ? 'rgba(16,177,199,0.04)' : '#ffffff', border: `1px solid ${already ? '#10B1C7' : '#e8e8e8'}`, borderRadius: 12, padding: isTennis ? '14px 16px' : 16, display: 'flex', alignItems: 'center', gap: 10, cursor: already ? 'default' : 'pointer' }}
+                  onMouseEnter={e => { if (!already) e.currentTarget.style.borderColor = '#F18006' }}
+                  onMouseLeave={e => { if (!already) e.currentTarget.style.borderColor = '#e8e8e8' }}
                 >
                   {isTennis ? (
                     team.photo ? (
                       <img src={team.photo} alt={team.name} style={{ width: 42, height: 42, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
                     ) : (
-                      <div style={{ width: 42, height: 42, borderRadius: '50%', background: '#1E3A5F', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>🎾</div>
+                      <div style={{ width: 42, height: 42, borderRadius: '50%', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>🎾</div>
                     )
                   ) : (
                     team.badge ? (
                       <img src={team.badge} alt={team.name} style={{ width: 36, height: 36, objectFit: 'contain', flexShrink: 0 }} />
                     ) : (
-                      <div style={{ width: 36, height: 36, borderRadius: 10, background: '#1E3A5F', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 500, color: '#8899AA', flexShrink: 0 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 500, color: '#666666', flexShrink: 0 }}>
                         {team.initials}
                       </div>
                     )
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ fontSize: 13, fontWeight: 500, color: '#FFFFFF', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.name}</span>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: '#1C2430', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.name}</span>
                     {isTennis && team.nationality && (
-                      <span style={{ fontSize: 11, color: '#8899AA', marginTop: 1, display: 'block' }}>{team.nationality}</span>
+                      <span style={{ fontSize: 11, color: '#666666', marginTop: 1, display: 'block' }}>{team.nationality}</span>
                     )}
                   </div>
                   {already && <span style={{ fontSize: 14, color: '#06D6A0' }}>✓</span>}
@@ -255,15 +255,15 @@ export default function TeamPicker() {
 
         {/* Barra de guardado */}
         {newlyAdded.length > 0 && (
-          <div style={{ background: saved ? '#06D6A0' : '#142238', borderRadius: 14, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 24, flexWrap: 'wrap', gap: 12, transition: 'background 0.3s' }}>
-            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
+          <div style={{ background: saved ? '#06D6A0' : '#ffffff', border: '1px solid #e8e8e8', borderRadius: 14, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 24, flexWrap: 'wrap', gap: 12, transition: 'background 0.3s' }}>
+            <span style={{ fontSize: 13, color: saved ? '#fff' : '#1C2430' }}>
               {saved
                 ? '✓ Sincronizado con Google Calendar'
-                : <><strong style={{ color: '#10B1C7' }}>{newlyAdded.length} {isTennis ? (newlyAdded.length === 1 ? 'jugador' : 'jugadores') : (newlyAdded.length === 1 ? 'equipo' : 'equipos')}</strong> — {newlyAdded.map(t => t.name).join(', ')}</>
+                : <><strong style={{ color: '#F18006' }}>{newlyAdded.length} {isTennis ? (newlyAdded.length === 1 ? 'jugador' : 'jugadores') : (newlyAdded.length === 1 ? 'equipo' : 'equipos')}</strong> — {newlyAdded.map(t => t.name).join(', ')}</>
               }
             </span>
             {!saved && (
-              <button onClick={handleSaveAndSync} disabled={saving} style={{ background: '#F18006', color: '#1C2430', border: 'none', borderRadius: 20, padding: '10px 24px', fontSize: 13, fontWeight: 500, cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+              <button onClick={handleSaveAndSync} disabled={saving} style={{ background: '#F18006', color: '#fff', border: 'none', borderRadius: 20, padding: '10px 24px', fontSize: 13, fontWeight: 500, cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1 }}>
                 {saving ? 'Sincronizando...' : 'Guardar y sincronizar'}
               </button>
             )}

@@ -80,7 +80,7 @@ export default function TeamSubscriptionModal({ team, league, sport, onConfirm, 
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 100 }}>
-      <div style={{ background: '#142238', borderRadius: 20, padding: '32px 28px', maxWidth: 420, width: '100%' }}>
+      <div style={{ background: '#ffffff', borderRadius: 20, padding: '32px 28px', maxWidth: 420, width: '100%' }}>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24 }}>
           {sport === 'tenis' && team.photo ? (
@@ -88,17 +88,17 @@ export default function TeamSubscriptionModal({ team, league, sport, onConfirm, 
           ) : team.badge ? (
             <img src={team.badge} alt={team.name} style={{ width: 52, height: 52, objectFit: 'contain', flexShrink: 0 }} />
           ) : (
-            <div style={{ width: 52, height: 52, borderRadius: 14, background: '#1E3A5F', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 500, color: '#8899AA', flexShrink: 0 }}>
+            <div style={{ width: 52, height: 52, borderRadius: 14, background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 500, color: '#666666', flexShrink: 0 }}>
               {team.initials}
             </div>
           )}
           <div>
-            <h2 style={{ fontSize: 20, fontWeight: 500, color: '#FFFFFF' }}>{team.name}</h2>
-            <p style={{ fontSize: 13, color: '#8899AA', marginTop: 2 }}>{emoji} {sportName} · {league.name}</p>
+            <h2 style={{ fontSize: 20, fontWeight: 500, color: '#1C2430' }}>{team.name}</h2>
+            <p style={{ fontSize: 13, color: '#666666', marginTop: 2 }}>{emoji} {sportName} · {league.name}</p>
           </div>
         </div>
 
-        <div style={{ fontSize: 14, fontWeight: 500, color: '#FFFFFF', marginBottom: 16 }}>
+        <div style={{ fontSize: 14, fontWeight: 500, color: '#1C2430', marginBottom: 16 }}>
           ¿Qué partidos quieres agregar a tu calendario?
         </div>
 
@@ -116,23 +116,23 @@ export default function TeamSubscriptionModal({ team, league, sport, onConfirm, 
         ].map((option) => (
           <div key={option.value}
             onClick={() => setMode(option.value)}
-            style={{ border: `1.5px solid ${mode === option.value ? '#10B1C7' : 'rgba(255,255,255,0.15)'}`, borderRadius: 14, padding: 16, cursor: 'pointer', marginBottom: 10, display: 'flex', alignItems: 'flex-start', gap: 14, background: mode === option.value ? 'rgba(16,177,199,0.04)' : 'transparent' }}
+            style={{ border: `1.5px solid ${mode === option.value ? '#10B1C7' : '#e8e8e8'}`, borderRadius: 14, padding: 16, cursor: 'pointer', marginBottom: 10, display: 'flex', alignItems: 'flex-start', gap: 14, background: mode === option.value ? 'rgba(16,177,199,0.04)' : 'transparent' }}
           >
-            <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${mode === option.value ? '#10B1C7' : 'rgba(255,255,255,0.15)'}`, flexShrink: 0, marginTop: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: mode === option.value ? '#10B1C7' : 'transparent' }}>
+            <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${mode === option.value ? '#10B1C7' : '#e8e8e8'}`, flexShrink: 0, marginTop: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: mode === option.value ? '#10B1C7' : 'transparent' }}>
               {mode === option.value && <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />}
             </div>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 500, color: '#FFFFFF', marginBottom: 4 }}>{option.title}</div>
-              <div style={{ fontSize: 12, color: '#8899AA', lineHeight: 1.5 }}>{option.desc}</div>
+              <div style={{ fontSize: 14, fontWeight: 500, color: '#1C2430', marginBottom: 4 }}>{option.title}</div>
+              <div style={{ fontSize: 12, color: '#666666', lineHeight: 1.5 }}>{option.desc}</div>
             </div>
           </div>
         ))}
 
         <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
-          <button onClick={onCancel} style={{ flex: 1, background: '#1E3A5F', color: '#8899AA', border: 'none', borderRadius: 20, padding: 12, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
+          <button onClick={onCancel} style={{ flex: 1, background: '#f0f0f0', color: '#666666', border: 'none', borderRadius: 20, padding: 12, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
             Cancelar
           </button>
-          <button onClick={() => onConfirm({ team, league, mode })} style={{ flex: 2, background: '#F18006', color: '#1C2430', border: 'none', borderRadius: 20, padding: 12, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
+          <button onClick={() => onConfirm({ team, league, mode })} style={{ flex: 2, background: '#F18006', color: '#fff', border: 'none', borderRadius: 20, padding: 12, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
             Agregar al calendario
           </button>
         </div>

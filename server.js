@@ -638,6 +638,9 @@ app.post("/api/nearby", async (req, res) => {
     const location = { city: city || "Tu ciudad", country, lat, lon };
     const cityNorm = (location.city || "").toLowerCase();
 
+    // Limpiar caché de venues para esta ciudad (re-evaluar con criterios frescos)
+    db.run("DELETE FROM venue_city_cache WHERE targetCity = ?", [cityNorm], () => {});
+
     // 2. Buscar ligas del país en todos los deportes (con caché SQLite de 24h)
     const getLeagueCache = (country, sport) => new Promise((resolve, reject) => {
       db.get(`SELECT data, cachedAt FROM league_country_cache WHERE country = ? AND sport = ?`,
@@ -762,7 +765,7 @@ app.post("/api/nearby", async (req, res) => {
               max_tokens: 4000,
               messages: [{
                 role: "user",
-                content: `Tengo una lista de estadios deportivos. Para cada uno, dime en qué ciudad está y si esa ciudad o cualquier ciudad adyacente forma parte del área metropolitana de "${location.city}". Por ejemplo, Miami Beach, Doral, Coral Gables y Hialeah son parte del área metropolitana de Miami.\n\nResponde SOLO con un JSON array, sin texto adicional:\n[{"venue": "nombre exacto", "city": "ciudad donde está", "inTargetCity": true/false}]\n\nLista de estadios:\n${batch.map((v, i) => `${i + 1}. ${v}`).join("\n")}`
+                content: `Tengo una lista de estadios deportivos. Para cada uno, necesito saber si está FÍSICAMENTE ubicado dentro de la zona metropolitana de "${location.city}", ${location.country}.\n\nReglas estrictas:\n- Responde inTargetCity: true SOLO si el estadio está geográficamente dentro de la zona metropolitana de "${location.city}"\n- NO marques true solo porque el nombre del estadio contiene "${location.city}" — verifica la ubicación real\n- Incluye ciudades conurbadas y municipios adyacentes que forman parte del área metropolitana\n- Si no conoces la ubicación del estadio, responde inTargetCity: false\n\nResponde SOLO con un JSON array, sin texto adicional:\n[{"venue": "nombre exacto del estadio", "city": "ciudad donde está físicamente", "inTargetCity": true/false}]\n\nLista de estadios:\n${batch.map((v, i) => `${i + 1}. ${v}`).join("\n")}`
               }]
             })
           });
@@ -814,10 +817,9 @@ app.post("/api/nearby", async (req, res) => {
     }
 
     // 6. Deduplicar por idEvent, filtrar próximos 30 días, ordenar por fecha
-    const now30 = new Date();
-    const fromDate = now30.toISOString().slice(0, 10);
-    now30.setDate(now30.getDate() + 30);
-    const toDate = now30.toISOString().slice(0, 10);
+    const nowMx = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));
+    const fromDate = nowMx.toISOString().split('T')[0];
+    const toDate = new Date(nowMx.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     const uniqueEvents = [...new Map(filteredEvents
       .filter(e => {

@@ -264,28 +264,28 @@ export default function LeaguePicker() {
 
       <Sidebar activePath="/dashboard" />
 
-      <div style={{ flex: 1, background: '#0F1A2E', padding: '32px 28px', overflowY: 'auto' }}>
+      <div style={{ flex: 1, background: '#faf9f7', padding: '32px 28px', overflowY: 'auto' }}>
 
-        <button onClick={() => navigate('/dashboard')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#8899AA', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 24, padding: 0 }}>
+        <button onClick={() => navigate('/dashboard')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#666666', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 24, padding: 0 }}>
           ← Volver a mis deportes
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-          <div style={{ width: 48, height: 48, background: '#142238', border: '0.5px solid rgba(255,255,255,0.08)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>{sportInfo.emoji}</div>
+          <div style={{ width: 48, height: 48, background: '#ffffff', border: '1px solid #e8e8e8', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>{sportInfo.emoji}</div>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 500, color: '#FFFFFF' }}>{sportInfo.name}</h1>
-            <p style={{ fontSize: 13, color: '#8899AA', marginTop: 2 }}>Elige las ligas que quieres seguir</p>
+            <h1 style={{ fontSize: 22, fontWeight: 500, color: '#1C2430' }}>{sportInfo.name}</h1>
+            <p style={{ fontSize: 13, color: '#666666', marginTop: 2 }}>Elige las ligas que quieres seguir</p>
           </div>
         </div>
 
-        <div style={{ background: '#1E3A5F', border: '0.5px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28 }}>
-          <span style={{ fontSize: 14, color: '#8899AA' }}>🔍</span>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar liga, copa o competición..." style={{ border: 'none', outline: 'none', fontSize: 14, color: '#FFFFFF', flex: 1, background: 'transparent' }} />
-          {search && <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#8899AA', padding: 0, lineHeight: 1 }}>×</button>}
+        <div style={{ background: '#f0f0f0', border: '1px solid #e8e8e8', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28 }}>
+          <span style={{ fontSize: 14, color: '#666666' }}>🔍</span>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar liga, copa o competición..." style={{ border: 'none', outline: 'none', fontSize: 14, color: '#1C2430', flex: 1, background: 'transparent' }} />
+          {search && <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#666666', padding: 0, lineHeight: 1 }}>×</button>}
         </div>
 
         {categories.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '60px 0', color: '#8899AA', fontSize: 14 }}>
+          <div style={{ textAlign: 'center', padding: '60px 0', color: '#666666', fontSize: 14 }}>
             Ligas de {sportInfo.name} próximamente.
           </div>
         )}
@@ -300,21 +300,21 @@ export default function LeaguePicker() {
           return (
             <div key={category.id} style={{ marginBottom: 32 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                <span style={{ fontSize: 13, fontWeight: 500, color: '#8899AA', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{category.title}</span>
-                {!isSelecciones && <span style={{ fontSize: 11, color: '#8899AA', background: 'rgba(255,255,255,0.1)', borderRadius: 10, padding: '2px 8px' }}>{visibleLeagues.length}</span>}
+                <span style={{ fontSize: 13, fontWeight: 500, color: '#666666', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{category.title}</span>
+                {!isSelecciones && <span style={{ fontSize: 11, color: '#666666', background: '#e8e8e8', borderRadius: 10, padding: '2px 8px' }}>{visibleLeagues.length}</span>}
               </div>
 
               {isSelecciones ? (
-                <div style={{ background: '#142238', border: '0.5px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: 20 }}>
-                  <p style={{ fontSize: 13, color: '#8899AA', marginBottom: 14, lineHeight: 1.5 }}>
+                <div style={{ background: '#ffffff', border: '0.5px solid #e8e8e8', borderRadius: 14, padding: 20 }}>
+                  <p style={{ fontSize: 13, color: '#666666', marginBottom: 14, lineHeight: 1.5 }}>
                     Busca tu selección y elige qué partidos quieres en tu calendario.
                   </p>
-                  <div style={{ background: '#1E3A5F', border: '0.5px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                    <span style={{ fontSize: 14, color: '#8899AA' }}>🔍</span>
-                    <input value={countrySearch} onChange={e => { setCountrySearch(e.target.value); setSelectedCountry(null); setNationalMode(null) }} placeholder="Ej: México, España, Brasil..." style={{ border: 'none', outline: 'none', fontSize: 14, color: '#FFFFFF', flex: 1, background: 'transparent' }} />
+                  <div style={{ background: '#f0f0f0', border: '0.5px solid #e8e8e8', borderRadius: 10, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <span style={{ fontSize: 14, color: '#666666' }}>🔍</span>
+                    <input value={countrySearch} onChange={e => { setCountrySearch(e.target.value); setSelectedCountry(null); setNationalMode(null) }} placeholder="Ej: México, España, Brasil..." style={{ border: 'none', outline: 'none', fontSize: 14, color: '#1C2430', flex: 1, background: 'transparent' }} />
                   </div>
                   {countrySearch.length < 2 ? (
-                    <div style={{ fontSize: 13, color: '#8899AA', textAlign: 'center', padding: '16px 0' }}>Escribe al menos 2 letras para buscar</div>
+                    <div style={{ fontSize: 13, color: '#666666', textAlign: 'center', padding: '16px 0' }}>Escribe al menos 2 letras para buscar</div>
                   ) : (
                     <div style={{ maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {(() => {
@@ -322,7 +322,7 @@ export default function LeaguePicker() {
                           t.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
                           t.confederation.toLowerCase().includes(countrySearch.toLowerCase())
                         )
-                        if (results.length === 0) return <div style={{ fontSize: 13, color: '#8899AA', textAlign: 'center', padding: '20px 0' }}>No encontramos "{countrySearch}"</div>
+                        if (results.length === 0) return <div style={{ fontSize: 13, color: '#666666', textAlign: 'center', padding: '20px 0' }}>No encontramos "{countrySearch}"</div>
                         return results.map(team => {
                           const alreadySubscribed = subscribedNational.includes(team.name)
                           const isSelected        = selectedCountry?.name === team.name
@@ -330,34 +330,34 @@ export default function LeaguePicker() {
                             <div key={team.name}>
                               <div onClick={() => { if (!alreadySubscribed) { setSelectedCountry(isSelected ? null : team); setNationalMode(null) } }}
                                 style={{ padding: '10px 12px', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: alreadySubscribed ? 'default' : 'pointer', background: isSelected ? 'rgba(16,177,199,0.04)' : 'transparent', border: `0.5px solid ${isSelected ? '#10B1C7' : 'transparent'}` }}
-                                onMouseEnter={e => { if (!alreadySubscribed && !isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+                                onMouseEnter={e => { if (!alreadySubscribed && !isSelected) e.currentTarget.style.background = 'rgba(241,128,6,0.04)' }}
                                 onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}
                               >
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                   <span style={{ fontSize: 22 }}>{team.flag}</span>
                                   <div>
-                                    <div style={{ fontSize: 14, fontWeight: 500, color: '#FFFFFF' }}>{team.name}</div>
-                                    <div style={{ fontSize: 11, color: '#8899AA' }}>{team.confederation}</div>
+                                    <div style={{ fontSize: 14, fontWeight: 500, color: '#1C2430' }}>{team.name}</div>
+                                    <div style={{ fontSize: 11, color: '#666666' }}>{team.confederation}</div>
                                   </div>
                                 </div>
                                 {alreadySubscribed
                                   ? <span style={{ fontSize: 12, color: '#06D6A0', fontWeight: 500 }}>✓ Suscrito</span>
-                                  : <span style={{ fontSize: 12, color: isSelected ? '#10B1C7' : '#8899AA' }}>{isSelected ? 'Seleccionado ✓' : 'Elegir'}</span>
+                                  : <span style={{ fontSize: 12, color: isSelected ? '#10B1C7' : '#666666' }}>{isSelected ? 'Seleccionado ✓' : 'Elegir'}</span>
                                 }
                               </div>
                               {isSelected && (
                                 <div style={{ padding: '14px 12px', background: 'rgba(16,177,199,0.04)', borderRadius: 10, margin: '4px 0 8px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                  <div style={{ fontSize: 12, color: '#8899AA' }}>¿Qué partidos quieres de {team.flag} {team.name}?</div>
+                                  <div style={{ fontSize: 12, color: '#666666' }}>¿Qué partidos quieres de {team.flag} {team.name}?</div>
                                   <div style={{ display: 'flex', gap: 8 }}>
-                                    <button onClick={() => setNationalMode('official')} style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: `1.5px solid ${nationalMode === 'official' ? '#10B1C7' : 'rgba(255,255,255,0.08)'}`, background: nationalMode === 'official' ? 'rgba(16,177,199,0.06)' : '#142238', color: nationalMode === 'official' ? '#10B1C7' : '#8899AA', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
+                                    <button onClick={() => setNationalMode('official')} style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: `1.5px solid ${nationalMode === 'official' ? '#10B1C7' : '#e8e8e8'}`, background: nationalMode === 'official' ? 'rgba(16,177,199,0.06)' : '#ffffff', color: nationalMode === 'official' ? '#10B1C7' : '#666666', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
                                       Solo competiciones oficiales
                                     </button>
-                                    <button onClick={() => setNationalMode('all')} style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: `1.5px solid ${nationalMode === 'all' ? '#10B1C7' : 'rgba(255,255,255,0.08)'}`, background: nationalMode === 'all' ? 'rgba(16,177,199,0.06)' : '#142238', color: nationalMode === 'all' ? '#10B1C7' : '#8899AA', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
+                                    <button onClick={() => setNationalMode('all')} style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: `1.5px solid ${nationalMode === 'all' ? '#10B1C7' : '#e8e8e8'}`, background: nationalMode === 'all' ? 'rgba(16,177,199,0.06)' : '#ffffff', color: nationalMode === 'all' ? '#10B1C7' : '#666666', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
                                       Competiciones + amistosos
                                     </button>
                                   </div>
                                   {nationalMode && (
-                                    <button onClick={handleNationalSubscribe} disabled={subscribingNational} style={{ background: '#F18006', color: '#1C2430', border: 'none', borderRadius: 10, padding: '10px', fontSize: 13, fontWeight: 500, cursor: subscribingNational ? 'wait' : 'pointer', opacity: subscribingNational ? 0.7 : 1 }}>
+                                    <button onClick={handleNationalSubscribe} disabled={subscribingNational} style={{ background: '#F18006', color: '#fff', border: 'none', borderRadius: 10, padding: '10px', fontSize: 13, fontWeight: 500, cursor: subscribingNational ? 'wait' : 'pointer', opacity: subscribingNational ? 0.7 : 1 }}>
                                       {subscribingNational ? 'Suscribiendo...' : `+ Seguir ${team.name}`}
                                     </button>
                                   )}
@@ -379,24 +379,24 @@ export default function LeaguePicker() {
                     return (
                       <div key={league.id}
                         onClick={() => { if (!isCup && !alreadySubscribed) navigate(`/dashboard/${sport}/${league.id}`, { state: { league, sportInfo } }) }}
-                        style={{ background: alreadySubscribed ? 'rgba(16,177,199,0.04)' : '#142238', border: `0.5px solid ${alreadySubscribed ? '#10B1C7' : 'rgba(255,255,255,0.08)'}`, borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: isCup || alreadySubscribed ? 'default' : 'pointer' }}
+                        style={{ background: alreadySubscribed ? 'rgba(16,177,199,0.04)' : '#ffffff', border: `0.5px solid ${alreadySubscribed ? '#10B1C7' : '#e8e8e8'}`, borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: isCup || alreadySubscribed ? 'default' : 'pointer' }}
                         onMouseEnter={e => { if (!isCup && !alreadySubscribed) e.currentTarget.style.borderColor = '#10B1C7' }}
-                        onMouseLeave={e => { if (!alreadySubscribed) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}
+                        onMouseLeave={e => { if (!alreadySubscribed) e.currentTarget.style.borderColor = '#e8e8e8' }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <div style={{ width: 40, height: 40, borderRadius: 10, background: isCup ? 'rgba(255,92,0,0.1)' : '#1E3A5F', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isCup ? 18 : 15, fontWeight: 500, color: isCup ? '#e0a020' : '#10B1C7', flexShrink: 0, border: `0.5px solid ${isCup ? '#ffe8b0' : 'rgba(255,255,255,0.08)'}` }}>
+                          <div style={{ width: 40, height: 40, borderRadius: 10, background: isCup ? 'rgba(255,92,0,0.1)' : '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isCup ? 18 : 15, fontWeight: 500, color: isCup ? '#e0a020' : '#10B1C7', flexShrink: 0, border: `0.5px solid ${isCup ? '#ffe8b0' : '#e8e8e8'}` }}>
                             {isCup ? '🏆' : league.name.charAt(0)}
                           </div>
                           <div>
-                            <div style={{ fontSize: 14, fontWeight: 500, color: '#FFFFFF' }}>{league.name}</div>
-                            <div style={{ fontSize: 12, color: '#8899AA', marginTop: 2 }}>{league.country}</div>
+                            <div style={{ fontSize: 14, fontWeight: 500, color: '#1C2430' }}>{league.name}</div>
+                            <div style={{ fontSize: 12, color: '#666666', marginTop: 2 }}>{league.country}</div>
                           </div>
                         </div>
                         <div>
                           {alreadySubscribed ? (
                             <span style={{ fontSize: 13, color: '#06D6A0', fontWeight: 500 }}>✓ Suscrito</span>
                           ) : isCup ? (
-                            <button onClick={e => { e.stopPropagation(); handleDirectSubscribe(league) }} disabled={isSubscribing} style={{ background: '#F18006', color: '#1C2430', border: 'none', borderRadius: 20, padding: '6px 16px', fontSize: 12, fontWeight: 500, cursor: isSubscribing ? 'wait' : 'pointer', opacity: isSubscribing ? 0.7 : 1 }}>
+                            <button onClick={e => { e.stopPropagation(); handleDirectSubscribe(league) }} disabled={isSubscribing} style={{ background: '#F18006', color: '#fff', border: 'none', borderRadius: 20, padding: '6px 16px', fontSize: 12, fontWeight: 500, cursor: isSubscribing ? 'wait' : 'pointer', opacity: isSubscribing ? 0.7 : 1 }}>
                               {isSubscribing ? '...' : '+ Suscribir'}
                             </button>
                           ) : (

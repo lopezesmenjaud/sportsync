@@ -10,10 +10,10 @@ const NAV_ITEMS = [
   { label: 'Planear viaje',     path: '/travel'    },
 ]
 
-
 export default function Sidebar({ activePath }) {
   const navigate = useNavigate()
   const [google, setGoogle] = useState({ connected: false, email: null })
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const userId = getUserId()
   const user = getUser()
 
@@ -24,18 +24,13 @@ export default function Sidebar({ activePath }) {
       .catch(() => {})
   }, [])
 
-  return (
-    <div style={{
-      width: 220,
-      background: '#263140',
-      padding: '20px 16px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 4,
-      flexShrink: 0,
-      minHeight: '100vh'
-    }}>
+  const handleNav = (path) => {
+    navigate(path)
+    setDrawerOpen(false)
+  }
 
+  const sidebarContent = (
+    <>
       {/* Logo */}
       <div style={{ paddingTop: 20, paddingBottom: 20, paddingLeft: 8, marginBottom: 24 }}>
         <img src="/fanschedule-logo.png" alt="FanSchedule" style={{ width: 160, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
@@ -47,7 +42,7 @@ export default function Sidebar({ activePath }) {
         return (
           <div
             key={item.label}
-            onClick={() => navigate(item.path)}
+            onClick={() => handleNav(item.path)}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -82,7 +77,6 @@ export default function Sidebar({ activePath }) {
 
       {/* Usuario y cuenta */}
       <div style={{ marginTop: 'auto', padding: '0 4px', borderTop: '1px solid rgba(255,255,255,0.15)' }}>
-        {/* Perfil del usuario */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 8px 6px' }}>
           <div style={{
             width: 32, height: 32, borderRadius: '50%',
@@ -104,7 +98,6 @@ export default function Sidebar({ activePath }) {
           </div>
         </div>
 
-        {/* Estado de Google Calendar */}
         {google.connected ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 8px 8px', fontSize: 10, color: 'rgba(74,222,128,0.9)' }}>
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#4ade80', flexShrink: 0 }} />
@@ -127,7 +120,6 @@ export default function Sidebar({ activePath }) {
           </button>
         )}
 
-        {/* Cerrar sesion */}
         <button
           onClick={() => { clearUser(); window.location.href = '/' }}
           style={{
@@ -141,7 +133,98 @@ export default function Sidebar({ activePath }) {
           Cerrar sesión
         </button>
       </div>
+    </>
+  )
 
-    </div>
+  return (
+    <>
+      <style>{`
+        @media (max-width: 768px) {
+          .sidebar-desktop { display: none !important; }
+          .sidebar-topbar { display: flex !important; }
+          .sidebar-drawer { display: flex !important; }
+          .sidebar-overlay { display: block !important; }
+        }
+        @media (min-width: 769px) {
+          .sidebar-desktop { display: flex !important; }
+          .sidebar-topbar { display: none !important; }
+          .sidebar-drawer { display: none !important; }
+          .sidebar-overlay { display: none !important; }
+        }
+      `}</style>
+
+      {/* Desktop sidebar */}
+      <div className="sidebar-desktop" style={{
+        width: 220,
+        background: '#263140',
+        padding: '20px 16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        flexShrink: 0,
+        minHeight: '100vh'
+      }}>
+        {sidebarContent}
+      </div>
+
+      {/* Mobile topbar */}
+      <div className="sidebar-topbar" style={{
+        display: 'none',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 56,
+        background: '#263140',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 16px',
+        zIndex: 1000,
+      }}>
+        <button
+          onClick={() => setDrawerOpen(!drawerOpen)}
+          style={{ background: 'none', border: 'none', color: '#fff', fontSize: 24, cursor: 'pointer', padding: '4px 8px', lineHeight: 1 }}
+        >
+          {drawerOpen ? '✕' : '☰'}
+        </button>
+        <img src="/fanschedule-logo.png" alt="FanSchedule" style={{ height: 32, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+        <div style={{ width: 40 }} />
+      </div>
+
+      {/* Mobile overlay */}
+      {drawerOpen && (
+        <div
+          className="sidebar-overlay"
+          onClick={() => setDrawerOpen(false)}
+          style={{
+            display: 'none',
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            zIndex: 1001,
+          }}
+        />
+      )}
+
+      {/* Mobile drawer */}
+      <div className="sidebar-drawer" style={{
+        display: 'none',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        bottom: 0,
+        width: 260,
+        background: '#263140',
+        padding: '20px 16px',
+        flexDirection: 'column',
+        gap: 4,
+        zIndex: 1002,
+        transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
+        transition: 'transform 0.3s ease',
+        overflowY: 'auto',
+      }}>
+        {sidebarContent}
+      </div>
+    </>
   )
 }
