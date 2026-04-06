@@ -995,57 +995,6 @@ app.post("/subscriptions/sync", async (req, res) => {
   }
 });
 
-app.get("/debug/sync-test", async (req, res) => {
-  try {
-    const KEY = process.env.THE_SPORTS_DB_API_KEY || process.env.SPORTSDB_API_KEY;
-    const BASE = process.env.THE_SPORTS_DB_BASE_URL || 'https://www.thesportsdb.com/api/v1/json';
-    const https = require('https');
-
-    const url = `${BASE}/${KEY}/eventsnextleague.php?id=4335`;
-
-    https.get(url, (resp) => {
-      let data = '';
-      resp.on('data', chunk => data += chunk);
-      resp.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          const events = parsed.events || [];
-          res.json({
-            url,
-            totalEvents: events.length,
-            firstEvent: events[0] || null,
-            nodeEnv: process.env.NODE_ENV,
-            dbPath: process.env.NODE_ENV === 'production' ? '/var/data/sportsync.db' : 'local'
-          });
-        } catch(e) {
-          res.json({ error: 'JSON parse failed', raw: data.substring(0, 200) });
-        }
-      });
-    }).on('error', e => res.json({ error: e.message }));
-  } catch(e) {
-    res.json({ error: e.message });
-  }
-});
-
-app.get("/debug/status", async (req, res) => {
-  try {
-    const matchCount = await new Promise((resolve, reject) => {
-      db.get("SELECT COUNT(*) as count FROM matches", [], (err, row) => {
-        if (err) reject(err); else resolve(row?.count || 0);
-      });
-    });
-    const subs = await new Promise((resolve, reject) => {
-      db.all("SELECT * FROM subscriptions LIMIT 10", [], (err, rows) => {
-        if (err) reject(err); else resolve(rows);
-      });
-    });
-    const dbPath = process.env.NODE_ENV === 'production' ? '/var/data/sportsync.db' : 'local';
-    res.json({ dbPath, matchCount, subscriptions: subs });
-  } catch(e) {
-    res.json({ error: e.message });
-  }
-});
-
 app.get("/matches/:userId", async (req, res) => {
   try {
     const { userId }      = req.params;
