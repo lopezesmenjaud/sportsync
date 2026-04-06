@@ -74,22 +74,26 @@ function getSeasonVariants(normalizedSport) {
   const primary = getCurrentSeason(normalizedSport);
   const variants = [primary];
 
-  // Agregar variantes alternas
+  // Agregar variantes alternas — cubrir temporada anterior y año simple
   if (primary.includes("-")) {
-    // Si es split, también probar año simple
+    // Split season: también probar temporada anterior y años simples
+    const [startYear] = primary.split("-").map(Number);
+    variants.push(`${startYear - 1}-${startYear}`); // temporada anterior (ej: 2024-2025)
     variants.push(`${year}`);
     variants.push(`${year - 1}`);
   } else {
-    // Si es año simple, también probar split
+    // Año simple: también probar split seasons
     if (month >= 8) {
       variants.push(`${year}-${year + 1}`);
     } else {
       variants.push(`${year - 1}-${year}`);
     }
+    variants.push(`${year - 2}-${year - 1}`); // temporada anterior split
     variants.push(`${year - 1}`);
   }
 
-  return variants;
+  // Deduplicar manteniendo orden
+  return [...new Set(variants)];
 }
 
 // Rango de sincronización: desde hoy hasta 30 días adelante
@@ -121,7 +125,7 @@ async function syncLeague(leagueId, sport) {
         break;
       }
     } catch (error) {
-      // Silently try next variant
+      console.log(`[sync] League ${leagueId} season "${season}" failed: ${error.message}`);
     }
   }
 
@@ -139,7 +143,7 @@ async function syncLeague(leagueId, sport) {
         console.log(`[sync] League ${leagueId} (${normalizedSport}): ${rawMatches.length} events via eventsnextleague fallback`);
       }
     } catch (error) {
-      // Last resort failed
+      console.error(`[sync] League ${leagueId} eventsnextleague fallback failed: ${error.message}`);
     }
   }
 
