@@ -115,35 +115,34 @@ async function syncLeague(leagueId, sport) {
 
   let rawMatches = [];
 
-  // ── Estrategia 1: eventsseason.php con múltiples variantes de temporada ──
-  const seasons = getSeasonVariants(normalizedSport);
-  for (const season of seasons) {
-    try {
-      rawMatches = await provider.getEventsByLeagueAndSeason({ leagueId, season, fromDate, toDate });
-      if (rawMatches.length > 0) {
-        console.log(`[sync] League ${leagueId} (${normalizedSport}): ${rawMatches.length} events with season "${season}"`);
-        break;
-      }
-    } catch (error) {
-      console.log(`[sync] League ${leagueId} season "${season}" failed: ${error.message}`);
+  // ── Estrategia 1: eventsnextleague.php (siempre devuelve próximos partidos) ──
+  try {
+    const nextEvents = await provider.getNextLeagueEvents(leagueId);
+    if (nextEvents.length > 0) {
+      rawMatches = nextEvents.filter(e => {
+        const d = e.dateEvent;
+        if (!d) return false;
+        return d >= fromDate && d <= toDate;
+      });
+      console.log(`[sync] League ${leagueId} (${normalizedSport}): ${rawMatches.length} events via eventsnextleague`);
     }
+  } catch (error) {
+    console.log(`[sync] League ${leagueId} eventsnextleague failed: ${error.message}`);
   }
 
-  // ── Estrategia 2: fallback a eventsnextleague.php ──
+  // ── Estrategia 2: fallback a eventsseason.php con variantes de temporada ──
   if (rawMatches.length === 0) {
-    try {
-      const nextEvents = await provider.getNextLeagueEvents(leagueId);
-      if (nextEvents.length > 0) {
-        // Filtrar por rango de 30 días
-        rawMatches = nextEvents.filter(e => {
-          const d = e.dateEvent;
-          if (!d) return false;
-          return d >= fromDate && d <= toDate;
-        });
-        console.log(`[sync] League ${leagueId} (${normalizedSport}): ${rawMatches.length} events via eventsnextleague fallback`);
+    const seasons = getSeasonVariants(normalizedSport);
+    for (const season of seasons) {
+      try {
+        rawMatches = await provider.getEventsByLeagueAndSeason({ leagueId, season, fromDate, toDate });
+        if (rawMatches.length > 0) {
+          console.log(`[sync] League ${leagueId} (${normalizedSport}): ${rawMatches.length} events with season "${season}" (fallback)`);
+          break;
+        }
+      } catch (error) {
+        console.log(`[sync] League ${leagueId} season "${season}" failed: ${error.message}`);
       }
-    } catch (error) {
-      console.error(`[sync] League ${leagueId} eventsnextleague fallback failed: ${error.message}`);
     }
   }
 
