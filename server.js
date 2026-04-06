@@ -104,50 +104,6 @@ async function safeFetchJson(url) {
   }
 }
 
-// ─────────────────────────────────────────────
-// Geocoding con Nominatim (OpenStreetMap)
-// ─────────────────────────────────────────────
-async function geocodeCity(cityName) {
-  try {
-    const url  = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cityName)}&format=json&limit=1&addressdetails=1&accept-language=en`;
-    const res  = await fetch(url, { headers: { "User-Agent": "SportSync/1.0 (lopezesmenjaud@gmail.com)" } });
-    const data = await res.json();
-    if (!data || data.length === 0) return null;
-    const place      = data[0];
-    const rawCountry = place.address?.country || null;
-    return {
-      city:        place.address?.city || place.address?.town || place.address?.village || cityName,
-      country:     normalizeCountry(rawCountry),
-      countryRaw:  rawCountry,
-      countryCode: place.address?.country_code?.toUpperCase() || null,
-      lat:         parseFloat(place.lat),
-      lon:         parseFloat(place.lon)
-    };
-  } catch (e) {
-    console.error("Geocoding error:", e.message);
-    return null;
-  }
-}
-
-async function reverseGeocode(lat, lon) {
-  try {
-    const url  = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1&accept-language=en`;
-    const res  = await fetch(url, { headers: { "User-Agent": "SportSync/1.0 (lopezesmenjaud@gmail.com)" } });
-    const data = await res.json();
-    const rawCountry = data.address?.country || null;
-    return {
-      city:        data.address?.city || data.address?.town || data.address?.village || "Tu ciudad",
-      country:     normalizeCountry(rawCountry),
-      countryRaw:  rawCountry,
-      countryCode: data.address?.country_code?.toUpperCase() || null,
-      lat,
-      lon
-    };
-  } catch (e) {
-    console.error("Reverse geocoding error:", e.message);
-    return null;
-  }
-}
 
 // ─────────────────────────────────────────────
 // Helpers resumen IA con caché
@@ -673,20 +629,13 @@ app.get("/api/tickets/:matchId", async (req, res) => {
 app.post("/api/nearby", async (req, res) => {
   console.log("[nearby] *** ENDPOINT HIT ***", req.body);
   try {
-    const { cityName, lat, lon } = req.body;
+    const { lat, lon, city, country } = req.body;
 
-    // 1. Geocodificar
-    let location = null;
-    if (lat && lon) {
-      location = await reverseGeocode(lat, lon);
-    } else if (cityName) {
-      location = await geocodeCity(cityName);
-    }
-    if (!location) {
-      return res.status(400).json({ ok: false, error: "No se pudo identificar la ubicación." });
+    if (!lat || !lon || !country) {
+      return res.status(400).json({ ok: false, error: "Se requieren lat, lon y country." });
     }
 
-    const country  = location.country;
+    const location = { city: city || "Tu ciudad", country, lat, lon };
     const cityNorm = (location.city || "").toLowerCase();
 
     // 2. Buscar ligas del país en todos los deportes (con caché SQLite de 24h)

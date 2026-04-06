@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Sidebar from '../components/Sidebar'
 import MatchCard from '../components/MatchCard'
 import { API_BASE } from '../config'
+import { geocodeCity, reverseGeocode } from '../utils/geocoding'
 
 export default function NearbyMatches() {
   const [loading, setLoading]       = useState(true)
@@ -21,9 +22,15 @@ export default function NearbyMatches() {
     }
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         setGeoStatus('granted')
-        fetchNearby({ lat: pos.coords.latitude, lon: pos.coords.longitude })
+        try {
+          const geo = await reverseGeocode(pos.coords.latitude, pos.coords.longitude)
+          fetchNearby({ lat: geo.lat, lon: geo.lon, city: geo.city, country: geo.country })
+        } catch {
+          setGeoStatus('denied')
+          setLoading(false)
+        }
       },
       (err) => {
         setGeoStatus('denied')
@@ -57,10 +64,17 @@ export default function NearbyMatches() {
     }
   }
 
-  const handleManualSearch = () => {
+  const handleManualSearch = async () => {
     if (!cityInput.trim()) return
     setLoading(true)
-    fetchNearby({ cityName: cityInput.trim() })
+    setError(null)
+    try {
+      const geo = await geocodeCity(cityInput.trim())
+      fetchNearby({ lat: geo.lat, lon: geo.lon, city: geo.city, country: geo.country })
+    } catch (e) {
+      setError(e.message)
+      setLoading(false)
+    }
   }
 
   const groupByDate = (list) => {

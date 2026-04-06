@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Sidebar from '../components/Sidebar'
 import MatchCard from '../components/MatchCard'
 import { API_BASE } from '../config'
+import { geocodeCity } from '../utils/geocoding'
 
 export default function TravelPlanner() {
   const [cityInput, setCityInput] = useState('')
@@ -23,10 +24,11 @@ export default function TravelPlanner() {
     setSearched(true)
 
     try {
-      const res  = await fetch(`${API_BASE}/api/nearby`, {
+      const geo = await geocodeCity(cityInput.trim())
+      const res = await fetch(`${API_BASE}/api/nearby`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cityName: cityInput.trim() })
+        body: JSON.stringify({ lat: geo.lat, lon: geo.lon, city: geo.city, country: geo.country })
       })
       const data = await res.json()
       if (data.ok) {
@@ -43,7 +45,7 @@ export default function TravelPlanner() {
         setError(data.error || 'No se pudo buscar la ciudad.')
       }
     } catch (e) {
-      setError('Error de conexión con el servidor.')
+      setError(e.message || 'Error de conexión con el servidor.')
     } finally {
       setLoading(false)
     }
