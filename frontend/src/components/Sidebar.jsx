@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { label: 'Próximos partidos', path: '/upcoming'  },
   { label: 'Cerca de mí',       path: '/nearby'    },
   { label: 'Planear viaje',     path: '/travel'    },
+  { label: 'Mi perfil',         path: '/profile'   },
 ]
 
 export default function Sidebar({ activePath }) {

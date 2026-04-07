@@ -865,6 +865,107 @@ app.post("/api/nearby", async (req, res) => {
 });
 
 // ── Suscripciones ──
+app.get("/api/admin/stats", async (req, res) => {
+  try {
+    const adminUser = req.headers['x-admin-user'];
+    if (adminUser !== 'lopezesmenjaud@gmail.com') {
+      return res.status(403).json({ ok: false, error: 'Forbidden' });
+    }
+
+    // Total usuarios
+    const totalUsers = await new Promise((resolve, reject) => {
+      db.get("SELECT COUNT(*) as count FROM google_accounts", [], (err, row) => {
+        if (err) reject(err); else resolve(row?.count || 0);
+      });
+    });
+
+    // Usuarios nuevos esta semana
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const newUsersThisWeek = await new Promise((resolve, reject) => {
+      db.get("SELECT COUNT(*) as count FROM google_accounts WHERE createdAtUtc >= ?", [weekAgo], (err, row) => {
+        if (err) reject(err); else resolve(row?.count || 0);
+      });
+    });
+
+    // Partidos sincronizados a calendarios
+    const syncedEvents = await new Promise((resolve, reject) => {
+      db.get("SELECT COUNT(*) as count FROM calendar_events", [], (err, row) => {
+        if (err) reject(err); else resolve(row?.count || 0);
+      });
+    });
+
+    // Top 10 ligas por suscriptores
+    const topLeagues = await new Promise((resolve, reject) => {
+      db.all(
+        `SELECT competitionName, competitionKey, sport, COUNT(DISTINCT userId) as subscribers
+         FROM subscriptions
+         WHERE competitionKey IS NOT NULL AND competitionName IS NOT NULL
+         GROUP BY competitionKey
+         ORDER BY subscribers DESC
+         LIMIT 10`,
+        [], (err, rows) => { if (err) reject(err); else resolve(rows || []); }
+      );
+    });
+
+    // Distribución por deporte
+    const sportDistribution = await new Promise((resolve, reject) => {
+      db.all(
+        `SELECT sport, COUNT(DISTINCT userId) as users
+         FROM subscriptions
+         GROUP BY sport
+         ORDER BY users DESC`,
+        [], (err, rows) => { if (err) reject(err); else resolve(rows || []); }
+      );
+    });
+
+    // Usuarios con detalle
+    const users = await new Promise((resolve, reject) => {
+      db.all(
+        `SELECT
+           g.userId as email,
+           g.createdAtUtc,
+           (SELECT COUNT(*) FROM subscriptions s WHERE s.userId = g.userId) as leagueCount,
+           ec.emailFanschedule,
+           ec.emailPartners
+         FROM google_accounts g
+         LEFT JOIN email_consent ec ON ec.userId = g.userId
+         ORDER BY g.createdAtUtc DESC`,
+        [], (err, rows) => { if (err) reject(err); else resolve(rows || []); }
+      );
+    });
+
+    res.json({
+      ok: true,
+      totalUsers,
+      newUsersThisWeek,
+      syncedEvents,
+      topLeagues,
+      sportDistribution,
+      users
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/consent", async (req, res) => {
+  try {
+    const { userId, emailFanschedule, emailPartners } = req.body;
+    if (!userId) return res.status(400).json({ ok: false, error: "userId is required" });
+    const now = new Date().toISOString();
+    await new Promise((resolve, reject) => {
+      db.run(
+        `INSERT OR REPLACE INTO email_consent (userId, emailFanschedule, emailPartners, consentDate, updatedAt) VALUES (?, ?, ?, COALESCE((SELECT consentDate FROM email_consent WHERE userId = ?), ?), ?)`,
+        [userId, emailFanschedule ? 1 : 0, emailPartners ? 1 : 0, userId, now, now],
+        (err) => { if (err) reject(err); else resolve(); }
+      );
+    });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.post("/subscriptions", async (req, res) => {
   try {
     const { userId, sport, competitionKey, competitionName, teamName } = req.body;

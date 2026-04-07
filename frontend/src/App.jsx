@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, useSearchParams, useNavigate, Navigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { setUser, isLoggedIn } from './auth'
+import EmailConsentModal from './components/EmailConsentModal'
 import LandingPage from './pages/LandingPage'
 import Dashboard from './pages/Dashboard'
 import LeaguePicker from './pages/LeaguePicker'
@@ -9,6 +10,8 @@ import UpcomingMatches from './pages/UpcomingMatches'
 import NearbyMatches from './pages/NearbyMatches'
 import TravelPlanner from './pages/TravelPlanner'
 import MatchDetail from './pages/MatchDetail'
+import Profile from './pages/Profile'
+import Admin from './pages/Admin'
 
 // Guarda el user del OAuth callback ANTES del primer render de rutas protegidas
 function saveUserFromUrl() {
@@ -44,10 +47,35 @@ function Protected({ children }) {
   return children
 }
 
+function EmailConsentGate() {
+  const [show, setShow] = useState(() => {
+    return isLoggedIn() && !localStorage.getItem('fanschedule_email_consent_shown')
+  })
+
+  if (!show) return null
+
+  const handleAccept = () => {
+    localStorage.setItem('fanschedule_email_consent_shown', 'true')
+    localStorage.setItem('fanschedule_email_notif', 'true')
+    localStorage.setItem('fanschedule_partner_notif', 'true')
+    setShow(false)
+  }
+
+  const handleDecline = () => {
+    localStorage.setItem('fanschedule_email_consent_shown', 'true')
+    localStorage.setItem('fanschedule_email_notif', 'false')
+    localStorage.setItem('fanschedule_partner_notif', 'false')
+    setShow(false)
+  }
+
+  return <EmailConsentModal onAccept={handleAccept} onDecline={handleDecline} />
+}
+
 function App() {
   return (
     <BrowserRouter>
       <CleanOAuthParams />
+      <EmailConsentGate />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/dashboard"                   element={<Protected><Dashboard /></Protected>} />
@@ -56,6 +84,8 @@ function App() {
         <Route path="/upcoming"                    element={<Protected><UpcomingMatches /></Protected>} />
         <Route path="/nearby"                      element={<Protected><NearbyMatches /></Protected>} />
         <Route path="/travel"                      element={<Protected><TravelPlanner /></Protected>} />
+        <Route path="/profile"                     element={<Protected><Profile /></Protected>} />
+        <Route path="/admin"                       element={<Protected><Admin /></Protected>} />
         <Route path="/match/:matchId"              element={<MatchDetail />} />
       </Routes>
     </BrowserRouter>

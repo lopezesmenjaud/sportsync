@@ -211,6 +211,17 @@ async function initializeDatabase() {
     `);
     console.log("✅ League country cache table ready");
 
+    await runAsync(`
+      CREATE TABLE IF NOT EXISTS email_consent (
+        userId TEXT PRIMARY KEY,
+        emailFanschedule INTEGER DEFAULT 0,
+        emailPartners INTEGER DEFAULT 0,
+        consentDate TEXT,
+        updatedAt TEXT
+      )
+    `);
+    console.log("✅ Email consent table ready");
+
   })();
 
   return initializationPromise;
