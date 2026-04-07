@@ -81,6 +81,7 @@ class MatchRepositorySqlite {
           sport,
           competitionKey,
           competitionName,
+          eventName,
           homeParticipantName,
           awayParticipantName,
           scheduledStartUtc,
@@ -92,13 +93,14 @@ class MatchRepositorySqlite {
           country,
           lastProviderUpdateUtc,
           data
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           match.providerMatchId,
           match.provider,
           match.sport,
           match.competitionKey,
           match.competitionName,
+          match.eventName || null,
           match.homeParticipantName,
           match.awayParticipantName,
           match.scheduledStartUtc,

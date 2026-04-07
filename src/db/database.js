@@ -99,7 +99,8 @@ async function initializeDatabase() {
         lastProviderUpdateUtc TEXT,
         data TEXT,
         ai_summary TEXT,
-        summary_generated_at TEXT
+        summary_generated_at TEXT,
+        eventName TEXT
       )
     `);
 
@@ -107,6 +108,7 @@ async function initializeDatabase() {
     await addColumnIfNotExists("matches", "summary_generated_at", "TEXT");
     await addColumnIfNotExists("matches", "city", "TEXT");
     await addColumnIfNotExists("matches", "country", "TEXT");
+    await addColumnIfNotExists("matches", "eventName", "TEXT");
 
     console.log("✅ Matches table ready");
 
