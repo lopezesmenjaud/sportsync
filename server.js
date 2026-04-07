@@ -989,23 +989,6 @@ app.post("/subscriptions/sync", async (req, res) => {
   }
 });
 
-app.get("/debug/clear-cache", async (req, res) => {
-  try {
-    await new Promise((resolve, reject) => {
-      db.run("DELETE FROM matches", [], (err) => { if (err) reject(err); else resolve(); });
-    });
-    await new Promise((resolve, reject) => {
-      db.run("DELETE FROM venue_city_cache", [], (err) => { if (err) reject(err); else resolve(); });
-    });
-    await new Promise((resolve, reject) => {
-      db.run("DELETE FROM league_country_cache", [], (err) => { if (err) reject(err); else resolve(); });
-    });
-    res.json({ ok: true, message: "Cleared: matches, venue_city_cache, league_country_cache" });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
 app.get("/matches/:userId", async (req, res) => {
   try {
     const { userId }      = req.params;
