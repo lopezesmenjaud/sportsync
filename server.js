@@ -994,6 +994,7 @@ app.get("/matches/:userId", async (req, res) => {
     const { userId }      = req.params;
     const subscriptions   = await subscriptionRepository.getByUserId(userId);
     const allMatches      = await matchRepository.getAll();
+    // Filtrar por suscripciones
     const relevantMatches = allMatches.filter(match =>
       subscriptions.some(sub => {
         if (normalizeSport(sub.sport) !== normalizeSport(match.sport)) return false;
@@ -1005,7 +1006,17 @@ app.get("/matches/:userId", async (req, res) => {
         return true;
       })
     );
-    res.json({ ok: true, matches: relevantMatches });
+
+    // Filtrar solo partidos desde "hoy" en la timezone del usuario
+    const tz = req.query.timezone || 'America/Mexico_City';
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
+    const today = now.toISOString().split('T')[0];
+    const upcomingMatches = relevantMatches.filter(m => {
+      const d = m.currentStartUtc?.split('T')[0] || m.scheduledStartUtc?.split('T')[0];
+      return d && d >= today;
+    });
+
+    res.json({ ok: true, matches: upcomingMatches });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

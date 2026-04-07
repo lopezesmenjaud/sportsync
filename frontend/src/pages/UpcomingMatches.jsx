@@ -12,7 +12,8 @@ export default function UpcomingMatches() {
   const userId = getUserId()
 
   useEffect(() => {
-    fetch(`${API_BASE}/matches/${userId}`)
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    fetch(`${API_BASE}/matches/${userId}?timezone=${encodeURIComponent(tz)}`)
       .then(res => res.json())
       .then(data => { if (data.ok) setMatches(data.matches) })
       .catch(err => console.error('Error loading matches:', err))
@@ -20,15 +21,22 @@ export default function UpcomingMatches() {
   }, [])
 
   const groupByDate = (matches) => {
-    const groups = {}
-    matches.forEach(match => {
+    const sorted = [...matches].sort((a, b) =>
+      new Date(a.currentStartUtc) - new Date(b.currentStartUtc)
+    )
+    const groups = []
+    const seen = new Map()
+    sorted.forEach(match => {
       const date = new Date(match.currentStartUtc)
       const key = date.toLocaleDateString('es-MX', {
         weekday: 'long', day: 'numeric', month: 'long',
         timeZone: 'America/Mexico_City'
       }).toUpperCase()
-      if (!groups[key]) groups[key] = []
-      groups[key].push(match)
+      if (!seen.has(key)) {
+        seen.set(key, [])
+        groups.push([key, seen.get(key)])
+      }
+      seen.get(key).push(match)
     })
     return groups
   }
@@ -53,7 +61,7 @@ export default function UpcomingMatches() {
             <p style={{ fontSize: 13, color: '#6b7280' }}>Agrega más equipos o ligas para ver sus partidos aquí.</p>
           </div>
         ) : (
-          Object.entries(grouped).map(([date, dateMatches]) => (
+          grouped.map(([date, dateMatches]) => (
             <div key={date} style={{ marginBottom: 28 }}>
               <div style={{ fontSize: 12, fontWeight: 500, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 12, borderBottom: '1px solid #e5e7eb', paddingBottom: 8 }}>
                 {date}
