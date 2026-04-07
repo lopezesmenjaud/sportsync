@@ -1010,10 +1010,10 @@ app.get("/matches/:userId", async (req, res) => {
     // Filtrar solo partidos desde "hoy" en la timezone del usuario
     const tz = req.query.timezone || 'America/Mexico_City';
     const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
-    const today = now.toISOString().split('T')[0];
+    const nowIso = now.toISOString();
     const upcomingMatches = relevantMatches.filter(m => {
-      const d = m.currentStartUtc?.split('T')[0] || m.scheduledStartUtc?.split('T')[0];
-      return d && d >= today;
+      const d = m.currentStartUtc || m.scheduledStartUtc;
+      return d && d >= nowIso;
     });
 
     res.json({ ok: true, matches: upcomingMatches });
