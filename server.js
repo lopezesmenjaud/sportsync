@@ -345,33 +345,26 @@ app.get("/api/broadcasting/:competitionKey/:country", async (req, res) => {
         max_tokens: 1000,
         messages: [{
           role: "user",
-          content: `Eres un experto en derechos de transmisión deportiva actualizado a 2024-2025.
-¿En qué canales de TV y plataformas de streaming se puede ver "${competitionName}" en ${country}?
+          content: `Eres un experto en derechos de transmisión deportiva. Para la competición "${competitionName}" en el país "${country}", dime en qué canales se puede ver en 2026.
 
-Sé muy preciso con los derechos actuales. Algunos ejemplos correctos:
-- La Liga española en México: Sky Sports (exclusivo de paga), Star+
-- Premier League en México: Sky Sports, ESPN
-- Champions League en México: HBO Max, ESPN
-- Fórmula 1 en México: Fox Sports, ESPN, DAZN
-- NFL en México: ESPN, Fox Sports, NFL Game Pass
-- NBA en México: NBA League Pass, Star+
+Reglas importantes:
+- Responde SOLO con un JSON válido, sin texto adicional
+- Sé específico para el país indicado, no des canales de otros países
+- Para México en específico: F1 ya NO se transmite por Fox Sports desde 2025, ahora es exclusivo de Sky Sports (Izzi/Sky) y F1 TV Pro
+- Para deportes como NFL donde los partidos rotan de canal, incluye todos los posibles y agrega una nota en el campo "note"
+- Si no tienes certeza, es mejor omitir un canal que incluir uno incorrecto
+- Incluye URLs oficiales de las plataformas de streaming cuando las conozcas
 
-Responde SOLO con un JSON válido, sin texto adicional ni backticks, con este formato exacto:
+Responde SOLO con este JSON:
 {
-  "freeTV": ["Canal 1"],
-  "paidTV": ["Canal de paga 1"],
-  "streaming": [
-    {"name": "Plataforma 1", "url": "https://..."}
-  ]
+  "freeTV": ["canal1", "canal2"],
+  "paidTV": ["canal1", "canal2"],
+  "streaming": [{"name": "nombre", "url": "https://..."}],
+  "note": "Nota opcional sobre rotación de canales o cambios recientes"
 }
 
-Reglas:
-- freeTV: canales de televisión abierta gratuitos
-- paidTV: canales de televisión de paga o cable (ej: Sky Sports, ESPN, Fox Sports)
-- streaming: plataformas contratables online con URL oficial
-- Si no hay opciones para una categoría, usa array vacío []
-- Solo incluye opciones reales y vigentes para ${country}
-- Para streaming incluye siempre la URL oficial de cada plataforma`
+Competición: ${competitionName}
+País: ${country}`
         }]
       })
     });

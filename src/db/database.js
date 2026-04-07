@@ -183,7 +183,8 @@ async function initializeDatabase() {
         UNIQUE(competitionKey, country)
       )
     `);
-    console.log("✅ Broadcasting cache table ready");
+    await runAsync(`DELETE FROM broadcasting_cache`);
+    console.log("✅ Broadcasting cache table ready (cleared)");
 
     await runAsync(`DROP TABLE IF EXISTS venue_cache`);
     await runAsync(`
