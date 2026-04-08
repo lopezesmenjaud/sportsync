@@ -63,18 +63,26 @@ function buildEventFromMatch(match) {
   const startDate = new Date(match.currentStartUtc || match.scheduledStartUtc);
   const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
 
+  const isTeamVsTeam = match.homeParticipantName && match.awayParticipantName;
+  const summary = isTeamVsTeam
+    ? `${match.homeParticipantName} vs ${match.awayParticipantName}`
+    : match.eventName || match.competitionName || "Evento deportivo";
+
+  const matchUrl = `https://fanschedule.com/match/${match.providerMatchId}`;
+
   const description = [
-    `${match.homeParticipantName} vs ${match.awayParticipantName}`,
+    isTeamVsTeam ? `${match.homeParticipantName} vs ${match.awayParticipantName}` : (match.eventName || match.competitionName),
     ``,
     `Competición: ${match.competitionName}`,
     `Deporte: ${match.sport}`,
     match.venueName ? `Estadio: ${match.venueName}` : null,
     ``,
-    `Powered by SportSync`,
+    `Ver partido: ${matchUrl}`,
+    `Powered by FanSchedule`,
   ].filter(Boolean).join("\n");
 
   return {
-    summary: `${match.homeParticipantName} vs ${match.awayParticipantName}`,
+    summary,
     location: match.venueName || undefined,
     description,
     start: {
@@ -84,6 +92,10 @@ function buildEventFromMatch(match) {
     end: {
       dateTime: endDate.toISOString(),
       timeZone: "UTC",
+    },
+    source: {
+      title: "Ver en FanSchedule",
+      url: matchUrl
     },
   };
 }

@@ -15,6 +15,7 @@ const SPORT_LABELS = {
   rugby:             { emoji: '🏉', name: 'Rugby' },
   hockey:            { emoji: '🏒', name: 'Hockey' },
   voleibol:          { emoji: '🏐', name: 'Voleibol' },
+  golf:              { emoji: '⛳', name: 'Golf' },
 }
 
 const LEAGUES_BY_SPORT = {
