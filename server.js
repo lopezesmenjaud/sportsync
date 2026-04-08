@@ -1079,12 +1079,33 @@ app.delete("/subscriptions/:id", async (req, res) => {
 
 app.post("/subscriptions/sync", async (req, res) => {
   try {
+    // Paso 1: descargar partidos nuevos/actualizados de TheSportsDB
     const results = await syncMatches();
     const calendarResults = [];
     for (const result of results) {
       const calendarResult = await syncMatchToCalendars(result.newMatch);
       calendarResults.push(...calendarResult);
     }
+
+    // Paso 2: re-sincronizar partidos existentes que no estén en calendar_events
+    const allMatches = await matchRepository.getAll();
+    const allCalendarEvents = await calendarEventRepository.getAll();
+    const syncedMatchIds = new Set(allCalendarEvents.map(ce => ce.providerMatchId));
+
+    let backfillCount = 0;
+    for (const match of allMatches) {
+      if (!syncedMatchIds.has(match.providerMatchId)) {
+        try {
+          const backfillResults = await syncMatchToCalendars(match);
+          calendarResults.push(...backfillResults);
+          backfillCount += backfillResults.length;
+        } catch (e) {
+          console.error(`[sync] Backfill error for ${match.providerMatchId}:`, e.message);
+        }
+      }
+    }
+    if (backfillCount > 0) console.log(`[sync] Backfilled ${backfillCount} calendar events`);
+
     res.json({ ok: true, synced: calendarResults.length, results: calendarResults });
   } catch (error) {
     res.status(500).json({ error: error.message });
