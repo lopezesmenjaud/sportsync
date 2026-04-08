@@ -144,4 +144,5 @@ module.exports = {
   createEvent,
   updateEvent,
   deleteEvent,
+  getCalendarClientForUser,
 };

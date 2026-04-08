@@ -949,6 +949,77 @@ app.get("/api/admin/stats", async (req, res) => {
   }
 });
 
+app.get("/api/admin/cleanup-calendar", async (req, res) => {
+  try {
+    const adminUser = req.headers['x-admin-user'];
+    if (adminUser !== 'lopezesmenjaud@gmail.com') {
+      return res.status(403).json({ ok: false, error: 'Forbidden' });
+    }
+
+    const accounts = await googleAccountRepository.getAll();
+    let totalDeleted = 0;
+    const details = [];
+
+    for (const account of accounts) {
+      try {
+        const calendar = await googleCalendarProvider.getCalendarClientForUser(account.userId);
+
+        // Obtener eventos que contengan "FanSchedule" en los próximos 60 días
+        const now = new Date();
+        const future = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+        const eventsRes = await calendar.events.list({
+          calendarId: 'primary',
+          timeMin: now.toISOString(),
+          timeMax: future.toISOString(),
+          maxResults: 500,
+          singleEvents: true,
+          q: 'FanSchedule'
+        });
+
+        const events = eventsRes.data.items || [];
+
+        // Agrupar por providerMatchId extraído de la description
+        const byMatchId = new Map();
+        for (const ev of events) {
+          const desc = ev.description || '';
+          const match = desc.match(/fanschedule\.com\/match\/(\w+)/);
+          if (!match) continue;
+          const matchId = match[1];
+          if (!byMatchId.has(matchId)) byMatchId.set(matchId, []);
+          byMatchId.get(matchId).push(ev);
+        }
+
+        // Borrar duplicados: mantener el más reciente, borrar el resto
+        let userDeleted = 0;
+        for (const [matchId, dupes] of byMatchId) {
+          if (dupes.length <= 1) continue;
+          // Ordenar por fecha de creación descendente (más reciente primero)
+          dupes.sort((a, b) => new Date(b.created || 0) - new Date(a.created || 0));
+          for (let i = 1; i < dupes.length; i++) {
+            try {
+              await calendar.events.delete({ calendarId: 'primary', eventId: dupes[i].id });
+              userDeleted++;
+            } catch (e) {
+              // skip if already deleted
+            }
+          }
+        }
+
+        totalDeleted += userDeleted;
+        if (userDeleted > 0) {
+          details.push({ userId: account.userId, deleted: userDeleted, totalEvents: events.length });
+        }
+      } catch (e) {
+        details.push({ userId: account.userId, error: e.message });
+      }
+    }
+
+    res.json({ ok: true, totalDeleted, users: accounts.length, details });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.post("/api/consent", async (req, res) => {
   try {
     const { userId, emailFanschedule, emailPartners } = req.body;
