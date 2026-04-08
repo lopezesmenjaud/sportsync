@@ -15,6 +15,7 @@ const SPORT_NAME_MAP = {
   rugby:            "rugby",
   hockey:           "ice hockey",
   voleibol:         "volleyball",
+  golf:             "golf",
   // Nombres en inglés (por si ya hay datos guardados así)
   football:         "football",
   "american football": "american football",
@@ -23,6 +24,7 @@ const SPORT_NAME_MAP = {
   fighting:         "fighting",
   "ice hockey":     "ice hockey",
   volleyball:       "volleyball",
+  golf:             "golf",
 };
 
 function normalizeSport(sport) {
@@ -43,7 +45,7 @@ function normalizeSport(sport) {
 //   → Si estamos en Jan-Aug: "{year-1}"
 
 const SPLIT_SEASON_SPORTS  = new Set(["football", "basketball", "ice hockey", "volleyball"]);
-const SINGLE_YEAR_SPORTS   = new Set(["motorsport", "baseball", "tennis", "fighting", "rugby"]);
+const SINGLE_YEAR_SPORTS   = new Set(["motorsport", "baseball", "tennis", "fighting", "rugby", "golf"]);
 
 function getCurrentSeason(normalizedSport) {
   const now   = new Date();

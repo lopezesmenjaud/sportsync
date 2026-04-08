@@ -170,6 +170,14 @@ const LEAGUES_BY_SPORT = {
       { id: '4544', name: 'Lega Volley',         apiName: 'Italian Volleyball League', country: 'Italia', type: 'league' },
     ]},
   ],
+  golf: [
+    { id: 'golf_all', title: 'Circuitos', leagues: [
+      { id: '4425', name: 'PGA Tour',       apiName: 'PGA Tour',      country: 'Mundial', type: 'cup' },
+      { id: '4553', name: 'LPGA Tour',      apiName: 'LPGA Tour',     country: 'Mundial', type: 'cup' },
+      { id: '4426', name: 'DP World Tour',  apiName: 'European Tour', country: 'Mundial', type: 'cup' },
+      { id: '5329', name: 'LIV Golf',       apiName: 'LIV Golf',     country: 'Mundial', type: 'cup' },
+    ]},
+  ],
 }
 
 const NATIONAL_TEAMS = [

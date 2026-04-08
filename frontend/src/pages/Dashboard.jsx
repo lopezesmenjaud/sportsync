@@ -15,12 +15,14 @@ const SPORTS = [
   { emoji: '🏉', name: 'Rugby',             sub: 'Six Nations, World Cup...',      key: 'rugby'            },
   { emoji: '🏒', name: 'Hockey',            sub: 'NHL, KHL...',                    key: 'hockey'           },
   { emoji: '🏐', name: 'Voleibol',          sub: 'FIVB, Liga italiana...',         key: 'voleibol'         },
+  { emoji: '⛳', name: 'Golf',              sub: 'PGA, LPGA, LIV Golf...',        key: 'golf'             },
 ]
 
 const SPORT_EMOJI = {
   futbol: '⚽', basketball: '🏀', futbol_americano: '🏈',
   automovilismo: '🏎️', baseball: '⚾', tenis: '🎾',
-  combate: '🥊', rugby: '🏉', hockey: '🏒', voleibol: '🏐'
+  combate: '🥊', rugby: '🏉', hockey: '🏒', voleibol: '🏐',
+  golf: '⛳'
 }
 
 export default function Dashboard() {
