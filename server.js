@@ -978,22 +978,38 @@ app.get("/api/admin/cleanup-calendar", async (req, res) => {
 
         const events = eventsRes.data.items || [];
 
-        // Agrupar por providerMatchId extraído de la description
+        // 1) Agrupar por link fanschedule.com/match/{id}
         const byMatchId = new Map();
+        const eventsWithoutLink = [];
         for (const ev of events) {
           const desc = ev.description || '';
           const match = desc.match(/fanschedule\.com\/match\/(\w+)/);
-          if (!match) continue;
-          const matchId = match[1];
-          if (!byMatchId.has(matchId)) byMatchId.set(matchId, []);
-          byMatchId.get(matchId).push(ev);
+          if (match) {
+            const matchId = match[1];
+            if (!byMatchId.has(matchId)) byMatchId.set(matchId, []);
+            byMatchId.get(matchId).push(ev);
+          } else {
+            eventsWithoutLink.push(ev);
+          }
         }
 
-        // Borrar duplicados: mantener el más reciente, borrar el resto
+        // 2) Agrupar eventos sin link por summary + fecha de inicio (YYYY-MM-DD)
+        const bySummaryDate = new Map();
+        for (const ev of eventsWithoutLink) {
+          const summary = (ev.summary || '').trim();
+          const startRaw = ev.start?.dateTime || ev.start?.date || '';
+          const dateKey = startRaw.substring(0, 10); // YYYY-MM-DD
+          if (!summary || !dateKey) continue;
+          const groupKey = `${summary}|||${dateKey}`;
+          if (!bySummaryDate.has(groupKey)) bySummaryDate.set(groupKey, []);
+          bySummaryDate.get(groupKey).push(ev);
+        }
+
+        // Borrar duplicados de ambos grupos: mantener el más reciente, borrar el resto
         let userDeleted = 0;
-        for (const [matchId, dupes] of byMatchId) {
+        const allGroups = [...byMatchId.values(), ...bySummaryDate.values()];
+        for (const dupes of allGroups) {
           if (dupes.length <= 1) continue;
-          // Ordenar por fecha de creación descendente (más reciente primero)
           dupes.sort((a, b) => new Date(b.created || 0) - new Date(a.created || 0));
           for (let i = 1; i < dupes.length; i++) {
             try {
