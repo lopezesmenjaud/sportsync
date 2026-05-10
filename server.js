@@ -685,7 +685,7 @@ app.post("/api/nearby", async (req, res) => {
     // 3. Obtener próximos eventos de cada liga (paralelo)
     const eventResults = await Promise.all(
       uniqueLeagues.map(async (league) => {
-        const url  = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventsnextleague.php?id=${league.idLeague}&e=15`;
+        const url  = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventsnextleague.php?id=${league.idLeague}&e=50`;
         const data = await safeFetchJson(url);
         return (data?.events || []).map(e => ({ ...e, _leagueName: league.strLeague, _leagueSport: league.strSport }));
       })
@@ -964,19 +964,30 @@ app.get("/api/admin/cleanup-calendar", async (req, res) => {
       try {
         const calendar = await googleCalendarProvider.getCalendarClientForUser(account.userId);
 
-        // Obtener eventos que contengan "FanSchedule" en los próximos 60 días
+        // Obtener eventos de FanSchedule y SportSync (branding anterior) en los próximos 60 días
         const now = new Date();
         const future = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
-        const eventsRes = await calendar.events.list({
+        const listParams = {
           calendarId: 'primary',
           timeMin: now.toISOString(),
           timeMax: future.toISOString(),
           maxResults: 500,
           singleEvents: true,
-          q: 'FanSchedule'
-        });
+        };
+        const [fanRes, sportRes] = await Promise.all([
+          calendar.events.list({ ...listParams, q: 'FanSchedule' }),
+          calendar.events.list({ ...listParams, q: 'SportSync' }),
+        ]);
 
-        const events = eventsRes.data.items || [];
+        // Combinar y deduplicar por event.id
+        const seen = new Set();
+        const events = [];
+        for (const ev of [...(fanRes.data.items || []), ...(sportRes.data.items || [])]) {
+          if (!seen.has(ev.id)) {
+            seen.add(ev.id);
+            events.push(ev);
+          }
+        }
 
         // 1) Agrupar por link fanschedule.com/match/{id}
         const byMatchId = new Map();
