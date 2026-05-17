@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { API_BASE } from '../config'
 
 const TICKER_ITEMS = [
@@ -142,8 +143,12 @@ export default function LandingPage() {
       </div>
 
       {/* Footer */}
-      <div style={{ background: '#1C2430', padding: '24px 28px', textAlign: 'center' }}>
+      <div style={{ background: '#1C2430', padding: '24px 28px', textAlign: 'center', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 13, color: '#8899AA' }}>FanSchedule</span>
+        <span style={{ fontSize: 13, color: '#8899AA' }}>·</span>
+        <Link to="/privacy" style={{ fontSize: 13, color: '#8899AA', textDecoration: 'none' }}>
+          Política de privacidad
+        </Link>
       </div>
 
       <style>{`

@@ -12,6 +12,7 @@ import TravelPlanner from './pages/TravelPlanner'
 import MatchDetail from './pages/MatchDetail'
 import Profile from './pages/Profile'
 import Admin from './pages/Admin'
+import PrivacyPolicy from './pages/PrivacyPolicy'
 
 // Guarda el user del OAuth callback ANTES del primer render de rutas protegidas
 function saveUserFromUrl() {
@@ -78,6 +79,7 @@ function App() {
       <EmailConsentGate />
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/dashboard"                   element={<Protected><Dashboard /></Protected>} />
         <Route path="/dashboard/:sport"            element={<Protected><LeaguePicker /></Protected>} />
         <Route path="/dashboard/:sport/:leagueId"  element={<Protected><TeamPicker /></Protected>} />
