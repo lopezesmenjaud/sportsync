@@ -1,5 +1,8 @@
 const cron = require("node-cron");
 const { syncMatches, syncSport } = require("./syncService");
+const { syncMatchToCalendars } = require("./calendarSyncService");
+const { matchRepository } = require("../repositories/matchRepositorySqlite");
+const { calendarEventRepository } = require("../repositories/calendarEventRepositorySqlite");
 
 // ─────────────────────────────────────────────
 // Intervalos de sincronización por deporte
@@ -38,6 +41,26 @@ const SPORT_SCHEDULES = [
   }
 ];
 
+async function backfillMissingCalendarEvents() {
+  const allMatches = await matchRepository.getAll();
+  const allCalendarEvents = await calendarEventRepository.getAll();
+  const syncedMatchIds = new Set(allCalendarEvents.map(ce => ce.providerMatchId));
+
+  let backfillCount = 0;
+  for (const match of allMatches) {
+    if (!syncedMatchIds.has(match.providerMatchId)) {
+      try {
+        const backfillResults = await syncMatchToCalendars(match);
+        backfillCount += backfillResults.length;
+      } catch (e) {
+        console.error(`[scheduler] Backfill error for ${match.providerMatchId}:`, e.message);
+      }
+    }
+  }
+  if (backfillCount > 0) console.log(`[scheduler] Backfilled ${backfillCount} calendar events`);
+  return backfillCount;
+}
+
 function startScheduler() {
   console.log("[scheduler] Starting automatic sync scheduler...");
 
@@ -46,6 +69,7 @@ function startScheduler() {
     console.log("[scheduler] Running initial sync on startup...");
     try {
       await syncMatches();
+      await backfillMissingCalendarEvents();
     } catch (e) {
       console.error("[scheduler] Initial sync error:", e.message);
     }
@@ -61,6 +85,11 @@ function startScheduler() {
         } catch (e) {
           console.error(`[scheduler] Error syncing ${sport}:`, e.message);
         }
+      }
+      try {
+        await backfillMissingCalendarEvents();
+      } catch (e) {
+        console.error(`[scheduler] Backfill error after ${schedule.name} sync:`, e.message);
       }
     });
     console.log(`[scheduler] Scheduled ${schedule.name} — ${schedule.label}`);
