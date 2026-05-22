@@ -170,6 +170,7 @@ async function initializeDatabase() {
         updatedAtUtc TEXT NOT NULL
       )
     `);
+    await addColumnIfNotExists("google_accounts", "fanschedule_calendar_id", "TEXT");
     console.log("✅ Google accounts table ready");
 
     await runAsync(`

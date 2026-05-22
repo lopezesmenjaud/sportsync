@@ -24,8 +24,10 @@ async function run() {
       lastProviderUpdateUtc: new Date().toISOString()
     };
 
+    const calendarId = await googleCalendarProvider.getOrCreateFanscheduleCalendar({ userId: "user_1" });
+
     console.log("CREATING REAL GOOGLE EVENT...");
-    const created = await googleCalendarProvider.createEvent({ userId: "user_1", match });
+    const created = await googleCalendarProvider.createEvent({ userId: "user_1", calendarId, match });
     console.log(JSON.stringify(created, null, 2));
 
     const updatedMatch = {
@@ -37,6 +39,7 @@ async function run() {
     console.log("\nUPDATING REAL GOOGLE EVENT...");
     const updated = await googleCalendarProvider.updateEvent({
       userId: "user_1",
+      calendarId,
       calendarEventId: created.calendarEventId,
       match: updatedMatch
     });

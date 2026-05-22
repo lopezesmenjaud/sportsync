@@ -9,6 +9,8 @@ async function syncMatchToCalendars(match) {
 
   for (const userId of affectedUserIds) {
     try {
+      const calendarId = await googleCalendarProvider.getOrCreateFanscheduleCalendar({ userId });
+
       const existingCalendarEvent =
         await calendarEventRepository.getByUserIdAndProviderMatchId(
           userId,
@@ -18,6 +20,7 @@ async function syncMatchToCalendars(match) {
       if (!existingCalendarEvent) {
         const created = await googleCalendarProvider.createEvent({
           userId,
+          calendarId,
           match
         });
 
@@ -41,15 +44,25 @@ async function syncMatchToCalendars(match) {
 
       const updated = await googleCalendarProvider.updateEvent({
         userId,
+        calendarId,
         calendarEventId: existingCalendarEvent.calendarEventId,
         match
       });
+
+      // Si updateEvent cayó al fallback de insert, el calendarEventId nuevo difiere
+      // del que teníamos guardado: persistirlo para no perder la referencia.
+      if (updated.calendarEventId !== existingCalendarEvent.calendarEventId) {
+        await calendarEventRepository.updateCalendarEventId(
+          existingCalendarEvent.id,
+          updated.calendarEventId
+        );
+      }
 
       results.push({
         action: "updated",
         userId,
         providerMatchId: match.providerMatchId,
-        calendarEventId: existingCalendarEvent.calendarEventId,
+        calendarEventId: updated.calendarEventId,
         htmlLink: updated.htmlLink
       });
     } catch (error) {

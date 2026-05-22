@@ -100,44 +100,121 @@ function buildEventFromMatch(match) {
   };
 }
 
-async function createEvent({ userId, match }) {
-  const calendar = await getCalendarClientForUser(userId);
+const FANSCHEDULE_CALENDAR_CACHE = new Map();
+const FANSCHEDULE_CALENDAR_TTL_MS = 5 * 60 * 1000;
 
-  const response = await calendar.events.insert({
-    calendarId: "primary",
-    requestBody: buildEventFromMatch(match),
-  });
-
-  return {
-    calendarEventId: response.data.id,
-    htmlLink: response.data.htmlLink,
-  };
+function invalidateFanscheduleCalendarCache(userId) {
+  FANSCHEDULE_CALENDAR_CACHE.delete(userId);
 }
 
-async function updateEvent({ userId, calendarEventId, match }) {
-  const calendar = await getCalendarClientForUser(userId);
-
-  const response = await calendar.events.update({
-    calendarId: "primary",
-    eventId: calendarEventId,
-    requestBody: buildEventFromMatch(match),
-  });
-
-  return {
-    calendarEventId: response.data.id,
-    htmlLink: response.data.htmlLink,
-  };
+function isGoneStatus(err) {
+  const status = err?.code || err?.response?.status;
+  return status === 404 || status === 410;
 }
 
-async function deleteEvent({ userId, calendarEventId }) {
+async function createEvent({ userId, calendarId, match }) {
+  if (!calendarId) throw new Error("createEvent: calendarId is required");
+  const calendar = await getCalendarClientForUser(userId);
+  const requestBody = buildEventFromMatch(match);
+
+  try {
+    const response = await calendar.events.insert({ calendarId, requestBody });
+    return {
+      calendarEventId: response.data.id,
+      htmlLink: response.data.htmlLink,
+      calendarId,
+    };
+  } catch (err) {
+    if (!isGoneStatus(err)) throw err;
+
+    console.log(`[google] Calendar ${calendarId} gone for ${userId} — recreating and retrying insert`);
+    invalidateFanscheduleCalendarCache(userId);
+    const newCalendarId = await getOrCreateFanscheduleCalendar({ userId });
+
+    const response = await calendar.events.insert({ calendarId: newCalendarId, requestBody });
+    return {
+      calendarEventId: response.data.id,
+      htmlLink: response.data.htmlLink,
+      calendarId: newCalendarId,
+    };
+  }
+}
+
+async function updateEvent({ userId, calendarId, calendarEventId, match }) {
+  if (!calendarId) throw new Error("updateEvent: calendarId is required");
+  const calendar = await getCalendarClientForUser(userId);
+  const requestBody = buildEventFromMatch(match);
+
+  try {
+    const response = await calendar.events.update({
+      calendarId,
+      eventId: calendarEventId,
+      requestBody,
+    });
+    return {
+      calendarEventId: response.data.id,
+      htmlLink: response.data.htmlLink,
+      calendarId,
+    };
+  } catch (err) {
+    if (!isGoneStatus(err)) throw err;
+
+    console.log(`[google] Event ${calendarEventId} gone for ${userId} — recreating via insert`);
+    return await createEvent({ userId, calendarId, match });
+  }
+}
+
+async function deleteEvent({ userId, calendarId, calendarEventId }) {
+  if (!calendarId) throw new Error("deleteEvent: calendarId is required");
   const calendar = await getCalendarClientForUser(userId);
 
-  await calendar.events.delete({
-    calendarId: "primary",
-    eventId: calendarEventId,
-  });
+  try {
+    await calendar.events.delete({ calendarId, eventId: calendarEventId });
+  } catch (err) {
+    if (!isGoneStatus(err)) throw err;
+    console.log(`[google] Event ${calendarEventId} already gone for ${userId} — treating delete as success`);
+  }
 
   return { calendarEventId };
+}
+
+async function getOrCreateFanscheduleCalendar({ userId, skipCache = false } = {}) {
+  if (!skipCache) {
+    const cached = FANSCHEDULE_CALENDAR_CACHE.get(userId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.calendarId;
+    }
+  }
+
+  const account = await googleAccountRepository.getByUserId(userId);
+  if (!account) {
+    throw new Error(`No Google account found for userId: ${userId}`);
+  }
+
+  const calendar = await getCalendarClientForUser(userId);
+  const existingId = account.fanschedule_calendar_id;
+
+  if (existingId) {
+    try {
+      await calendar.calendars.get({ calendarId: existingId });
+      FANSCHEDULE_CALENDAR_CACHE.set(userId, { calendarId: existingId, expiresAt: Date.now() + FANSCHEDULE_CALENDAR_TTL_MS });
+      return existingId;
+    } catch (err) {
+      if (!isGoneStatus(err)) throw err;
+      console.log(`[google] FanSchedule calendar ${existingId} no longer exists for ${userId} — recreating`);
+    }
+  }
+
+  const created = await calendar.calendars.insert({
+    requestBody: { summary: "FanSchedule" },
+  });
+  const newId = created.data.id;
+
+  await googleAccountRepository.setFanscheduleCalendarId(userId, newId);
+  FANSCHEDULE_CALENDAR_CACHE.set(userId, { calendarId: newId, expiresAt: Date.now() + FANSCHEDULE_CALENDAR_TTL_MS });
+  console.log(`[google] Created FanSchedule calendar ${newId} for ${userId}`);
+
+  return newId;
 }
 
 module.exports = {
@@ -145,4 +222,6 @@ module.exports = {
   updateEvent,
   deleteEvent,
   getCalendarClientForUser,
+  getOrCreateFanscheduleCalendar,
+  invalidateFanscheduleCalendarCache,
 };

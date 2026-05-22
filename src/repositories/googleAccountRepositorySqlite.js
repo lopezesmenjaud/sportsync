@@ -106,6 +106,24 @@ class GoogleAccountRepositorySqlite {
       });
     });
   }
+
+  setFanscheduleCalendarId(userId, calendarId) {
+    return new Promise((resolve, reject) => {
+      const now = new Date().toISOString();
+      db.run(
+        `
+        UPDATE google_accounts
+        SET fanschedule_calendar_id = ?, updatedAtUtc = ?
+        WHERE userId = ?
+        `,
+        [calendarId, now, userId],
+        (err) => {
+          if (err) return reject(err);
+          resolve();
+        }
+      );
+    });
+  }
 }
 
 const googleAccountRepository = new GoogleAccountRepositorySqlite();

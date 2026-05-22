@@ -962,12 +962,13 @@ app.get("/api/admin/cleanup-calendar", async (req, res) => {
     for (const account of accounts) {
       try {
         const calendar = await googleCalendarProvider.getCalendarClientForUser(account.userId);
+        const fanscheduleCalendarId = await googleCalendarProvider.getOrCreateFanscheduleCalendar({ userId: account.userId });
 
         // Obtener eventos de FanSchedule y SportSync (branding anterior) en los próximos 60 días
         const now = new Date();
         const future = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
         const listParams = {
-          calendarId: 'primary',
+          calendarId: fanscheduleCalendarId,
           timeMin: now.toISOString(),
           timeMax: future.toISOString(),
           maxResults: 500,
@@ -1023,7 +1024,7 @@ app.get("/api/admin/cleanup-calendar", async (req, res) => {
           dupes.sort((a, b) => new Date(b.created || 0) - new Date(a.created || 0));
           for (let i = 1; i < dupes.length; i++) {
             try {
-              await calendar.events.delete({ calendarId: 'primary', eventId: dupes[i].id });
+              await calendar.events.delete({ calendarId: fanscheduleCalendarId, eventId: dupes[i].id });
               userDeleted++;
             } catch (e) {
               // skip if already deleted
@@ -1148,9 +1149,15 @@ app.delete("/subscriptions/:id", async (req, res) => {
 
         // Eliminar eventos de Google Calendar para el usuario
         const calEvents = await calendarEventRepository.getByUserIdAndMatchIds(deleted.userId, orphanIds);
+        const calendarIdByUser = new Map();
         for (const ce of calEvents) {
           try {
-            await googleCalendarProvider.deleteEvent({ userId: ce.userId, calendarEventId: ce.calendarEventId });
+            let calendarId = calendarIdByUser.get(ce.userId);
+            if (!calendarId) {
+              calendarId = await googleCalendarProvider.getOrCreateFanscheduleCalendar({ userId: ce.userId });
+              calendarIdByUser.set(ce.userId, calendarId);
+            }
+            await googleCalendarProvider.deleteEvent({ userId: ce.userId, calendarId, calendarEventId: ce.calendarEventId });
             await calendarEventRepository.deleteById(ce.id);
             console.log(`[sub] Deleted calendar event ${ce.calendarEventId} for match ${ce.providerMatchId}`);
           } catch (err) {
