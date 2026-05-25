@@ -2,6 +2,12 @@ const { google } = require("googleapis");
 const fs = require("fs");
 const path = require("path");
 const { googleAccountRepository } = require("../repositories/googleAccountRepositorySqlite");
+const { createMutex } = require("./mutex");
+
+// Lock global para serializar la sección check-then-insert que crea
+// el calendario "FanSchedule" en la cuenta del usuario. Sin esto, dos flujos
+// concurrentes pueden ver "no existe" y crear dos calendarios distintos.
+const fanscheduleCalendarMutex = createMutex();
 
 // Lee credenciales OAuth: archivo local o variables de entorno
 let client_id, client_secret, redirect_uri;
@@ -186,35 +192,46 @@ async function getOrCreateFanscheduleCalendar({ userId, skipCache = false } = {}
     }
   }
 
-  const account = await googleAccountRepository.getByUserId(userId);
-  if (!account) {
-    throw new Error(`No Google account found for userId: ${userId}`);
-  }
-
-  const calendar = await getCalendarClientForUser(userId);
-  const existingId = account.fanschedule_calendar_id;
-
-  if (existingId) {
-    try {
-      await calendar.calendars.get({ calendarId: existingId });
-      FANSCHEDULE_CALENDAR_CACHE.set(userId, { calendarId: existingId, expiresAt: Date.now() + FANSCHEDULE_CALENDAR_TTL_MS });
-      return existingId;
-    } catch (err) {
-      if (!isGoneStatus(err)) throw err;
-      console.log(`[google] FanSchedule calendar ${existingId} no longer exists for ${userId} — recreating`);
+  return await fanscheduleCalendarMutex(async () => {
+    // Re-chequear cache adentro del lock: si otro flujo ya creó el calendario
+    // mientras esperábamos, lo tomamos sin volver a crear.
+    if (!skipCache) {
+      const cached = FANSCHEDULE_CALENDAR_CACHE.get(userId);
+      if (cached && cached.expiresAt > Date.now()) {
+        return cached.calendarId;
+      }
     }
-  }
 
-  const created = await calendar.calendars.insert({
-    requestBody: { summary: "FanSchedule" },
+    const account = await googleAccountRepository.getByUserId(userId);
+    if (!account) {
+      throw new Error(`No Google account found for userId: ${userId}`);
+    }
+
+    const calendar = await getCalendarClientForUser(userId);
+    const existingId = account.fanschedule_calendar_id;
+
+    if (existingId) {
+      try {
+        await calendar.calendars.get({ calendarId: existingId });
+        FANSCHEDULE_CALENDAR_CACHE.set(userId, { calendarId: existingId, expiresAt: Date.now() + FANSCHEDULE_CALENDAR_TTL_MS });
+        return existingId;
+      } catch (err) {
+        if (!isGoneStatus(err)) throw err;
+        console.log(`[google] FanSchedule calendar ${existingId} no longer exists for ${userId} — recreating`);
+      }
+    }
+
+    const created = await calendar.calendars.insert({
+      requestBody: { summary: "FanSchedule" },
+    });
+    const newId = created.data.id;
+
+    await googleAccountRepository.setFanscheduleCalendarId(userId, newId);
+    FANSCHEDULE_CALENDAR_CACHE.set(userId, { calendarId: newId, expiresAt: Date.now() + FANSCHEDULE_CALENDAR_TTL_MS });
+    console.log(`[google] Created FanSchedule calendar ${newId} for ${userId}`);
+
+    return newId;
   });
-  const newId = created.data.id;
-
-  await googleAccountRepository.setFanscheduleCalendarId(userId, newId);
-  FANSCHEDULE_CALENDAR_CACHE.set(userId, { calendarId: newId, expiresAt: Date.now() + FANSCHEDULE_CALENDAR_TTL_MS });
-  console.log(`[google] Created FanSchedule calendar ${newId} for ${userId}`);
-
-  return newId;
 }
 
 module.exports = {

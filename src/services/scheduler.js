@@ -68,7 +68,14 @@ function startScheduler() {
   setTimeout(async () => {
     console.log("[scheduler] Running initial sync on startup...");
     try {
-      await syncMatches();
+      const results = await syncMatches();
+      for (const result of results) {
+        try {
+          await syncMatchToCalendars(result.newMatch);
+        } catch (e) {
+          console.error(`[scheduler] Calendar sync error for ${result.matchId}:`, e.message);
+        }
+      }
       await backfillMissingCalendarEvents();
     } catch (e) {
       console.error("[scheduler] Initial sync error:", e.message);
@@ -81,7 +88,14 @@ function startScheduler() {
       console.log(`[scheduler] Running sync for: ${schedule.name} (${schedule.label})`);
       for (const sport of schedule.sports) {
         try {
-          await syncSport(sport);
+          const results = await syncSport(sport);
+          for (const result of results) {
+            try {
+              await syncMatchToCalendars(result.newMatch);
+            } catch (e) {
+              console.error(`[scheduler] Calendar sync error for ${result.matchId}:`, e.message);
+            }
+          }
         } catch (e) {
           console.error(`[scheduler] Error syncing ${sport}:`, e.message);
         }
