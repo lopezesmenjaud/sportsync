@@ -128,6 +128,7 @@ async function run() {
   let errGoogle = 0;
   let okDb = 0;
   let errDb = 0;
+  let skippedDb = 0;
 
   for (let i = 0; i < plan.length; i++) {
     const { link, located, eventName } = plan[i];
@@ -138,28 +139,39 @@ async function run() {
     // que es el id que NOSOTROS guardamos al crear el evento — nunca tocamos
     // eventos personales del usuario.
     const targetCalendarId = located.calendarId || target.fanschedule_calendar_id || "primary";
+    let shouldDeleteDbRow = false;
     try {
       await calendar.events.delete({ calendarId: targetCalendarId, eventId: link.calendarEventId });
       console.log(`${tag}   ✓ Google Calendar: evento borrado de ${targetCalendarId}`);
       okGoogle++;
+      shouldDeleteDbRow = true;
     } catch (err) {
       if (isGoneStatus(err)) {
         console.log(`${tag}   ✓ Google Calendar: el evento ya no existía (404/410) — tratado como éxito`);
         goneGoogle++;
+        shouldDeleteDbRow = true;
       } else {
         console.error(`${tag}   ✗ Google Calendar: ERROR — ${err.message}`);
+        console.error(`${tag}   ⤷ Fila ${link.id} se MANTIENE en BD para evitar evento huérfano en Google. Reintentar cuando se resuelva el error.`);
         errGoogle++;
       }
     }
 
-    // Borrar fila en BD (siempre, consistente con el patrón usado en server.js/subscriptions DELETE)
-    try {
-      await calendarEventRepository.deleteById(link.id);
-      console.log(`${tag}   ✓ DB: fila ${link.id} eliminada de calendar_events`);
-      okDb++;
-    } catch (err) {
-      console.error(`${tag}   ✗ DB: ERROR borrando fila ${link.id} — ${err.message}`);
-      errDb++;
+    // Solo borramos la fila si Google confirmó éxito o devolvió 404/410.
+    // Si Google falló con otro código (403/429/500/red), DEJAMOS la fila intacta:
+    // borrarla mientras el evento sigue en Google produciría un evento huérfano,
+    // y la próxima sincronización crearía un duplicado encima.
+    if (shouldDeleteDbRow) {
+      try {
+        await calendarEventRepository.deleteById(link.id);
+        console.log(`${tag}   ✓ DB: fila ${link.id} eliminada de calendar_events`);
+        okDb++;
+      } catch (err) {
+        console.error(`${tag}   ✗ DB: ERROR borrando fila ${link.id} — ${err.message}`);
+        errDb++;
+      }
+    } else {
+      skippedDb++;
     }
   }
 
@@ -167,7 +179,7 @@ async function run() {
   console.log("RESUMEN");
   console.log("=".repeat(110));
   console.log(`Google Calendar : borrados=${okGoogle}  ya-no-existían=${goneGoogle}  errores=${errGoogle}`);
-  console.log(`BD              : filas borradas=${okDb}  errores=${errDb}`);
+  console.log(`BD              : filas borradas=${okDb}  errores=${errDb}  mantenidas-por-error-en-google=${skippedDb}`);
 
   console.log("\nFIN.");
   process.exit(errGoogle + errDb > 0 ? 1 : 0);
