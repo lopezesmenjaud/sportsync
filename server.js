@@ -698,7 +698,12 @@ app.post("/api/nearby", async (req, res) => {
 
     // 4. Resolver si cada venue está en la ciudad buscada (caché SQLite + Claude AI)
 
-    const uniqueVenues = [...new Set(allEvents.map(e => e.strVenue).filter(Boolean))];
+    // Lista de "lugares" a clasificar: estadios cuando el evento trae strVenue,
+    // equipo local (strHomeTeam) como fallback cuando NO trae strVenue.
+    // Esto evita descartar partidos que TheSportsDB devuelve sin estadio.
+    const uniqueVenues = [...new Set(
+      allEvents.flatMap(e => e.strVenue ? [e.strVenue] : (e.strHomeTeam ? [e.strHomeTeam] : []))
+    )];
     console.log(`[nearby] DEBUG venues únicos: ${JSON.stringify(uniqueVenues)}`);
 
     // Helper: leer venue_city_cache para un (venue, targetCity)
@@ -764,7 +769,7 @@ app.post("/api/nearby", async (req, res) => {
               max_tokens: 4000,
               messages: [{
                 role: "user",
-                content: `Tengo una lista de estadios deportivos. Para cada uno, necesito saber si está FÍSICAMENTE ubicado dentro de la zona metropolitana de "${location.city}", ${location.country}.\n\nReglas estrictas:\n- Responde inTargetCity: true SOLO si el estadio está geográficamente dentro de la zona metropolitana de "${location.city}"\n- NO marques true solo porque el nombre del estadio contiene "${location.city}" — verifica la ubicación real\n- Incluye ciudades conurbadas y municipios adyacentes que forman parte del área metropolitana\n- Si no conoces la ubicación del estadio, responde inTargetCity: false\n\nResponde SOLO con un JSON array, sin texto adicional:\n[{"venue": "nombre exacto del estadio", "city": "ciudad donde está físicamente", "inTargetCity": true/false}]\n\nLista de estadios:\n${batch.map((v, i) => `${i + 1}. ${v}`).join("\n")}`
+                content: `Tengo una lista de elementos. Cada elemento puede ser un ESTADIO deportivo o un EQUIPO deportivo. Para cada uno, necesito saber si su ubicación cae dentro de la zona metropolitana de "${location.city}", ${location.country}:\n- Si es un ESTADIO: dime en qué ciudad está físicamente ubicado.\n- Si es un EQUIPO: dime en qué ciudad juega de local (su sede principal).\n\nReglas estrictas:\n- Responde inTargetCity: true SOLO si la ciudad (del estadio, o de la sede del equipo) está geográficamente dentro de la zona metropolitana de "${location.city}".\n- NO marques true solo porque el nombre contiene "${location.city}" — verifica la ubicación real.\n- Incluye ciudades conurbadas y municipios adyacentes que forman parte del área metropolitana.\n- Si no conoces la ubicación del estadio o la sede del equipo, responde inTargetCity: false.\n\nResponde SOLO con un JSON array, sin texto adicional:\n[{"venue": "nombre exacto del estadio o equipo", "city": "ciudad donde está físicamente el estadio o donde juega de local el equipo", "inTargetCity": true/false}]\n\nLista:\n${batch.map((v, i) => `${i + 1}. ${v}`).join("\n")}`
               }]
             })
           });
@@ -810,7 +815,12 @@ app.post("/api/nearby", async (req, res) => {
     );
     console.log(`[nearby] ${localVenues.size} venues in "${location.city}":`, [...localVenues]);
 
-    const filteredEvents = allEvents.filter(e => e.strVenue && localVenues.has(e.strVenue));
+    // Un evento se queda si su estadio (strVenue) está marcado como local,
+    // o si no tiene estadio pero su equipo local (strHomeTeam) está marcado como local.
+    const filteredEvents = allEvents.filter(e => {
+      if (e.strVenue) return localVenues.has(e.strVenue);
+      return e.strHomeTeam && localVenues.has(e.strHomeTeam);
+    });
 
     if (filteredEvents.length === 0) {
       return res.json({ ok: true, location, matches: [], message: `No encontramos partidos confirmados en ${location.city || cityNorm}` });
