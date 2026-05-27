@@ -687,14 +687,19 @@ app.post("/api/nearby", async (req, res) => {
       uniqueLeagues.map(async (league) => {
         const url  = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventsnextleague.php?id=${league.idLeague}&e=50`;
         const data = await safeFetchJson(url);
-        return (data?.events || []).map(e => ({ ...e, _leagueName: league.strLeague, _leagueSport: league.strSport }));
+        const events = data?.events || [];
+        console.log(`[nearby] DEBUG liga ${league.strLeague || league.idLeague} → ${events.length} eventos`);
+        return events.map(e => ({ ...e, _leagueName: league.strLeague, _leagueSport: league.strSport }));
       })
     );
     const allEvents = eventResults.flat();
+    console.log(`[nearby] DEBUG total eventos: ${allEvents.length}`);
+    console.log(`[nearby] DEBUG eventos SIN strVenue: ${allEvents.filter(e => !e.strVenue).length}`);
 
     // 4. Resolver si cada venue está en la ciudad buscada (caché SQLite + Claude AI)
 
     const uniqueVenues = [...new Set(allEvents.map(e => e.strVenue).filter(Boolean))];
+    console.log(`[nearby] DEBUG venues únicos: ${JSON.stringify(uniqueVenues)}`);
 
     // Helper: leer venue_city_cache para un (venue, targetCity)
     const getVenueCityCache = (venue, targetCity) => new Promise((resolve, reject) => {
@@ -781,6 +786,7 @@ app.post("/api/nearby", async (req, res) => {
       for (const item of allResults) {
         if (item.venue && stillUncached.includes(item.venue)) {
           const inTarget = item.inTargetCity === true;
+          console.log(`[nearby] DEBUG venue "${item.venue}" → city="${item.city || ''}", inTargetCity=${inTarget}`);
           venueInCity.set(item.venue, inTarget);
           await setVenueCityCache(item.venue, cityNorm, item.city || null, inTarget);
         }
