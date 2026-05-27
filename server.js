@@ -1047,6 +1047,109 @@ app.get("/api/admin/cleanup-calendar", async (req, res) => {
   }
 });
 
+// ── Re-sincronización per-usuario (solo localhost — pensado para el shell de Render) ──
+// Corre en el mismo proceso que el server, así reutiliza el mutex en memoria de
+// calendarSyncService y previene duplicados aunque el scheduler dispare en paralelo.
+app.post("/api/admin/resync-user", async (req, res) => {
+  const remote = req.socket.remoteAddress || "";
+  const isLocal =
+    remote === "127.0.0.1" ||
+    remote === "::1" ||
+    remote === "::ffff:127.0.0.1";
+  if (!isLocal) {
+    return res.status(403).json({ ok: false, error: "Forbidden (localhost-only)" });
+  }
+
+  const { email } = req.body || {};
+  if (!email) {
+    return res.status(400).json({ ok: false, error: "email is required in body" });
+  }
+
+  try {
+    const allAccounts = await googleAccountRepository.getAll();
+    const target = allAccounts.find(
+      a => (a.googleEmail || "").toLowerCase() === email.toLowerCase()
+    );
+    if (!target) {
+      return res.status(404).json({ ok: false, error: `No account found for email: ${email}` });
+    }
+
+    console.log(`[admin/resync-user] start  userId=${target.userId}  email=${target.googleEmail}`);
+    console.log(`[admin/resync-user] fanschedule_calendar_id (antes)=${target.fanschedule_calendar_id || "(null)"}`);
+
+    const subscriptions = await subscriptionRepository.getByUserId(target.userId);
+    console.log(`[admin/resync-user] subscriptions=${subscriptions.length}`);
+    if (subscriptions.length === 0) {
+      return res.json({
+        ok: true,
+        message: "Usuario sin suscripciones — nada que sincronizar.",
+        userId: target.userId,
+        email: target.googleEmail,
+        subscriptions: 0,
+        relevantMatches: 0,
+        created: 0,
+        updated: 0,
+        errors: 0,
+        totalCalendarEventRows: 0,
+        duplicates: [],
+      });
+    }
+
+    const { getMatchesForUser } = require("./src/services/subscriptionMatchService");
+    const relevantMatches = await getMatchesForUser(target.userId);
+    console.log(`[admin/resync-user] relevantMatches=${relevantMatches.length}`);
+
+    let created = 0;
+    let updated = 0;
+    let errors = 0;
+    for (let i = 0; i < relevantMatches.length; i++) {
+      const m = relevantMatches[i];
+      try {
+        const results = await syncMatchToCalendars(m);
+        const userResults = results.filter(r => r.userId === target.userId);
+        created += userResults.filter(r => r.action === "created").length;
+        updated += userResults.filter(r => r.action === "updated").length;
+      } catch (e) {
+        errors++;
+        console.error(`[admin/resync-user] error for ${m.providerMatchId}: ${e.message}`);
+      }
+      if ((i + 1) % 10 === 0 || i + 1 === relevantMatches.length) {
+        console.log(`[admin/resync-user] progress ${i + 1}/${relevantMatches.length}  created=${created} updated=${updated} errors=${errors}`);
+      }
+    }
+
+    const refreshed = await googleAccountRepository.getByUserId(target.userId);
+    const finalLinks = await calendarEventRepository.getByUserId(target.userId);
+    const byMatchId = new Map();
+    for (const ce of finalLinks) {
+      byMatchId.set(ce.providerMatchId, (byMatchId.get(ce.providerMatchId) || 0) + 1);
+    }
+    const duplicates = [...byMatchId.entries()]
+      .filter(([, count]) => count > 1)
+      .map(([providerMatchId, count]) => ({ providerMatchId, count }));
+
+    console.log(`[admin/resync-user] done.  created=${created} updated=${updated} errors=${errors} totalRows=${finalLinks.length} duplicates=${duplicates.length}`);
+
+    res.json({
+      ok: true,
+      userId: target.userId,
+      email: target.googleEmail,
+      fanscheduleCalendarIdBefore: target.fanschedule_calendar_id || null,
+      fanscheduleCalendarIdAfter: refreshed?.fanschedule_calendar_id || null,
+      subscriptions: subscriptions.length,
+      relevantMatches: relevantMatches.length,
+      created,
+      updated,
+      errors,
+      totalCalendarEventRows: finalLinks.length,
+      duplicates,
+    });
+  } catch (error) {
+    console.error("[admin/resync-user] FATAL:", error);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.post("/api/consent", async (req, res) => {
   try {
     const { userId, emailFanschedule, emailPartners } = req.body;
