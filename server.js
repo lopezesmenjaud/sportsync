@@ -778,11 +778,12 @@ app.post("/api/nearby", async (req, res) => {
 
     // 4. Resolver si cada venue está en la ciudad buscada (caché SQLite + Claude AI)
 
-    // Lista de "lugares" a clasificar: estadios cuando el evento trae strVenue,
-    // equipo local (strHomeTeam) como fallback cuando NO trae strVenue.
-    // Esto evita descartar partidos que TheSportsDB devuelve sin estadio.
+    // Lista de "lugares" a clasificar: PRIORIDAD al equipo local (strHomeTeam),
+    // que es señal más confiable que el nombre del estadio (algunos estadios
+    // tienen nombres ambiguos o ubicaciones que Claude clasifica mal).
+    // Solo si el evento no trae strHomeTeam caemos a strVenue.
     const uniqueVenues = [...new Set(
-      eventsInWindow.flatMap(e => e.strVenue ? [e.strVenue] : (e.strHomeTeam ? [e.strHomeTeam] : []))
+      eventsInWindow.flatMap(e => e.strHomeTeam ? [e.strHomeTeam] : (e.strVenue ? [e.strVenue] : []))
     )];
     console.log(`[nearby] DEBUG venues únicos: ${JSON.stringify(uniqueVenues)}`);
 
@@ -895,11 +896,11 @@ app.post("/api/nearby", async (req, res) => {
     );
     console.log(`[nearby] ${localVenues.size} venues in "${location.city}":`, [...localVenues]);
 
-    // Un evento se queda si su estadio (strVenue) está marcado como local,
-    // o si no tiene estadio pero su equipo local (strHomeTeam) está marcado como local.
+    // Un evento se queda si su equipo local (strHomeTeam) está marcado como local;
+    // si el evento NO tiene strHomeTeam, evalúa su estadio (strVenue) como fallback.
     const filteredEvents = eventsInWindow.filter(e => {
-      if (e.strVenue) return localVenues.has(e.strVenue);
-      return e.strHomeTeam && localVenues.has(e.strHomeTeam);
+      if (e.strHomeTeam) return localVenues.has(e.strHomeTeam);
+      return e.strVenue && localVenues.has(e.strVenue);
     });
 
     if (filteredEvents.length === 0) {
