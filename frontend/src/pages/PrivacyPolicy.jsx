@@ -64,7 +64,21 @@ export default function PrivacyPolicy() {
           </p>
         </Section>
 
-        <Section title="4. Cómo eliminamos tus datos">
+        <Section title="4. Datos de Google y Uso Limitado">
+          <p style={{ marginBottom: 16 }}>
+            El uso y la transferencia que hace FanSchedule de la información recibida de las APIs de Google
+            se ajustará a la Política de Datos de Usuario de los Servicios de la API de Google, incluyendo
+            los requisitos de Uso Limitado (Limited Use). En concreto, los datos de tu Google Calendar:
+          </p>
+          <ul style={ulStyle}>
+            <li>se usan únicamente para crear y actualizar los eventos de los partidos que tú eliges;</li>
+            <li>no se utilizan con fines publicitarios;</li>
+            <li>no se venden ni se transfieren a terceros, salvo lo estrictamente necesario para operar la app o cuando la ley lo exija;</li>
+            <li>no son leídos por ninguna persona, salvo que tú lo autorices expresamente o sea requerido por ley.</li>
+          </ul>
+        </Section>
+
+        <Section title="5. Cómo eliminamos tus datos">
           <p>
             Puedes cerrar sesión en cualquier momento desde la app. Si quieres eliminar por completo
             tu cuenta y todos los datos asociados, escríbenos a{' '}
@@ -73,7 +87,7 @@ export default function PrivacyPolicy() {
           </p>
         </Section>
 
-        <Section title="5. Cookies y almacenamiento">
+        <Section title="6. Cookies y almacenamiento">
           <p>
             Usamos <code style={codeStyle}>localStorage</code> del navegador para mantener tu sesión
             iniciada y recordar tus preferencias (deportes, equipos, consentimiento de email). No usamos
@@ -81,7 +95,20 @@ export default function PrivacyPolicy() {
           </p>
         </Section>
 
-        <Section title="6. Contacto">
+        <Section title="7. Menores de edad">
+          <p>
+            FanSchedule no está dirigido a menores de 13 años y no recopilamos a sabiendas datos de menores de esa edad.
+          </p>
+        </Section>
+
+        <Section title="8. Cambios a esta política">
+          <p>
+            Podemos actualizar esta política ocasionalmente. Si hacemos cambios importantes, actualizaremos
+            la fecha de "última actualización" en la parte superior de esta página.
+          </p>
+        </Section>
+
+        <Section title="9. Contacto">
           <p>
             Si tienes dudas sobre esta política o quieres ejercer tus derechos sobre tus datos,
             escríbenos a <a href="mailto:lopezesmenjaud@gmail.com" style={linkStyle}>lopezesmenjaud@gmail.com</a>.
