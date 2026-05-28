@@ -619,6 +619,28 @@ app.get("/api/tickets/:matchId", async (req, res) => {
   }
 });
 
+// Helper para /api/nearby: variantes de temporada candidatas para eventsseason.php,
+// según el deporte de la liga (strSport viene en inglés desde TheSportsDB).
+function guessSeasonsForLeague(league) {
+  const sport = (league.strSport || "").toLowerCase().trim();
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+
+  if (sport === "american football") {
+    return month >= 8 ? [`${year}`, `${year - 1}`] : [`${year - 1}`, `${year}`];
+  }
+  if (["motorsport", "baseball", "tennis", "fighting", "rugby", "golf"].includes(sport)) {
+    return [`${year}`, `${year - 1}`];
+  }
+  if (["soccer", "basketball", "ice hockey", "volleyball"].includes(sport)) {
+    const splitCurrent = month >= 8 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+    const splitOther   = month >= 8 ? `${year - 1}-${year}` : `${year}-${year + 1}`;
+    return [splitCurrent, splitOther, `${year}`];
+  }
+  return [`${year}`, `${year - 1}-${year}`, `${year}-${year + 1}`];
+}
+
 // ── Partidos por ubicación (Cerca de mí + Planear viaje) ──
 app.post("/api/nearby", async (req, res) => {
   console.log("[nearby] *** ENDPOINT HIT ***", req.body);
@@ -683,18 +705,76 @@ app.post("/api/nearby", async (req, res) => {
     }
 
     // 3. Obtener próximos eventos de cada liga (paralelo)
+    //
+    // Estrategia dual: eventsnextleague.php devuelve "los próximos N" (~15 free,
+    // ~50 premium; el parámetro &e=N en este endpoint es ignorado por TheSportsDB).
+    // Para ligas con calendario denso (p.ej. Liga Mexicana de Béisbol) eso puede
+    // ser apenas ~2 días. Si la respuesta no alcanza windowToDate, complementamos
+    // con eventsseason.php (devuelve la temporada completa) usando la primera
+    // variante de temporada con resultados.
+    const nowMxNearby = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));
+    const windowFromDate = nowMxNearby.toISOString().split('T')[0];
+    const windowToDate = new Date(nowMxNearby.getTime() + 30 * 86400000).toISOString().split('T')[0];
+
     const eventResults = await Promise.all(
       uniqueLeagues.map(async (league) => {
-        const url  = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventsnextleague.php?id=${league.idLeague}&e=50`;
-        const data = await safeFetchJson(url);
-        const events = data?.events || [];
-        console.log(`[nearby] DEBUG liga ${league.strLeague || league.idLeague} → ${events.length} eventos`);
-        return events.map(e => ({ ...e, _leagueName: league.strLeague, _leagueSport: league.strSport }));
+        // a) eventsnextleague.php — próximos eventos rápidos
+        const nextUrl  = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventsnextleague.php?id=${league.idLeague}`;
+        const nextData = await safeFetchJson(nextUrl);
+        const nextEvents = nextData?.events || [];
+
+        const lastNextDate = nextEvents.reduce((max, e) => {
+          const d = e?.dateEvent || "";
+          return d > max ? d : max;
+        }, "");
+        const coversWindow = lastNextDate && lastNextDate >= windowToDate;
+
+        let combined = nextEvents;
+        let seasonContribution = 0;
+        let seasonUsed = null;
+
+        if (!coversWindow) {
+          // b) eventsseason.php — primera variante de temporada con eventos gana
+          const seasons = guessSeasonsForLeague(league);
+          for (const season of seasons) {
+            const seasonUrl  = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventsseason.php?id=${league.idLeague}&s=${encodeURIComponent(season)}`;
+            const seasonData = await safeFetchJson(seasonUrl);
+            const seasonEvents = seasonData?.events || [];
+            if (seasonEvents.length > 0) {
+              const seenIds = new Set(combined.map(e => e?.idEvent).filter(Boolean));
+              const newOnes = seasonEvents.filter(e => e?.idEvent && !seenIds.has(e.idEvent));
+              combined = [...combined, ...newOnes];
+              seasonContribution = newOnes.length;
+              seasonUsed = season;
+              break;
+            }
+          }
+        }
+
+        console.log(
+          `[nearby] DEBUG liga ${league.strLeague || league.idLeague} → ${combined.length} eventos ` +
+          `(eventsnextleague=${nextEvents.length}${
+            seasonUsed
+              ? `, +${seasonContribution} via eventsseason s=${seasonUsed}`
+              : (coversWindow ? ", season no requerido" : ", season sin resultados")
+          })`
+        );
+
+        return combined.map(e => ({ ...e, _leagueName: league.strLeague, _leagueSport: league.strSport }));
       })
     );
     const allEvents = eventResults.flat();
     console.log(`[nearby] DEBUG total eventos: ${allEvents.length}`);
     console.log(`[nearby] DEBUG eventos SIN strVenue: ${allEvents.filter(e => !e.strVenue).length}`);
+
+    // Pre-filtrar a la ventana de 30 días ANTES de la clasificación de venues.
+    // Sin esto, eventsseason.php infla uniqueVenues con eventos lejanos que
+    // igual se descartan al final, encareciendo Claude innecesariamente.
+    const eventsInWindow = allEvents.filter(e => {
+      const d = e.dateEvent;
+      return d && d >= windowFromDate && d <= windowToDate;
+    });
+    console.log(`[nearby] DEBUG eventos en ventana 30d: ${eventsInWindow.length}`);
 
     // 4. Resolver si cada venue está en la ciudad buscada (caché SQLite + Claude AI)
 
@@ -702,7 +782,7 @@ app.post("/api/nearby", async (req, res) => {
     // equipo local (strHomeTeam) como fallback cuando NO trae strVenue.
     // Esto evita descartar partidos que TheSportsDB devuelve sin estadio.
     const uniqueVenues = [...new Set(
-      allEvents.flatMap(e => e.strVenue ? [e.strVenue] : (e.strHomeTeam ? [e.strHomeTeam] : []))
+      eventsInWindow.flatMap(e => e.strVenue ? [e.strVenue] : (e.strHomeTeam ? [e.strHomeTeam] : []))
     )];
     console.log(`[nearby] DEBUG venues únicos: ${JSON.stringify(uniqueVenues)}`);
 
@@ -817,7 +897,7 @@ app.post("/api/nearby", async (req, res) => {
 
     // Un evento se queda si su estadio (strVenue) está marcado como local,
     // o si no tiene estadio pero su equipo local (strHomeTeam) está marcado como local.
-    const filteredEvents = allEvents.filter(e => {
+    const filteredEvents = eventsInWindow.filter(e => {
       if (e.strVenue) return localVenues.has(e.strVenue);
       return e.strHomeTeam && localVenues.has(e.strHomeTeam);
     });
