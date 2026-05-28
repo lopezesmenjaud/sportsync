@@ -17,7 +17,7 @@ export default function PrivacyPolicy() {
       {/* Content */}
       <main style={{ maxWidth: 760, margin: '0 auto', padding: '48px 28px 80px', lineHeight: 1.7 }}>
         <h1 style={{ fontSize: 36, fontWeight: 500, marginBottom: 8 }}>Política de privacidad</h1>
-        <p style={{ fontSize: 14, color: '#6B7280', marginBottom: 40 }}>Última actualización: 17 de mayo de 2026</p>
+        <p style={{ fontSize: 14, color: '#6B7280', marginBottom: 40 }}>Última actualización: 27 de mayo de 2026</p>
 
         <p style={{ fontSize: 16, marginBottom: 32 }}>
           En FanSchedule respetamos tu privacidad. Esta página explica qué información recopilamos,
@@ -26,10 +26,10 @@ export default function PrivacyPolicy() {
 
         <Section title="1. Qué datos recopilamos">
           <ul style={ulStyle}>
-            <li><strong>Nombre y email</strong> de tu cuenta de Google, obtenidos vía OAuth cuando inicias sesión.</li>
+            <li><strong>Nombre y correo</strong> de tu cuenta de Google, obtenidos vía OAuth cuando inicias sesión.</li>
             <li><strong>Ligas y equipos favoritos</strong> que seleccionas dentro de la app.</li>
-            <li><strong>Consentimiento de email marketing</strong>: si aceptaste recibir novedades o comunicaciones de partners.</li>
-            <li><strong>Eventos sincronizados</strong> a tu Google Calendar (identificadores y metadatos de los partidos que añadimos).</li>
+            <li><strong>Consentimiento de email marketing</strong>: si aceptaste recibir novedades del producto o comunicaciones de partners.</li>
+            <li><strong>Eventos sincronizados</strong> a tu Google Calendar: identificadores y metadatos de los partidos que añadimos.</li>
           </ul>
         </Section>
 
@@ -42,12 +42,23 @@ export default function PrivacyPolicy() {
         </Section>
 
         <Section title="3. Con quién compartimos datos">
+          <p style={{ marginBottom: 16 }}>
+            Para que FanSchedule funcione, enviamos cierta información a estos servicios:
+          </p>
           <ul style={ulStyle}>
-            <li><strong>Google (Calendar API)</strong>: para crear y actualizar los eventos en tu calendario.</li>
-            <li><strong>TheSportsDB</strong>: como fuente de datos de partidos, equipos y ligas.</li>
-            <li><strong>Ticketmaster</strong>: para mostrar boletos y disponibilidad de eventos.</li>
+            <li><strong>Google Calendar</strong>: con tu autorización, creamos y actualizamos en tu propio calendario los eventos de los partidos que eliges.</li>
+            <li><strong>OpenStreetMap / Nominatim</strong>: en las funciones "Cerca de mí" y "Planear viaje", tu navegador envía tu ubicación (coordenadas) o el nombre de una ciudad a este servicio para determinar a qué ciudad corresponde.</li>
+            <li><strong>Anthropic (Claude)</strong>: enviamos datos de los partidos (equipos, estadios) y la ciudad que consultas, para generar la información de "dónde ver", "eventos cercanos" y resúmenes de partidos. No enviamos tu nombre ni tu correo.</li>
+            <li><strong>ip-api.com</strong>: cuando abres la app, enviamos tu dirección IP a este servicio para detectar tu país automáticamente. No almacenamos tu IP.</li>
           </ul>
-          <p style={{ marginTop: 16 }}>
+          <p style={{ marginTop: 24, marginBottom: 16 }}>
+            También obtenemos información de las siguientes fuentes, a las que no les enviamos tus datos personales — solo consultas sobre partidos y eventos:
+          </p>
+          <ul style={ulStyle}>
+            <li><strong>TheSportsDB</strong>: fuente de datos de partidos, equipos y ligas.</li>
+            <li><strong>Ticketmaster</strong>: información de boletos para los partidos.</li>
+          </ul>
+          <p style={{ marginTop: 24 }}>
             <strong>No vendemos tus datos a terceros.</strong> Solo compartimos lo estrictamente necesario
             con los servicios anteriores para que FanSchedule funcione.
           </p>
