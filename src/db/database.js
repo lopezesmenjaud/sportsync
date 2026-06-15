@@ -100,7 +100,9 @@ async function initializeDatabase() {
         data TEXT,
         ai_summary TEXT,
         summary_generated_at TEXT,
-        eventName TEXT
+        eventName TEXT,
+        createdAt TEXT,
+        lastSyncedAt TEXT
       )
     `);
 
@@ -109,6 +111,15 @@ async function initializeDatabase() {
     await addColumnIfNotExists("matches", "city", "TEXT");
     await addColumnIfNotExists("matches", "country", "TEXT");
     await addColumnIfNotExists("matches", "eventName", "TEXT");
+    // Timestamps de auditoría del sync. SQLite no permite DEFAULT en ALTER TABLE ADD
+    // COLUMN con funciones, así que se agregan nullable y se backfillean abajo.
+    // Formato ISO-8601 UTC (strftime) para que coincida con currentStartUtc.
+    await addColumnIfNotExists("matches", "createdAt", "TEXT");
+    await addColumnIfNotExists("matches", "lastSyncedAt", "TEXT");
+
+    // Migration: filas existentes no tienen timestamp real → ahora (solo si NULL)
+    await runAsync(`UPDATE matches SET createdAt = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE createdAt IS NULL`);
+    await runAsync(`UPDATE matches SET lastSyncedAt = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE lastSyncedAt IS NULL`);
 
     console.log("✅ Matches table ready");
 

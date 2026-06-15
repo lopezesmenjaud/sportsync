@@ -1045,6 +1045,69 @@ app.get("/api/admin/stats", async (req, res) => {
   }
 });
 
+app.get("/api/admin/sync-status", async (req, res) => {
+  try {
+    const adminUser = req.headers['x-admin-user'];
+    if (adminUser !== 'lopezesmenjaud@gmail.com') {
+      return res.status(403).json({ ok: false, error: 'Forbidden' });
+    }
+
+    const nowIso  = new Date().toISOString();
+    const in30Iso = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Ligas con al menos una suscripción
+    const leagues = await new Promise((resolve, reject) => {
+      db.all(
+        `SELECT competitionKey, competitionName, sport, COUNT(DISTINCT userId) as subscribers
+         FROM subscriptions
+         WHERE competitionKey IS NOT NULL AND competitionKey NOT LIKE 'national_%'
+         GROUP BY competitionKey
+         ORDER BY subscribers DESC`,
+        [], (err, rows) => { if (err) reject(err); else resolve(rows || []); }
+      );
+    });
+
+    // Agregados de matches en DB por liga
+    const result = [];
+    for (const lg of leagues) {
+      const agg = await new Promise((resolve, reject) => {
+        db.get(
+          `SELECT
+             COUNT(*) as totalMatchesInDb,
+             MIN(currentStartUtc) as earliestMatchDate,
+             MAX(currentStartUtc) as latestMatchDate,
+             SUM(CASE WHEN currentStartUtc >= ? AND currentStartUtc <= ? THEN 1 ELSE 0 END) as matchesInNext30Days,
+             MIN(createdAt) as oldestCreatedAt,
+             MAX(lastSyncedAt) as latestLastSyncedAt,
+             SUM(CASE WHEN lastSyncedAt >= strftime('%Y-%m-%dT%H:%M:%SZ','now','-1 day') THEN 1 ELSE 0 END) as matchesSyncedInLast24h
+           FROM matches
+           WHERE competitionKey = ?`,
+          [nowIso, in30Iso, lg.competitionKey],
+          (err, row) => { if (err) reject(err); else resolve(row || {}); }
+        );
+      });
+
+      result.push({
+        leagueId:               lg.competitionKey,
+        leagueName:             lg.competitionName,
+        sport:                  lg.sport,
+        subscribers:            lg.subscribers,
+        totalMatchesInDb:       agg.totalMatchesInDb || 0,
+        earliestMatchDate:      agg.earliestMatchDate || null,
+        latestMatchDate:        agg.latestMatchDate || null,
+        matchesInNext30Days:    agg.matchesInNext30Days || 0,
+        oldestCreatedAt:        agg.oldestCreatedAt || null,
+        latestLastSyncedAt:     agg.latestLastSyncedAt || null,
+        matchesSyncedInLast24h: agg.matchesSyncedInLast24h || 0,
+      });
+    }
+
+    res.json({ ok: true, generatedAt: nowIso, leagues: result });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.get("/api/admin/cleanup-calendar", async (req, res) => {
   try {
     const adminUser = req.headers['x-admin-user'];

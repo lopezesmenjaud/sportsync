@@ -74,8 +74,11 @@ class MatchRepositorySqlite {
 
   save(match) {
     return new Promise((resolve, reject) => {
+      // UPSERT real (no INSERT OR REPLACE, que recrearía la fila y borraría createdAt /
+      // ai_summary). En INSERT: createdAt y lastSyncedAt = ahora. En conflicto: se
+      // actualizan los campos del proveedor + lastSyncedAt, pero createdAt se preserva.
       db.run(
-        `INSERT OR REPLACE INTO matches (
+        `INSERT INTO matches (
           providerMatchId,
           provider,
           sport,
@@ -92,8 +95,28 @@ class MatchRepositorySqlite {
           city,
           country,
           lastProviderUpdateUtc,
-          data
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          data,
+          createdAt,
+          lastSyncedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+        ON CONFLICT(providerMatchId) DO UPDATE SET
+          provider              = excluded.provider,
+          sport                 = excluded.sport,
+          competitionKey        = excluded.competitionKey,
+          competitionName       = excluded.competitionName,
+          eventName             = excluded.eventName,
+          homeParticipantName   = excluded.homeParticipantName,
+          awayParticipantName   = excluded.awayParticipantName,
+          scheduledStartUtc     = excluded.scheduledStartUtc,
+          currentStartUtc       = excluded.currentStartUtc,
+          status                = excluded.status,
+          rawStatus             = excluded.rawStatus,
+          venueName             = excluded.venueName,
+          city                  = excluded.city,
+          country               = excluded.country,
+          lastProviderUpdateUtc = excluded.lastProviderUpdateUtc,
+          data                  = excluded.data,
+          lastSyncedAt          = strftime('%Y-%m-%dT%H:%M:%SZ','now')`,
         [
           match.providerMatchId,
           match.provider,
