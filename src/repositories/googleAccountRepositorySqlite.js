@@ -107,6 +107,34 @@ class GoogleAccountRepositorySqlite {
     });
   }
 
+  markNeedsReauth(userId) {
+    return new Promise((resolve, reject) => {
+      const now = new Date().toISOString();
+      db.run(
+        `UPDATE google_accounts SET needsReauth = 1, updatedAtUtc = ? WHERE userId = ?`,
+        [now, userId],
+        (err) => {
+          if (err) return reject(err);
+          resolve();
+        }
+      );
+    });
+  }
+
+  clearNeedsReauth(userId) {
+    return new Promise((resolve, reject) => {
+      const now = new Date().toISOString();
+      db.run(
+        `UPDATE google_accounts SET needsReauth = 0, updatedAtUtc = ? WHERE userId = ?`,
+        [now, userId],
+        (err) => {
+          if (err) return reject(err);
+          resolve();
+        }
+      );
+    });
+  }
+
   setFanscheduleCalendarId(userId, calendarId) {
     return new Promise((resolve, reject) => {
       const now = new Date().toISOString();

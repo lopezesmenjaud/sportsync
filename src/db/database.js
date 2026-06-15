@@ -182,6 +182,8 @@ async function initializeDatabase() {
       )
     `);
     await addColumnIfNotExists("google_accounts", "fanschedule_calendar_id", "TEXT");
+    // Flag: el refresh token del usuario expiró/se revocó (invalid_grant) y necesita reconectar.
+    await addColumnIfNotExists("google_accounts", "needsReauth", "INTEGER DEFAULT 0");
     console.log("✅ Google accounts table ready");
 
     await runAsync(`

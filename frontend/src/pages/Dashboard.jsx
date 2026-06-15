@@ -30,7 +30,7 @@ export default function Dashboard() {
   const [subscriptions, setSubscriptions] = useState([])
   const [loading, setLoading] = useState(true)
   const [deletingId, setDeletingId] = useState(null)
-  const [googleStatus, setGoogleStatus] = useState({ connected: false, email: null, loading: true })
+  const [googleStatus, setGoogleStatus] = useState({ connected: false, email: null, needsReauth: false, loading: true })
   const userId = getUserId()
 
   useEffect(() => {
@@ -42,7 +42,7 @@ export default function Dashboard() {
 
     fetch(`${API_BASE}/auth/google/status/${userId}`)
       .then(res => res.json())
-      .then(data => { if (data.ok) setGoogleStatus({ connected: data.connected, email: data.email, loading: false }) })
+      .then(data => { if (data.ok) setGoogleStatus({ connected: data.connected, email: data.email, needsReauth: data.needsReauth, loading: false }) })
       .catch(() => setGoogleStatus(prev => ({ ...prev, loading: false })))
   }, [])
 
@@ -68,6 +68,45 @@ export default function Dashboard() {
 
       {/* Main */}
       <div style={{ flex: 1, background: '#faf9f7', padding: '32px 28px', overflowY: 'auto' }}>
+
+        {/* Banner de reconexión (token de Google expirado) */}
+        {!googleStatus.loading && googleStatus.needsReauth && (
+          <div style={{
+            background: '#FEF3E2',
+            border: '1px solid #F18006',
+            borderRadius: 14,
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 24,
+            gap: 16,
+            flexWrap: 'wrap',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: '#FFE0B2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+                ⚠️
+              </div>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#7c2d12' }}>Tu conexión con Google expiró</div>
+                <div style={{ fontSize: 12, color: '#92400e', marginTop: 2 }}>
+                  Reconecta tu cuenta para seguir sincronizando tus partidos al calendario.
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => { window.location.href = `${API_BASE}/auth/google` }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: '#F18006', color: '#fff', border: 'none', borderRadius: 20,
+                padding: '9px 18px', fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+              }}
+            >
+              Reconectar
+            </button>
+          </div>
+        )}
+
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 500, color: '#111827' }}>Mis favoritos</h1>

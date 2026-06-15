@@ -41,7 +41,7 @@ const SPORT_SCHEDULES = [
   }
 ];
 
-async function backfillMissingCalendarEvents() {
+async function backfillMissingCalendarEvents(skipUserIds = new Set()) {
   const allMatches = await matchRepository.getAll();
   const allCalendarEvents = await calendarEventRepository.getAll();
   const syncedMatchIds = new Set(allCalendarEvents.map(ce => ce.providerMatchId));
@@ -50,7 +50,7 @@ async function backfillMissingCalendarEvents() {
   for (const match of allMatches) {
     if (!syncedMatchIds.has(match.providerMatchId)) {
       try {
-        const backfillResults = await syncMatchToCalendars(match);
+        const backfillResults = await syncMatchToCalendars(match, skipUserIds);
         backfillCount += backfillResults.length;
       } catch (e) {
         console.error(`[scheduler] Backfill error for ${match.providerMatchId}:`, e.message);
@@ -68,15 +68,16 @@ function startScheduler() {
   setTimeout(async () => {
     console.log("[scheduler] Running initial sync on startup...");
     try {
+      const skipUserIds = new Set();
       const results = await syncMatches();
       for (const result of results) {
         try {
-          await syncMatchToCalendars(result.newMatch);
+          await syncMatchToCalendars(result.newMatch, skipUserIds);
         } catch (e) {
           console.error(`[scheduler] Calendar sync error for ${result.matchId}:`, e.message);
         }
       }
-      await backfillMissingCalendarEvents();
+      await backfillMissingCalendarEvents(skipUserIds);
     } catch (e) {
       console.error("[scheduler] Initial sync error:", e.message);
     }
@@ -86,12 +87,13 @@ function startScheduler() {
   for (const schedule of SPORT_SCHEDULES) {
     cron.schedule(schedule.cron, async () => {
       console.log(`[scheduler] Running sync for: ${schedule.name} (${schedule.label})`);
+      const skipUserIds = new Set();
       for (const sport of schedule.sports) {
         try {
           const results = await syncSport(sport);
           for (const result of results) {
             try {
-              await syncMatchToCalendars(result.newMatch);
+              await syncMatchToCalendars(result.newMatch, skipUserIds);
             } catch (e) {
               console.error(`[scheduler] Calendar sync error for ${result.matchId}:`, e.message);
             }
@@ -101,7 +103,7 @@ function startScheduler() {
         }
       }
       try {
-        await backfillMissingCalendarEvents();
+        await backfillMissingCalendarEvents(skipUserIds);
       } catch (e) {
         console.error(`[scheduler] Backfill error after ${schedule.name} sync:`, e.message);
       }

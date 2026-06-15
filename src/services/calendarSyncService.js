@@ -1,7 +1,17 @@
 const { getAffectedUserIdsForMatch } = require("./affectedUsersService");
 const { calendarEventRepository } = require("../repositories/calendarEventRepositorySqlite");
+const { googleAccountRepository } = require("../repositories/googleAccountRepositorySqlite");
 const googleCalendarProvider = require("./googleCalendarProvider");
 const { createMutex } = require("./mutex");
+
+// Detecta el error invalid_grant de Google (refresh token expirado/revocado).
+// Puede llegar como message, como response.data.error o como código.
+function isInvalidGrant(err) {
+  const msg     = String(err?.message || "").toLowerCase();
+  const respErr = String(err?.response?.data?.error || "").toLowerCase();
+  const code    = String(err?.code || "").toLowerCase();
+  return msg.includes("invalid_grant") || respErr === "invalid_grant" || code === "invalid_grant";
+}
 
 // Lock global para serializar la sección crítica
 // "verificar existencia → crear evento en Google → insertar fila".
@@ -9,12 +19,18 @@ const { createMutex } = require("./mutex");
 // y ambas crear el evento, generando filas duplicadas en calendar_events.
 const calendarEventCreateMutex = createMutex();
 
-async function syncMatchToCalendars(match) {
+// skipUserIds: Set compartido dentro de una misma corrida de sync. Un usuario que
+// ya disparó invalid_grant se agrega ahí para no reintentarlo ni re-loguearlo en
+// los partidos siguientes de esa corrida. Llamadas sueltas usan un Set vacío nuevo.
+async function syncMatchToCalendars(match, skipUserIds = new Set()) {
   const affectedUserIds = await getAffectedUserIdsForMatch(match);
 
   const results = [];
 
   for (const userId of affectedUserIds) {
+    // Ya marcado needsReauth en esta corrida: saltar sin intentar ni loguear.
+    if (skipUserIds.has(userId)) continue;
+
     try {
       const calendarId = await googleCalendarProvider.getOrCreateFanscheduleCalendar({ userId });
 
@@ -82,6 +98,18 @@ async function syncMatchToCalendars(match) {
         htmlLink: updated.htmlLink
       });
     } catch (error) {
+      // Refresh token expirado/revocado: marcar al usuario para reconexión y saltar
+      // el resto del sync para ESTE usuario. Los demás usuarios continúan normal.
+      if (isInvalidGrant(error)) {
+        try {
+          await googleAccountRepository.markNeedsReauth(userId);
+        } catch (markErr) {
+          console.error(`[auth] Failed to mark needsReauth for ${userId}:`, markErr.message);
+        }
+        console.log(`[auth] User ${userId} refresh token invalid, marked needsReauth=true`);
+        skipUserIds.add(userId);
+        continue;
+      }
       console.error(`[calendar] Error syncing match ${match.providerMatchId} for user ${userId}:`, error.message);
     }
   }

@@ -268,6 +268,9 @@ app.get("/auth/google/callback", async (req, res) => {
       expiryDate: tokens.expiry_date,
     });
 
+    // Token fresco: limpiar cualquier flag de reconexión pendiente.
+    await googleAccountRepository.clearNeedsReauth(userId);
+
     saveTokens(tokens);
 
     const userObj = { userId, email: profile.email, name: profile.name || profile.email.split("@")[0] };
@@ -291,6 +294,7 @@ app.get("/auth/google/status/:userId", async (req, res) => {
       ok: true,
       connected: !!account,
       email: account?.googleEmail || null,
+      needsReauth: !!account?.needsReauth,
     });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
@@ -1262,10 +1266,11 @@ app.post("/api/admin/resync-user", async (req, res) => {
     let created = 0;
     let updated = 0;
     let errors = 0;
+    const skipUserIds = new Set();
     for (let i = 0; i < relevantMatches.length; i++) {
       const m = relevantMatches[i];
       try {
-        const results = await syncMatchToCalendars(m);
+        const results = await syncMatchToCalendars(m, skipUserIds);
         const userResults = results.filter(r => r.userId === target.userId);
         created += userResults.filter(r => r.action === "created").length;
         updated += userResults.filter(r => r.action === "updated").length;
@@ -1350,17 +1355,18 @@ app.post("/subscriptions", async (req, res) => {
     // Sync inmediato en background (no bloquea la respuesta)
     setImmediate(async () => {
       try {
+        const skipUserIds = new Set();
         if (competitionKey && !competitionKey.startsWith("national_")) {
           const results = await syncLeague(competitionKey, sport);
           console.log(`[sub] Immediate sync for league ${competitionKey}: ${results.length} changes`);
           for (const r of results) {
-            try { await syncMatchToCalendars(r.newMatch); } catch (e) { /* skip */ }
+            try { await syncMatchToCalendars(r.newMatch, skipUserIds); } catch (e) { /* skip */ }
           }
         } else if (teamName && !competitionKey) {
           const results = await syncTeam(teamName, sport);
           console.log(`[sub] Immediate sync for team "${teamName}": ${results.length} changes`);
           for (const r of results) {
-            try { await syncMatchToCalendars(r.newMatch); } catch (e) { /* skip */ }
+            try { await syncMatchToCalendars(r.newMatch, skipUserIds); } catch (e) { /* skip */ }
           }
         }
       } catch (err) {
@@ -1448,9 +1454,10 @@ app.post("/subscriptions/sync", async (req, res) => {
   try {
     // Paso 1: descargar partidos nuevos/actualizados de TheSportsDB
     const results = await syncMatches();
+    const skipUserIds = new Set();
     const calendarResults = [];
     for (const result of results) {
-      const calendarResult = await syncMatchToCalendars(result.newMatch);
+      const calendarResult = await syncMatchToCalendars(result.newMatch, skipUserIds);
       calendarResults.push(...calendarResult);
     }
 
@@ -1463,7 +1470,7 @@ app.post("/subscriptions/sync", async (req, res) => {
     for (const match of allMatches) {
       if (!syncedMatchIds.has(match.providerMatchId)) {
         try {
-          const backfillResults = await syncMatchToCalendars(match);
+          const backfillResults = await syncMatchToCalendars(match, skipUserIds);
           calendarResults.push(...backfillResults);
           backfillCount += backfillResults.length;
         } catch (e) {

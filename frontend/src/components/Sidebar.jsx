@@ -43,7 +43,7 @@ function BrandLogo({ symbolSize = 32, fontSize = 20 }) {
 
 export default function Sidebar({ activePath }) {
   const navigate = useNavigate()
-  const [google, setGoogle] = useState({ connected: false, email: null })
+  const [google, setGoogle] = useState({ connected: false, email: null, needsReauth: false })
   const [drawerOpen, setDrawerOpen] = useState(false)
   const userId = getUserId()
   const user = getUser()
@@ -51,7 +51,7 @@ export default function Sidebar({ activePath }) {
   useEffect(() => {
     fetch(`${API_BASE}/auth/google/status/${userId}`)
       .then(res => res.json())
-      .then(data => { if (data.ok) setGoogle({ connected: data.connected, email: data.email }) })
+      .then(data => { if (data.ok) setGoogle({ connected: data.connected, email: data.email, needsReauth: data.needsReauth }) })
       .catch(() => {})
   }, [])
 
@@ -129,12 +129,34 @@ export default function Sidebar({ activePath }) {
           </div>
         </div>
 
-        {google.connected ? (
+        {google.needsReauth && (
+          <div style={{
+            background: '#FEF3E2', border: '1px solid #F18006', borderRadius: 8,
+            padding: '8px 10px', margin: '4px 0 8px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11, color: '#7c2d12', fontWeight: 500, lineHeight: 1.3 }}>
+              <span style={{ flexShrink: 0 }}>⚠️</span>
+              <span>Tu conexión con Google expiró</span>
+            </div>
+            <button
+              onClick={() => { window.location.href = `${API_BASE}/auth/google` }}
+              style={{
+                width: '100%', marginTop: 6, padding: '5px 10px', borderRadius: 6,
+                border: 'none', background: '#F18006', color: '#fff',
+                fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              Reconectar
+            </button>
+          </div>
+        )}
+
+        {google.connected && !google.needsReauth ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 8px 8px', fontSize: 10, color: 'rgba(74,222,128,0.9)' }}>
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#4ade80', flexShrink: 0 }} />
             Google Calendar conectado
           </div>
-        ) : (
+        ) : google.connected && google.needsReauth ? null : (
           <button
             onClick={() => { window.location.href = `${API_BASE}/auth/google` }}
             style={{
