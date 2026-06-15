@@ -11,6 +11,36 @@ const NAV_ITEMS = [
   { label: 'Mi perfil',         path: '/profile'   },
 ]
 
+// Símbolo calendar-F (mismo que favicon.svg y los íconos PWA)
+function LogoMark({ size = 32 }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 120 120"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ borderRadius: Math.round(size * 0.22), flexShrink: 0, display: 'block' }}
+    >
+      <rect width="120" height="120" fill="#1C2430" />
+      <rect x="42" y="28" width="8" height="14" rx="3" fill="#F18006" />
+      <rect x="70" y="28" width="8" height="14" rx="3" fill="#F18006" />
+      <rect x="26" y="38" width="68" height="60" rx="10" fill="#F18006" />
+      <path d="M46,50 H78 V60 H56 V65 H72 V74 H56 V88 H46 Z" fill="#1C2430" />
+    </svg>
+  )
+}
+
+function BrandLogo({ symbolSize = 32, fontSize = 20 }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <LogoMark size={symbolSize} />
+      <span style={{ fontSize, fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1 }}>
+        <span style={{ color: '#F18006' }}>Fan</span><span style={{ color: '#fff' }}>Schedule</span>
+      </span>
+    </div>
+  )
+}
+
 export default function Sidebar({ activePath }) {
   const navigate = useNavigate()
   const [google, setGoogle] = useState({ connected: false, email: null })
@@ -34,7 +64,7 @@ export default function Sidebar({ activePath }) {
     <>
       {/* Logo */}
       <div style={{ paddingTop: 20, paddingBottom: 20, paddingLeft: 8, marginBottom: 24 }}>
-        <img src="/fanschedule-logo.png" alt="FanSchedule" style={{ width: 160, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+        <BrandLogo symbolSize={32} fontSize={20} />
       </div>
 
       {/* Nav items */}
@@ -188,7 +218,7 @@ export default function Sidebar({ activePath }) {
         >
           {drawerOpen ? '✕' : '☰'}
         </button>
-        <img src="/fanschedule-logo.png" alt="FanSchedule" style={{ height: 32, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+        <BrandLogo symbolSize={28} fontSize={17} />
         <div style={{ width: 40 }} />
       </div>
 
