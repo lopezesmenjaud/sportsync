@@ -117,34 +117,38 @@ async function syncLeague(leagueId, sport) {
 
   let rawMatches = [];
 
-  // ── Estrategia 1: eventsnextleague.php (siempre devuelve próximos partidos) ──
-  try {
-    const nextEvents = await provider.getNextLeagueEvents(leagueId);
-    if (nextEvents.length > 0) {
-      rawMatches = nextEvents.filter(e => {
-        const d = e.dateEvent;
-        if (!d) return false;
-        return d >= fromDate && d <= toDate;
-      });
-      console.log(`[sync] League ${leagueId} (${normalizedSport}): ${rawMatches.length} events via eventsnextleague`);
+  // ── Estrategia PRIMARIA: eventsseason.php con variantes de temporada ──
+  // Devuelve la temporada completa y se recorta a la ventana hoy→+30d dentro del
+  // provider. Evita el tope por cantidad (~15-20 eventos) de eventsnextleague, que
+  // dejaba cortas a las ligas densas (p.ej. MLB cubría solo ~2 días).
+  const seasons = getSeasonVariants(normalizedSport);
+  for (const season of seasons) {
+    try {
+      const seasonEvents = await provider.getEventsByLeagueAndSeason({ leagueId, season, fromDate, toDate });
+      if (seasonEvents.length > 0) {
+        rawMatches = seasonEvents;
+        console.log(`[sync] League ${leagueId} (${normalizedSport}): ${rawMatches.length} events via eventsseason (season "${season}")`);
+        break;
+      }
+    } catch (error) {
+      console.log(`[sync] League ${leagueId} season "${season}" failed: ${error.message}`);
     }
-  } catch (error) {
-    console.log(`[sync] League ${leagueId} eventsnextleague failed: ${error.message}`);
   }
 
-  // ── Estrategia 2: fallback a eventsseason.php con variantes de temporada ──
+  // ── Estrategia FALLBACK: eventsnextleague.php (solo si eventsseason no dio nada) ──
   if (rawMatches.length === 0) {
-    const seasons = getSeasonVariants(normalizedSport);
-    for (const season of seasons) {
-      try {
-        rawMatches = await provider.getEventsByLeagueAndSeason({ leagueId, season, fromDate, toDate });
-        if (rawMatches.length > 0) {
-          console.log(`[sync] League ${leagueId} (${normalizedSport}): ${rawMatches.length} events with season "${season}" (fallback)`);
-          break;
-        }
-      } catch (error) {
-        console.log(`[sync] League ${leagueId} season "${season}" failed: ${error.message}`);
+    try {
+      const nextEvents = await provider.getNextLeagueEvents(leagueId);
+      if (nextEvents.length > 0) {
+        rawMatches = nextEvents.filter(e => {
+          const d = e.dateEvent;
+          if (!d) return false;
+          return d >= fromDate && d <= toDate;
+        });
+        console.log(`[sync] League ${leagueId} (${normalizedSport}): ${rawMatches.length} events via eventsnextleague (fallback)`);
       }
+    } catch (error) {
+      console.log(`[sync] League ${leagueId} eventsnextleague failed: ${error.message}`);
     }
   }
 
@@ -177,6 +181,12 @@ async function syncLeague(leagueId, sport) {
 }
 
 // Sincroniza los partidos de un equipo específico por nombre
+//
+// LIMITACIÓN CONOCIDA: getNextTeamEvents() usa eventsnext.php que TheSportsDB
+// capa a ~20 eventos por respuesta. Para deportes densos (MLB, NBA, NHL) esto
+// cubre solo 1-3 días por equipo. Aceptable mientras los usuarios solo sigan
+// equipos de fútbol/F1/golf (~10+ semanas de cobertura). Se resolverá nativamente
+// al migrar a un provider enterprise (SportRadar, Stats Perform, etc.).
 async function syncTeam(teamName, sport) {
   const provider        = getProvider("the_sports_db");
   const { fromDate, toDate } = getSyncDateRange();
