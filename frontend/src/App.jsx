@@ -48,6 +48,12 @@ function Protected({ children }) {
   return children
 }
 
+// Inversa de Protected: si ya hay sesión, salta el landing y va al dashboard
+function RootRoute() {
+  if (isLoggedIn()) return <Navigate to="/dashboard" replace />
+  return <LandingPage />
+}
+
 function EmailConsentGate() {
   const [show, setShow] = useState(() => {
     return isLoggedIn() && !localStorage.getItem('fanschedule_email_consent_shown')
@@ -78,7 +84,7 @@ function App() {
       <CleanOAuthParams />
       <EmailConsentGate />
       <Routes>
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<RootRoute />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/dashboard"                   element={<Protected><Dashboard /></Protected>} />
         <Route path="/dashboard/:sport"            element={<Protected><LeaguePicker /></Protected>} />
