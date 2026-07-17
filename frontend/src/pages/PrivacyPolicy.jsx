@@ -117,8 +117,12 @@ export default function PrivacyPolicy() {
       </main>
 
       {/* Footer */}
-      <footer style={{ background: '#1C2430', padding: '24px 28px', textAlign: 'center' }}>
+      <footer style={{ background: '#1C2430', padding: '24px 28px', textAlign: 'center', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 13, color: '#8899AA' }}>FanSchedule</span>
+        <span style={{ fontSize: 13, color: '#8899AA' }}>·</span>
+        <Link to="/terms" style={{ fontSize: 13, color: '#8899AA', textDecoration: 'none' }}>
+          Términos del Servicio
+        </Link>
       </footer>
     </div>
   )

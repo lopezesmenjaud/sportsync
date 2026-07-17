@@ -149,6 +149,10 @@ export default function LandingPage() {
         <Link to="/privacy" style={{ fontSize: 13, color: '#8899AA', textDecoration: 'none' }}>
           Política de privacidad
         </Link>
+        <span style={{ fontSize: 13, color: '#8899AA' }}>·</span>
+        <Link to="/terms" style={{ fontSize: 13, color: '#8899AA', textDecoration: 'none' }}>
+          Términos del Servicio
+        </Link>
       </div>
 
       <style>{`

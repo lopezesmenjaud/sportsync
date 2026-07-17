@@ -13,6 +13,7 @@ import MatchDetail from './pages/MatchDetail'
 import Profile from './pages/Profile'
 import Admin from './pages/Admin'
 import PrivacyPolicy from './pages/PrivacyPolicy'
+import TermsOfService from './pages/TermsOfService'
 
 // Guarda el user del OAuth callback ANTES del primer render de rutas protegidas
 function saveUserFromUrl() {
@@ -86,6 +87,7 @@ function App() {
       <Routes>
         <Route path="/" element={<RootRoute />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsOfService />} />
         <Route path="/dashboard"                   element={<Protected><Dashboard /></Protected>} />
         <Route path="/dashboard/:sport"            element={<Protected><LeaguePicker /></Protected>} />
         <Route path="/dashboard/:sport/:leagueId"  element={<Protected><TeamPicker /></Protected>} />
