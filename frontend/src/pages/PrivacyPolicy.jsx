@@ -17,7 +17,7 @@ export default function PrivacyPolicy() {
       {/* Content */}
       <main style={{ maxWidth: 760, margin: '0 auto', padding: '48px 28px 80px', lineHeight: 1.7 }}>
         <h1 style={{ fontSize: 36, fontWeight: 500, marginBottom: 8 }}>Política de privacidad</h1>
-        <p style={{ fontSize: 14, color: '#6B7280', marginBottom: 40 }}>Última actualización: 27 de mayo de 2026</p>
+        <p style={{ fontSize: 14, color: '#6B7280', marginBottom: 40 }}>Última actualización: 18 de julio de 2026</p>
 
         <p style={{ fontSize: 16, marginBottom: 32 }}>
           En FanSchedule respetamos tu privacidad. Esta página explica qué información recopilamos,
@@ -78,7 +78,23 @@ export default function PrivacyPolicy() {
           </ul>
         </Section>
 
-        <Section title="5. Cómo eliminamos tus datos">
+        <Section title="5. Medidas de protección de datos">
+          <p style={{ marginBottom: 16 }}>
+            Aplicamos las siguientes medidas para proteger tu información, en particular
+            los datos sensibles asociados a tu cuenta de Google:
+          </p>
+          <ul style={ulStyle}>
+            <li><strong>Cifrado en tránsito</strong>: toda la comunicación entre tu navegador, FanSchedule y las APIs de Google se realiza mediante conexiones cifradas HTTPS/TLS.</li>
+            <li><strong>Cifrado de credenciales en reposo</strong>: los tokens de acceso y actualización de Google que autorizan la sincronización con tu calendario se almacenan cifrados con AES-256-GCM, un algoritmo de cifrado autenticado. Las claves de cifrado se gestionan mediante variables de entorno del servidor y nunca se incluyen en el código fuente ni en el repositorio.</li>
+            <li><strong>Sin registro de credenciales</strong>: los tokens de acceso no se escriben en registros (logs), ni completos ni parciales, y no se exponen en ninguna respuesta de la aplicación ni en su interfaz.</li>
+            <li><strong>Sin acceso humano a tu calendario</strong>: la creación y actualización de eventos es un proceso totalmente automatizado. Ninguna persona de FanSchedule lee, revisa ni accede al contenido de tu Google Calendar.</li>
+            <li><strong>Minimización de datos</strong>: solicitamos únicamente los permisos necesarios para el funcionamiento del servicio y almacenamos solo los datos indispensables para operarlo. No recopilamos ni almacenamos tu ubicación, ni datos de pago, ni información de contacto adicional.</li>
+            <li><strong>Acceso restringido</strong>: las funciones administrativas del servicio están limitadas y las operaciones sensibles solo pueden ejecutarse desde el propio servidor, no de forma remota.</li>
+            <li><strong>Revocación en cualquier momento</strong>: puedes retirar el acceso de FanSchedule a tu cuenta de Google cuando quieras desde la configuración de seguridad de tu cuenta de Google, sin necesidad de contactarnos.</li>
+          </ul>
+        </Section>
+
+        <Section title="6. Cómo eliminamos tus datos">
           <p>
             Puedes cerrar sesión en cualquier momento desde la app. Si quieres eliminar por completo
             tu cuenta y todos los datos asociados, escríbenos a{' '}
@@ -87,7 +103,7 @@ export default function PrivacyPolicy() {
           </p>
         </Section>
 
-        <Section title="6. Cookies y almacenamiento">
+        <Section title="7. Cookies y almacenamiento">
           <p>
             Usamos <code style={codeStyle}>localStorage</code> del navegador para mantener tu sesión
             iniciada y recordar tus preferencias (deportes, equipos, consentimiento de email). No usamos
@@ -95,20 +111,20 @@ export default function PrivacyPolicy() {
           </p>
         </Section>
 
-        <Section title="7. Menores de edad">
+        <Section title="8. Menores de edad">
           <p>
             FanSchedule no está dirigido a menores de 13 años y no recopilamos a sabiendas datos de menores de esa edad.
           </p>
         </Section>
 
-        <Section title="8. Cambios a esta política">
+        <Section title="9. Cambios a esta política">
           <p>
             Podemos actualizar esta política ocasionalmente. Si hacemos cambios importantes, actualizaremos
             la fecha de "última actualización" en la parte superior de esta página.
           </p>
         </Section>
 
-        <Section title="9. Contacto">
+        <Section title="10. Contacto">
           <p>
             Si tienes dudas sobre esta política o quieres ejercer tus derechos sobre tus datos,
             escríbenos a <a href="mailto:lopezesmenjaud@gmail.com" style={linkStyle}>lopezesmenjaud@gmail.com</a>.
