@@ -1,4 +1,5 @@
 const { db } = require("../db/database");
+const { encrypt, decrypt } = require("../config/tokenCrypto");
 
 class GoogleAccountRepositorySqlite {
   upsert({
@@ -11,6 +12,11 @@ class GoogleAccountRepositorySqlite {
   }) {
     return new Promise((resolve, reject) => {
       const now = new Date().toISOString();
+
+      // Cifrar tokens ANTES de persistir. encrypt(null) devuelve null, así que
+      // el refreshToken null sigue disparando el CASE que conserva el valor previo.
+      const accessTokenEnc = encrypt(accessToken);
+      const refreshTokenEnc = encrypt(refreshToken);
 
       db.run(
         `
@@ -39,8 +45,8 @@ class GoogleAccountRepositorySqlite {
         [
           userId,
           googleEmail,
-          accessToken,
-          refreshToken,
+          accessTokenEnc,
+          refreshTokenEnc,
           scope,
           expiryDate,
           now,
@@ -49,6 +55,8 @@ class GoogleAccountRepositorySqlite {
         (err) => {
           if (err) return reject(err);
 
+          // El objeto devuelto conserva los tokens en claro (los consumidores
+          // esperan texto plano); en la DB quedan cifrados.
           resolve({
             userId,
             googleEmail,
@@ -75,6 +83,10 @@ class GoogleAccountRepositorySqlite {
         [userId],
         (err, row) => {
           if (err) return reject(err);
+          if (row) {
+            row.accessToken = decrypt(row.accessToken);
+            row.refreshToken = decrypt(row.refreshToken);
+          }
           resolve(row || null);
         }
       );
@@ -92,6 +104,10 @@ class GoogleAccountRepositorySqlite {
         [],
         (err, rows) => {
           if (err) return reject(err);
+          for (const row of rows) {
+            row.accessToken = decrypt(row.accessToken);
+            row.refreshToken = decrypt(row.refreshToken);
+          }
           resolve(rows);
         }
       );

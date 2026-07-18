@@ -3,7 +3,6 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { oauth2Client } = require("./src/config/googleClient");
-const { saveTokens } = require("./src/config/googleTokenStore");
 const { initializeDatabase, db } = require("./src/db/database");
 const { subscriptionRepository } = require("./src/repositories/subscriptionRepositorySqlite");
 const { googleAccountRepository } = require("./src/repositories/googleAccountRepositorySqlite");
@@ -252,7 +251,6 @@ app.get("/auth/google/callback", async (req, res) => {
     console.log(`[auth] Exchanging code for tokens...`);
     const { tokens } = await oauth2Client.getToken({ code, redirect_uri: redirectUri });
     oauth2Client.setCredentials(tokens);
-    console.log(`[auth] Tokens received. access_token=${tokens.access_token?.slice(0,20)}...`);
 
     const oauth2 = require("googleapis").google.oauth2({ version: "v2", auth: oauth2Client });
     const { data: profile } = await oauth2.userinfo.get();
@@ -270,8 +268,6 @@ app.get("/auth/google/callback", async (req, res) => {
 
     // Token fresco: limpiar cualquier flag de reconexión pendiente.
     await googleAccountRepository.clearNeedsReauth(userId);
-
-    saveTokens(tokens);
 
     const userObj = { userId, email: profile.email, name: profile.name || profile.email.split("@")[0] };
     const userParam = encodeURIComponent(JSON.stringify(userObj));
