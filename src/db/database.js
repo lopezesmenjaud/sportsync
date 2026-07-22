@@ -116,6 +116,7 @@ async function initializeDatabase() {
     // Formato ISO-8601 UTC (strftime) para que coincida con currentStartUtc.
     await addColumnIfNotExists("matches", "createdAt", "TEXT");
     await addColumnIfNotExists("matches", "lastSyncedAt", "TEXT");
+    await addColumnIfNotExists("matches", "intRound", "TEXT");
 
     // Migration: filas existentes no tienen timestamp real → ahora (solo si NULL)
     await runAsync(`UPDATE matches SET createdAt = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE createdAt IS NULL`);
@@ -235,6 +236,41 @@ async function initializeDatabase() {
       )
     `);
     console.log("✅ Email consent table ready");
+
+    await runAsync(`
+      CREATE TABLE IF NOT EXISTS round_labels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        competitionKey TEXT NOT NULL,
+        intRound TEXT NOT NULL,
+        label TEXT,
+        source TEXT NOT NULL,
+        createdAtUtc TEXT NOT NULL,
+        UNIQUE(competitionKey, intRound)
+      )
+    `);
+
+    // Precarga MANUAL validada de la Champions (4480). Idempotente: INSERT OR IGNORE
+    // no pisa correcciones manuales posteriores ni etiquetas ya generadas.
+    const CHAMPIONS_ROUND_LABELS = [
+      ["4480", "400", "Clasificatorio"],
+      ["4480", "32",  "Playoff"],
+      ["4480", "16",  "Octavos"],
+      ["4480", "125", "Cuartos"],
+      ["4480", "150", "Semifinal"],
+      ["4480", "200", "Final"],
+      // Fase de liga regular: sin etiqueta (label NULL) → suprime llamada a IA.
+      ["4480", "1", null], ["4480", "2", null], ["4480", "3", null], ["4480", "4", null],
+      ["4480", "5", null], ["4480", "6", null], ["4480", "7", null], ["4480", "8", null],
+    ];
+    const nowSeed = new Date().toISOString();
+    for (const [ck, round, label] of CHAMPIONS_ROUND_LABELS) {
+      await runAsync(
+        `INSERT OR IGNORE INTO round_labels (competitionKey, intRound, label, source, createdAtUtc)
+         VALUES (?, ?, ?, 'manual', ?)`,
+        [ck, round, label, nowSeed]
+      );
+    }
+    console.log("✅ Round labels table ready (Champions precargado)");
 
   })();
 

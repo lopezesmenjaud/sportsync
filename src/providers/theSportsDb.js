@@ -123,6 +123,10 @@ class TheSportsDbProvider {
     const city    = rawEvent.strCity    || null;
     const country = rawEvent.strCountry || null;
 
+    // Ronda/fase cruda de TheSportsDB (código numérico: "400", "16", "200"...).
+    // Se mapea a etiqueta legible en roundLabelService.
+    const intRound = rawEvent.intRound != null ? String(rawEvent.intRound) : null;
+
     return createMatch({
       internalMatchId: `the_sports_db_${providerMatchId}`,
       provider: "the_sports_db",
@@ -140,6 +144,7 @@ class TheSportsDbProvider {
       venueName,
       city,
       country,
+      intRound,
       lastProviderUpdateUtc
     });
   }

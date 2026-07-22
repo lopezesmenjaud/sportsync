@@ -15,6 +15,7 @@ function createMatch({
   venueName,
   city,
   country,
+  intRound,
   lastProviderUpdateUtc
 }) {
   return {
@@ -34,6 +35,7 @@ function createMatch({
     venueName,
     city:    city    || null,
     country: country || null,
+    intRound: intRound || null,
     lastProviderUpdateUtc
   };
 }

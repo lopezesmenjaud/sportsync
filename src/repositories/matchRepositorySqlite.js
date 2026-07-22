@@ -94,11 +94,12 @@ class MatchRepositorySqlite {
           venueName,
           city,
           country,
+          intRound,
           lastProviderUpdateUtc,
           data,
           createdAt,
           lastSyncedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), strftime('%Y-%m-%dT%H:%M:%SZ','now'))
         ON CONFLICT(providerMatchId) DO UPDATE SET
           provider              = excluded.provider,
           sport                 = excluded.sport,
@@ -114,6 +115,7 @@ class MatchRepositorySqlite {
           venueName             = excluded.venueName,
           city                  = excluded.city,
           country               = excluded.country,
+          intRound              = excluded.intRound,
           lastProviderUpdateUtc = excluded.lastProviderUpdateUtc,
           data                  = excluded.data,
           lastSyncedAt          = strftime('%Y-%m-%dT%H:%M:%SZ','now')`,
@@ -133,6 +135,7 @@ class MatchRepositorySqlite {
           match.venueName,
           match.city    || null,
           match.country || null,
+          match.intRound || null,
           match.lastProviderUpdateUtc,
           JSON.stringify(match)
         ],

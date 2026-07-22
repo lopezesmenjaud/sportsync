@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { googleAccountRepository } = require("../repositories/googleAccountRepositorySqlite");
 const { createMutex } = require("./mutex");
+const { getRoundLabel } = require("./roundLabelService");
 
 // Lock global para serializar la sección check-then-insert que crea
 // el calendario "FanSchedule" en la cuenta del usuario. Sin esto, dos flujos
@@ -65,14 +66,20 @@ async function getCalendarClientForUser(userId) {
   return google.calendar({ version: "v3", auth: userClient });
 }
 
-function buildEventFromMatch(match) {
+async function buildEventFromMatch(match) {
   const startDate = new Date(match.currentStartUtc || match.scheduledStartUtc);
   const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
 
   const isTeamVsTeam = match.homeParticipantName && match.awayParticipantName;
-  const summary = isTeamVsTeam
+  const baseSummary = isTeamVsTeam
     ? `${match.homeParticipantName} vs ${match.awayParticipantName}`
     : match.eventName || match.competitionName || "Evento deportivo";
+
+  // Etiqueta de fase (ej. "Cuartos"). Si no hay, el título queda igual que hoy.
+  const roundLabel = await getRoundLabel(
+    match.competitionKey, match.competitionName, match.intRound, match.sport
+  );
+  const summary = roundLabel ? `${baseSummary} (${roundLabel})` : baseSummary;
 
   const matchUrl = `https://fanschedule.com/match/${match.providerMatchId}`;
 
@@ -121,7 +128,7 @@ function isGoneStatus(err) {
 async function createEvent({ userId, calendarId, match }) {
   if (!calendarId) throw new Error("createEvent: calendarId is required");
   const calendar = await getCalendarClientForUser(userId);
-  const requestBody = buildEventFromMatch(match);
+  const requestBody = await buildEventFromMatch(match);
 
   try {
     const response = await calendar.events.insert({ calendarId, requestBody });
@@ -149,7 +156,7 @@ async function createEvent({ userId, calendarId, match }) {
 async function updateEvent({ userId, calendarId, calendarEventId, match }) {
   if (!calendarId) throw new Error("updateEvent: calendarId is required");
   const calendar = await getCalendarClientForUser(userId);
-  const requestBody = buildEventFromMatch(match);
+  const requestBody = await buildEventFromMatch(match);
 
   try {
     const response = await calendar.events.update({

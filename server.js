@@ -7,6 +7,7 @@ const { initializeDatabase, db } = require("./src/db/database");
 const { subscriptionRepository } = require("./src/repositories/subscriptionRepositorySqlite");
 const { googleAccountRepository } = require("./src/repositories/googleAccountRepositorySqlite");
 const { syncMatchToCalendars } = require("./src/services/calendarSyncService");
+const { invalidate: invalidateRoundLabel } = require("./src/services/roundLabelService");
 const { syncMatches, syncLeague, syncTeam, normalizeSport } = require("./src/services/syncService");
 const { matchRepository } = require("./src/repositories/matchRepositorySqlite");
 const { startScheduler } = require("./src/services/scheduler");
@@ -1106,6 +1107,48 @@ app.get("/api/admin/sync-status", async (req, res) => {
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
+});
+
+// ── Admin: listar etiquetas de ronda (para revisar lo generado por IA) ──
+app.get("/api/admin/round-labels", async (req, res) => {
+  const adminUser = req.headers['x-admin-user'];
+  if (adminUser !== 'lopezesmenjaud@gmail.com') {
+    return res.status(403).json({ ok: false, error: 'Forbidden' });
+  }
+  db.all(
+    `SELECT id, competitionKey, intRound, label, source, createdAtUtc
+     FROM round_labels
+     ORDER BY competitionKey ASC, CAST(intRound AS INTEGER) ASC`,
+    [],
+    (err, rows) => {
+      if (err) return res.status(500).json({ ok: false, error: err.message });
+      res.json({ ok: true, labels: rows });
+    }
+  );
+});
+
+// ── Admin: corregir una etiqueta manualmente (label + source='manual') ──
+app.put("/api/admin/round-labels", async (req, res) => {
+  const adminUser = req.headers['x-admin-user'];
+  if (adminUser !== 'lopezesmenjaud@gmail.com') {
+    return res.status(403).json({ ok: false, error: 'Forbidden' });
+  }
+  const { competitionKey, intRound, label } = req.body || {};
+  if (!competitionKey || !intRound) {
+    return res.status(400).json({ ok: false, error: 'competitionKey e intRound son requeridos' });
+  }
+  const now = new Date().toISOString();
+  db.run(
+    `INSERT INTO round_labels (competitionKey, intRound, label, source, createdAtUtc)
+     VALUES (?, ?, ?, 'manual', ?)
+     ON CONFLICT(competitionKey, intRound) DO UPDATE SET label = excluded.label, source = 'manual'`,
+    [competitionKey, String(intRound), label ?? null, now],
+    (err) => {
+      if (err) return res.status(500).json({ ok: false, error: err.message });
+      invalidateRoundLabel(competitionKey, String(intRound)); // limpiar cache en memoria
+      res.json({ ok: true, competitionKey, intRound: String(intRound), label: label ?? null, source: 'manual' });
+    }
+  );
 });
 
 app.get("/api/admin/cleanup-calendar", async (req, res) => {
