@@ -4,6 +4,7 @@
 // Orden: blocklist → cache en memoria → tabla round_labels → IA (una vez) → null.
 // NUNCA inventa: si la IA falla o no está segura, guarda label NULL y devuelve null.
 const { db } = require("../db/database");
+const { ANTHROPIC_MODEL } = require("../config/aiModel");
 
 // Formato regular sin fases eliminatorias:
 //  - Por DEPORTE (escala solo): motor y combate nunca tienen octavos/cuartos.
@@ -103,7 +104,7 @@ si es una jornada regular sin fase distintiva. Sin números, sin explicación, s
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: ANTHROPIC_MODEL,
       max_tokens: 20,
       messages: [{ role: "user", content: prompt }],
     }),

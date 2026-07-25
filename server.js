@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { oauth2Client } = require("./src/config/googleClient");
+const { ANTHROPIC_MODEL } = require("./src/config/aiModel");
 const { initializeDatabase, db } = require("./src/db/database");
 const { subscriptionRepository } = require("./src/repositories/subscriptionRepositorySqlite");
 const { googleAccountRepository } = require("./src/repositories/googleAccountRepositorySqlite");
@@ -137,10 +138,20 @@ async function getSmartSummary(match) {
   if (daysUntilMatch > 7) {
     return { summary: null, source: "too_far", reason: "El partido es en más de 7 días." };
   }
-  if (!match.homeParticipantName || !match.awayParticipantName ||
-      match.homeParticipantName === "TBD" || match.awayParticipantName === "TBD") {
+
+  // Dos participantes confirmados (equipo vs equipo) vs. evento/sesión individual (F1, motorsport…).
+  const isTeamVsTeam = match.homeParticipantName && match.awayParticipantName &&
+    match.homeParticipantName !== "TBD" && match.awayParticipantName !== "TBD";
+  const isSingleEvent = !isTeamVsTeam && !!match.eventName;
+
+  // Sin dos participantes NI nombre de evento → no hay con qué generar.
+  if (!isTeamVsTeam && !isSingleEvent) {
     return { summary: null, source: "tbd", reason: "Los rivales aún no están confirmados." };
   }
+
+  const label = isTeamVsTeam
+    ? `${match.homeParticipantName} vs ${match.awayParticipantName}`
+    : match.eventName;
 
   const stored = await getSummaryFromDb(match.providerMatchId);
   if (stored?.ai_summary && stored?.summary_generated_at) {
@@ -156,7 +167,21 @@ async function getSmartSummary(match) {
     }
   }
 
-  console.log(`[summary] Generating new summary for ${match.homeParticipantName} vs ${match.awayParticipantName}...`);
+  console.log(`[summary] Generating new summary for ${label}...`);
+
+  const prompt = isTeamVsTeam
+    ? `Genera un resumen pre-partido breve y emocionante (máximo 3 oraciones) para este partido de ${match.sport}:
+${match.homeParticipantName} vs ${match.awayParticipantName}
+Competición: ${match.competitionName}
+Fecha: ${match.currentStartUtc}
+Responde solo con el resumen, sin títulos ni formato extra.`
+    : `Genera un resumen breve y emocionante (máximo 3 oraciones) para este evento de ${match.sport}:
+${match.eventName}
+Competición: ${match.competitionName}
+Fecha: ${match.currentStartUtc}
+Es un evento o sesión individual (no un partido entre dos equipos). Enfócate en el contexto de la competición y qué esperar de esta sesión o carrera.
+Responde solo con el resumen, sin títulos ni formato extra.`;
+
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -165,24 +190,29 @@ async function getSmartSummary(match) {
       "anthropic-version": "2023-06-01"
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: ANTHROPIC_MODEL,
       max_tokens: 1000,
-      messages: [{
-        role: "user",
-        content: `Genera un resumen pre-partido breve y emocionante (máximo 3 oraciones) para este partido de ${match.sport}:
-${match.homeParticipantName} vs ${match.awayParticipantName}
-Competición: ${match.competitionName}
-Fecha: ${match.currentStartUtc}
-Responde solo con el resumen, sin títulos ni formato extra.`
-      }]
+      messages: [{ role: "user", content: prompt }]
     })
   });
 
-  const data    = await response.json();
-  const summary = data.content?.[0]?.text || "Resumen no disponible.";
-  await saveSummaryToDb(match.providerMatchId, summary);
+  // Error de la API: NO cachear. Loguear status + cuerpo real. El fallback se muestra solo en el momento.
+  if (!response.ok) {
+    const errBody = await response.text().catch(() => "");
+    console.error(`[summary] Anthropic API ${response.status} para ${match.providerMatchId}: ${errBody.slice(0, 300)}`);
+    return { summary: "Resumen no disponible.", source: "error" };
+  }
+
+  const data = await response.json();
+  const text = data.content?.[0]?.text;
+  if (!text) {
+    console.error(`[summary] Anthropic sin content para ${match.providerMatchId}: ${JSON.stringify(data).slice(0, 300)}`);
+    return { summary: "Resumen no disponible.", source: "error" };
+  }
+
+  await saveSummaryToDb(match.providerMatchId, text);
   console.log(`[summary] Saved new summary for ${match.providerMatchId}`);
-  return { summary, source: "generated" };
+  return { summary: text, source: "generated" };
 }
 
 // ─────────────────────────────────────────────
@@ -342,7 +372,7 @@ app.get("/api/broadcasting/:competitionKey/:country", async (req, res) => {
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: ANTHROPIC_MODEL,
         max_tokens: 1000,
         messages: [{
           role: "user",
@@ -846,7 +876,7 @@ app.post("/api/nearby", async (req, res) => {
               "anthropic-version": "2023-06-01"
             },
             body: JSON.stringify({
-              model: "claude-sonnet-4-20250514",
+              model: ANTHROPIC_MODEL,
               max_tokens: 4000,
               messages: [{
                 role: "user",
