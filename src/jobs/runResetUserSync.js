@@ -1,27 +1,30 @@
 // src/jobs/runResetUserSync.js
 //
-// Resetea el vínculo de sincronización de UN usuario y RECREA sus eventos futuros
-// en un calendario nuevo. Útil cuando el usuario borró su calendario "FanSchedule"
-// a mano en Google y quedaron:
-//   - google_accounts.fanschedule_calendar_id apuntando a un calendario inexistente
-//   - filas "fantasma" en calendar_events que hacen que el sync salte eventos
+// Reset TOTAL del calendario de UN usuario: borra los calendarios "FanSchedule"
+// que existan en su Google (incluido un huérfano de pruebas), limpia el vínculo en
+// la DB y recrea sus eventos futuros en un calendario nuevo.
 //
-// Qué hace (SOLO para TARGET_USER, al aplicar con CONFIRM=1):
-//   1. RESET:
-//      a. fanschedule_calendar_id = NULL en google_accounts → el próximo acceso
-//         crea un calendario nuevo (getOrCreateFanscheduleCalendar maneja NULL).
-//      b. DELETE de todas las filas de calendar_events de ese userId.
-//   2. RECREACIÓN FORZADA:
-//      Recorre TODOS los partidos futuros suscritos del usuario (getMatchesForUser,
-//      no solo los que cambiaron) y crea el evento en Google reusando los primitivos
-//      POR-USUARIO: getOrCreateFanscheduleCalendar({userId}) + createEvent({userId,...}).
-//      NO usa syncMatchToCalendars (que es multi-usuario) → cero efecto en otros users.
+// Caso: el usuario tenía DOS calendarios "FanSchedule" (uno huérfano). Borró uno a
+// mano; el fanschedule_calendar_id guardado apunta a uno inexistente, y hay un
+// "FanSchedule" vivo que la app no conoce, con eventos viejos.
 //
-// NO toca a ningún otro usuario. NO toca tokens, suscripciones ni matches.
+// Qué hace (SOLO para TARGET_USER, al aplicar con CONFIRM=1), EN ESTE ORDEN:
+//   1. Lista los calendarios del usuario y encuentra TODOS los "FanSchedule".
+//   2. BORRA de Google cada uno (calendar.calendars.delete) — IRREVERSIBLE.
+//      Guarda triple: summary === "FanSchedule" && !primary && accessRole === "owner".
+//   3. fanschedule_calendar_id = NULL en google_accounts.
+//   4. DELETE de todas las filas de calendar_events del usuario.
+//   5. Recrea: fuerza un calendario FanSchedule NUEVO y re-crea todos los partidos
+//      futuros suscritos, reusando primitivos POR-USUARIO (getOrCreateFanscheduleCalendar
+//      + createEvent). NO usa syncMatchToCalendars (multi-usuario) → cero efecto en otros.
+//
+// NO toca a ningún otro usuario. NO toca tokens (salvo refresh normal), suscripciones ni matches.
 //
 // Seguridad:
 //   - TARGET_USER obligatorio (no hardcodeado). Sin él, aborta.
-//   - Dry-run por defecto. Solo escribe/llama a Google con CONFIRM=1.
+//   - Dry-run por defecto: solo LISTA qué calendarios borraría (summary+id) y cuántos
+//     eventos recrearía. NO borra, no escribe, no crea. Solo lee (calendarList.list).
+//   - Solo aplica con CONFIRM=1.
 //   - Ruta de DB desde src/db/database.js (local vs /var/data según NODE_ENV).
 //
 // Uso:
@@ -29,10 +32,9 @@
 //   Aplicar local:   TARGET_USER=tu@email CONFIRM=1 node src/jobs/runResetUserSync.js
 //   Aplicar Render:  TARGET_USER=tu@email CONFIRM=1 NODE_ENV=production node src/jobs/runResetUserSync.js
 //
-// NOTA de concurrencia: corre en proceso aparte del server, así que no comparte el
-// mutex en memoria del scheduler. Para evitar duplicados, córrelo cuando el scheduler
-// no esté sincronizando a este usuario (o reinicia el servicio antes). El script
-// igual reporta duplicados al final si los detecta.
+// NOTA de concurrencia: corre en proceso aparte del server (no comparte el mutex del
+// scheduler). Córrelo cuando el scheduler no sincronice a este usuario, o reinicia el
+// servicio antes. El script reporta duplicados al final si los detecta.
 
 require("dotenv").config();
 
@@ -40,6 +42,7 @@ const { db } = require("../db/database");
 
 const TARGET_USER = process.env.TARGET_USER;
 const APPLY = process.env.CONFIRM === "1" || process.env.CONFIRM === "true";
+const FANSCHEDULE_SUMMARY = "FanSchedule";
 
 function get(sql, params = []) {
   return new Promise((resolve, reject) => {
@@ -56,12 +59,17 @@ function run(sql, params = []) {
   });
 }
 
-// invalid_grant: refresh token expirado/revocado (mismo criterio que calendarSyncService).
 function isInvalidGrant(err) {
   const msg     = String(err?.message || "").toLowerCase();
   const respErr = String(err?.response?.data?.error || "").toLowerCase();
   const code    = String(err?.code || "").toLowerCase();
   return msg.includes("invalid_grant") || respErr === "invalid_grant" || code === "invalid_grant";
+}
+
+// Solo borrables: se llaman exactamente "FanSchedule", NO son el primario, y el
+// usuario es OWNER. Triple guarda para nunca tocar el calendario primario ni ajenos.
+function isDeletableFanschedule(cal) {
+  return (cal.summary || "") === FANSCHEDULE_SUMMARY && !cal.primary && cal.accessRole === "owner";
 }
 
 async function main() {
@@ -70,10 +78,9 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`[reset] modo: ${APPLY ? "APLICAR (CONFIRM=1)" : "DRY-RUN (sin escribir ni llamar a Google)"}`);
+  console.log(`[reset] modo: ${APPLY ? "APLICAR (CONFIRM=1)" : "DRY-RUN (solo lista; no borra, no escribe, no crea)"}`);
   console.log(`[reset] TARGET_USER=${TARGET_USER}`);
 
-  // Verificar que la cuenta exista (evita reset silencioso por typo en TARGET_USER).
   const account = await get(
     "SELECT userId, fanschedule_calendar_id FROM google_accounts WHERE userId = ?",
     [TARGET_USER]
@@ -82,51 +89,78 @@ async function main() {
     console.error(`[reset] No existe google_accounts para userId=${TARGET_USER}. Aborta (¿typo en TARGET_USER?).`);
     process.exit(1);
   }
+  const savedId = account.fanschedule_calendar_id;
 
   const { n: eventCount } = await get(
     "SELECT COUNT(*) n FROM calendar_events WHERE userId = ?",
     [TARGET_USER]
   );
 
-  // Partidos futuros suscritos (independiente de calendar_events; solo DB, no Google).
   const { getMatchesForUser } = require("../services/subscriptionMatchService");
   const nowIso = new Date().toISOString();
   const futureMatches = (await getMatchesForUser(TARGET_USER)).filter(
     (m) => (m.currentStartUtc || m.scheduledStartUtc || "") >= nowIso
   );
 
-  console.log(`[reset] fanschedule_calendar_id actual: ${account.fanschedule_calendar_id || "(ya es NULL)"}`);
+  // Listar calendarios reales en Google (lectura).
+  const googleCalendarProvider = require("../services/googleCalendarProvider");
+  const calendar = await googleCalendarProvider.getCalendarClientForUser(TARGET_USER);
+  const list = await calendar.calendarList.list({ maxResults: 250 });
+  const items = list.data.items || [];
+  const toDelete = items.filter(isDeletableFanschedule);
+  const savedExists = savedId ? items.some((c) => c.id === savedId) : false;
+
+  console.log(`[reset] fanschedule_calendar_id guardado: ${savedId || "(NULL)"} ${savedId ? (savedExists ? "(existe en Google)" : "(YA NO existe en Google)") : ""}`);
   console.log(`[reset] calendar_events de este usuario: ${eventCount}`);
   console.log(`[reset] partidos futuros suscritos a recrear: ${futureMatches.length}`);
+  console.log(`[reset] calendarios "FanSchedule" borrables encontrados: ${toDelete.length}`);
+  if (toDelete.length) {
+    console.table(toDelete.map((c) => ({ summary: c.summary, id: c.id, accessRole: c.accessRole })));
+  }
 
   if (!APPLY) {
-    console.log("─".repeat(56));
-    console.log(`[reset] DRY-RUN: borraría ${eventCount} filas de calendar_events`);
-    console.log(`[reset] DRY-RUN: pondría fanschedule_calendar_id = NULL`);
-    console.log(`[reset] DRY-RUN: recrearía ${futureMatches.length} eventos en un calendario nuevo`);
-    console.log("[reset] Nada se escribió ni se llamó a Google. Re-ejecuta con CONFIRM=1 para aplicar.");
+    console.log("─".repeat(60));
+    console.log("[reset] DRY-RUN. Al aplicar con CONFIRM=1 haría, en orden:");
+    console.log(`[reset]   1. BORRAR de Google (IRREVERSIBLE) ${toDelete.length} calendario(s) "FanSchedule" listados arriba`);
+    console.log(`[reset]   2. fanschedule_calendar_id = NULL`);
+    console.log(`[reset]   3. borrar ${eventCount} filas de calendar_events`);
+    console.log(`[reset]   4. recrear ${futureMatches.length} eventos en un calendario nuevo`);
+    console.log("[reset] Revisa la lista de calendarios de arriba ANTES de aplicar. Nada se modificó.");
     return;
   }
 
-  // ── 1) RESET (SOLO este userId) ──
-  const del = await run("DELETE FROM calendar_events WHERE userId = ?", [TARGET_USER]);
+  // ── 1) BORRAR calendarios FanSchedule de Google (IRREVERSIBLE) ──
+  let deletedCals = 0;
+  for (const c of toDelete) {
+    try {
+      await calendar.calendars.delete({ calendarId: c.id });
+      deletedCals++;
+      console.log(`[reset] calendario Google borrado: "${c.summary}" ${c.id}`);
+    } catch (e) {
+      console.error(`[reset] error borrando calendario ${c.id}: ${e.message}`);
+    }
+  }
+  console.log(`[reset] calendarios "FanSchedule" borrados de Google: ${deletedCals}/${toDelete.length}`);
+
+  // ── 2) NULL + 3) borrar calendar_events (SOLO este userId) ──
   const now = new Date().toISOString();
   await run(
     "UPDATE google_accounts SET fanschedule_calendar_id = NULL, updatedAtUtc = ? WHERE userId = ?",
     [now, TARGET_USER]
   );
+  const del = await run("DELETE FROM calendar_events WHERE userId = ?", [TARGET_USER]);
   const afterReset = await get(
     "SELECT fanschedule_calendar_id FROM google_accounts WHERE userId = ?",
     [TARGET_USER]
   );
-  console.log("─".repeat(56));
-  console.log(`[reset] calendar_events borradas: ${del.changes}`);
   console.log(`[reset] fanschedule_calendar_id ahora: ${afterReset.fanschedule_calendar_id === null ? "NULL ✓" : afterReset.fanschedule_calendar_id}`);
+  console.log(`[reset] calendar_events borradas: ${del.changes}`);
 
-  // ── 2) RECREACIÓN FORZADA (primitivos POR-USUARIO; no toca a otros users) ──
-  const googleCalendarProvider = require("../services/googleCalendarProvider");
+  // Limpiar caché en memoria del calendarId por si acaso.
+  googleCalendarProvider.invalidateFanscheduleCalendarCache(TARGET_USER);
+
+  // ── 5) RECREACIÓN FORZADA (primitivos POR-USUARIO) ──
   const { calendarEventRepository } = require("../repositories/calendarEventRepositorySqlite");
-
   let recreated = 0;
   let skipped = 0;
   let errors = 0;
@@ -134,7 +168,6 @@ async function main() {
     const m = futureMatches[i];
     try {
       const calendarId = await googleCalendarProvider.getOrCreateFanscheduleCalendar({ userId: TARGET_USER });
-      // Idempotencia: si ya existe la fila (p.ej. corrida previa), no duplicar.
       const existing = await calendarEventRepository.getByUserIdAndProviderMatchId(TARGET_USER, m.providerMatchId);
       if (existing) { skipped++; continue; }
 
@@ -167,7 +200,8 @@ async function main() {
   }
   const duplicates = [...byMatchId.entries()].filter(([, c]) => c > 1).map(([providerMatchId, count]) => ({ providerMatchId, count }));
 
-  console.log("─".repeat(56));
+  console.log("─".repeat(60));
+  console.log(`[reset] calendarios Google borrados: ${deletedCals}`);
   console.log(`[reset] eventos recreados: ${recreated}`);
   console.log(`[reset] saltados (ya existían): ${skipped}`);
   console.log(`[reset] errores: ${errors}`);
