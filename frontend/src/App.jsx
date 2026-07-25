@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, useSearchParams, useNavigate, Navigate } from 'react-router-dom'
+import { Analytics } from '@vercel/analytics/react'
 import { useState, useEffect } from 'react'
 import { setUser, isLoggedIn } from './auth'
 import EmailConsentModal from './components/EmailConsentModal'
@@ -82,6 +83,7 @@ function EmailConsentGate() {
 function App() {
   return (
     <BrowserRouter>
+      <Analytics />
       <CleanOAuthParams />
       <EmailConsentGate />
       <Routes>
