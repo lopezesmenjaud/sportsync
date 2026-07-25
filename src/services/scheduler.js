@@ -1,8 +1,8 @@
 const cron = require("node-cron");
 const { syncMatches, syncSport } = require("./syncService");
 const { syncMatchToCalendars } = require("./calendarSyncService");
-const { matchRepository } = require("../repositories/matchRepositorySqlite");
-const { calendarEventRepository } = require("../repositories/calendarEventRepositorySqlite");
+const { googleAccountRepository } = require("../repositories/googleAccountRepositorySqlite");
+const { backfillUserEvents } = require("./userBackfillService");
 
 // ─────────────────────────────────────────────
 // Intervalos de sincronización por deporte
@@ -41,24 +41,40 @@ const SPORT_SCHEDULES = [
   }
 ];
 
-async function backfillMissingCalendarEvents(skipUserIds = new Set()) {
-  const allMatches = await matchRepository.getAll();
-  const allCalendarEvents = await calendarEventRepository.getAll();
-  const syncedMatchIds = new Set(allCalendarEvents.map(ce => ce.providerMatchId));
+// Scope requerido para crear/gestionar el calendario del usuario.
+const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
 
-  let backfillCount = 0;
-  for (const match of allMatches) {
-    if (!syncedMatchIds.has(match.providerMatchId)) {
-      try {
-        const backfillResults = await syncMatchToCalendars(match, skipUserIds);
-        backfillCount += backfillResults.length;
-      } catch (e) {
-        console.error(`[scheduler] Backfill error for ${match.providerMatchId}:`, e.message);
-      }
+// Salta usuarios que no pueden recibir eventos (evita fallos y spam de logs cada ciclo).
+function shouldSkipUser(acc, skipUserIds) {
+  if (skipUserIds.has(acc.userId)) return "needsReauth (marcado en esta corrida)";
+  if (acc.needsReauth === 1) return "needsReauth";
+  if (!(acc.scope || "").includes(CALENDAR_SCOPE)) return "sin scope de Calendar";
+  return null;
+}
+
+// Backfill PER-USUARIO: por cada usuario, crea los eventos que le FALTAN (en ventana),
+// reusando backfillUserEvents (mismo mutex compartido + skip existentes). Ya NO deduplica
+// por providerMatchId GLOBAL — esa era la raíz del bug "orden de llegada" (un match que
+// otro usuario ya tenía se saltaba para TODOS).
+async function backfillMissingCalendarEvents(skipUserIds = new Set()) {
+  const accounts = await googleAccountRepository.getAll();
+
+  let totalCreated = 0;
+  const skipped = [];
+  for (const acc of accounts) {
+    const reason = shouldSkipUser(acc, skipUserIds);
+    if (reason) { skipped.push(`${acc.googleEmail} (${reason})`); continue; }
+    try {
+      const r = await backfillUserEvents(acc.userId); // sin onLog → silencioso (sin logs por partido)
+      totalCreated += r.created;
+    } catch (e) {
+      console.error(`[scheduler] Backfill error para ${acc.googleEmail}: ${e.message}`);
     }
   }
-  if (backfillCount > 0) console.log(`[scheduler] Backfilled ${backfillCount} calendar events`);
-  return backfillCount;
+
+  if (totalCreated > 0) console.log(`[scheduler] Backfill per-usuario: +${totalCreated} eventos creados`);
+  if (skipped.length > 0) console.log(`[scheduler] Backfill: ${skipped.length} usuarios saltados: ${skipped.join(", ")}`);
+  return totalCreated;
 }
 
 function startScheduler() {
