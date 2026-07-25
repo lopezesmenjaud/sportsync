@@ -4,7 +4,7 @@
 // Orden: blocklist → cache en memoria → tabla round_labels → IA (una vez) → null.
 // NUNCA inventa: si la IA falla o no está segura, guarda label NULL y devuelve null.
 const { db } = require("../db/database");
-const { ANTHROPIC_MODEL } = require("../config/aiModel");
+const { ANTHROPIC_MODEL, readAnthropicText } = require("../config/aiModel");
 
 // Formato regular sin fases eliminatorias:
 //  - Por DEPORTE (escala solo): motor y combate nunca tienen octavos/cuartos.
@@ -110,7 +110,12 @@ si es una jornada regular sin fase distintiva. Sin números, sin explicación, s
     }),
   });
   const data = await response.json();
-  return sanitizeLabel(data.content?.[0]?.text);
+  const { text, blockTypes } = readAnthropicText(data);
+  if (!text) {
+    console.error(`[roundLabel] Anthropic sin bloque text (bloques: ${JSON.stringify(blockTypes)})`);
+    return null;
+  }
+  return sanitizeLabel(text);
 }
 
 async function getRoundLabel(competitionKey, competitionName, intRound, sport) {

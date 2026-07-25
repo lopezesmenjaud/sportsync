@@ -3,7 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { oauth2Client } = require("./src/config/googleClient");
-const { ANTHROPIC_MODEL } = require("./src/config/aiModel");
+const { ANTHROPIC_MODEL, readAnthropicText } = require("./src/config/aiModel");
 const { initializeDatabase, db } = require("./src/db/database");
 const { subscriptionRepository } = require("./src/repositories/subscriptionRepositorySqlite");
 const { googleAccountRepository } = require("./src/repositories/googleAccountRepositorySqlite");
@@ -204,9 +204,9 @@ Responde solo con el resumen, sin títulos ni formato extra.`;
   }
 
   const data = await response.json();
-  const text = data.content?.[0]?.text;
+  const { text, blockTypes } = readAnthropicText(data);
   if (!text) {
-    console.error(`[summary] Anthropic sin content para ${match.providerMatchId}: ${JSON.stringify(data).slice(0, 300)}`);
+    console.error(`[summary] Anthropic sin bloque text para ${match.providerMatchId} (bloques: ${JSON.stringify(blockTypes)})`);
     return { summary: "Resumen no disponible.", source: "error" };
   }
 
@@ -401,12 +401,18 @@ País: ${country}`
     });
 
     const aiData = await response.json();
-    const text   = aiData.content?.[0]?.text || "{}";
+    const { text, blockTypes } = readAnthropicText(aiData);
+    const EMPTY = { freeTV: [], paidTV: [], streaming: [] };
+    if (!text) {
+      console.error(`[broadcasting] Anthropic sin bloque text para ${competitionKey}/${country} (bloques: ${JSON.stringify(blockTypes)})`);
+      return res.json({ ok: true, data: EMPTY, source: "error" }); // NO cachear el fallo
+    }
     let parsed;
     try {
       parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
     } catch {
-      parsed = { freeTV: [], paidTV: [], streaming: [] };
+      console.error(`[broadcasting] JSON inválido para ${competitionKey}/${country}: ${text.slice(0, 200)}`);
+      return res.json({ ok: true, data: EMPTY, source: "error" }); // NO cachear el fallo
     }
 
     await saveBroadcastingToDb(competitionKey, competitionName, country, parsed);
@@ -887,18 +893,26 @@ app.post("/api/nearby", async (req, res) => {
 
           if (aiResponse.ok) {
             const aiData = await aiResponse.json();
-            const text = aiData?.content?.[0]?.text || "";
-            const jsonMatch = text.match(/\[[\s\S]*\]/);
-            if (jsonMatch) return JSON.parse(jsonMatch[0]);
+            const { text, blockTypes } = readAnthropicText(aiData);
+            if (text) {
+              const jsonMatch = text.match(/\[[\s\S]*\]/);
+              if (jsonMatch) return { ok: true, items: JSON.parse(jsonMatch[0]) };
+            }
+            console.error(`[nearby] Claude sin JSON usable (bloques: ${JSON.stringify(blockTypes)}) para batch de ${batch.length} venues`);
+          } else {
+            console.error(`[nearby] Claude HTTP ${aiResponse.status} para batch de ${batch.length} venues`);
           }
         } catch (aiErr) {
           console.error(`[nearby] Claude AI batch failed:`, aiErr.message);
         }
-        return [];
+        return { ok: false, batch };
       }));
 
-      // Combinar resultados de todos los batches
-      const allResults = batchResults.flat();
+      // Venues cuyo batch FALLÓ: se excluyen de este request pero NO se cachean (reintentan luego).
+      const failedVenues = new Set(batchResults.filter(r => !r.ok).flatMap(r => r.batch));
+
+      // Combinar resultados de los batches EXITOSOS
+      const allResults = batchResults.filter(r => r.ok).flatMap(r => r.items);
       for (const item of allResults) {
         if (item.venue && stillUncached.includes(item.venue)) {
           const inTarget = item.inTargetCity === true;
@@ -909,10 +923,12 @@ app.post("/api/nearby", async (req, res) => {
       }
       console.log(`[nearby] Claude AI resolved ${allResults.length}/${stillUncached.length} venues for "${location.city}"`);
 
-      // Venues que Claude no resolvió: cachear como false para no reintentar
+      // Venues que Claude no resolvió: cachear como false SOLO si NO fue por fallo de la IA.
+      // Los de un batch fallido se excluyen de ESTE request pero no se cachean → reintentan.
       for (const venue of stillUncached) {
-        if (!venueInCity.has(venue)) {
-          venueInCity.set(venue, false);
+        if (venueInCity.has(venue)) continue;
+        venueInCity.set(venue, false);
+        if (!failedVenues.has(venue)) {
           await setVenueCityCache(venue, cityNorm, null, false);
         }
       }
