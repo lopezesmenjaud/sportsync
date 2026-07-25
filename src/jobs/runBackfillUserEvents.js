@@ -1,22 +1,22 @@
 // src/jobs/runBackfillUserEvents.js
 //
 // Backfill de eventos de Google Calendar para UN usuario: crea los eventos que le
-// FALTAN (partidos relevantes sin fila en calendar_events), independiente de si el
-// match cambió. Reusa el criterio per-usuario de calendarSyncService.js:38-46.
+// FALTAN (partidos relevantes EN VENTANA sin fila en calendar_events), independiente
+// de si el match cambió. Delega TODA la lógica en userBackfillService (fuente única
+// compartida con el scheduler): getMissingEventsForUser + backfillUserEvents.
 //
-// A diferencia de POST /api/admin/resync-user:
-//   - Target-only: NO toca a otros usuarios (usa primitivos por-usuario, no
-//     syncMatchToCalendars que es multi-usuario).
-//   - SALTA los existentes (no los re-actualiza) → solo N creates, no update masivo.
+//   - SALTA los existentes (no los re-actualiza).
+//   - Reusa la sección crítica atómica bajo el mutex compartido (createCalendarEventIfMissing).
 //   - Log por partido: created / skipped / error. NO aborta si un partido falla.
 //
 // Seguridad / operación:
 //   - TARGET_USER (email) obligatorio. Sin él, aborta.
 //   - Dry-run por defecto. Solo crea con CONFIRM=1.
-//   - MAX (opcional): limita cuántos crear en esta corrida (para una prueba chica).
+//   - MAX (opcional): limita cuántos crear (prueba chica).
 //   - DELAY_MS (opcional, default 150): pausa entre creates (rate-limit de Google).
-//   - Corre en proceso aparte (no comparte el mutex del scheduler): córrelo en un
-//     minuto != :00 y NO justo tras un deploy. Reporta duplicados al final.
+//   - Corre en proceso APARTE del server: aunque la op atómica use el mutex compartido,
+//     ese mutex es por-proceso, así que córrelo en un minuto != :00 y NO tras un deploy.
+//     Reporta duplicados al final.
 //   - Ruta de DB desde src/db/database.js. NO llama initializeDatabase (no borra caches).
 //
 // Uso:
@@ -27,11 +27,9 @@
 
 require("dotenv").config();
 
-const { getMatchesForUser } = require("../services/subscriptionMatchService");
-const { calendarEventRepository } = require("../repositories/calendarEventRepositorySqlite");
 const { googleAccountRepository } = require("../repositories/googleAccountRepositorySqlite");
-const googleCalendarProvider = require("../services/googleCalendarProvider");
-const { getSyncDateRange } = require("../services/syncService");
+const { calendarEventRepository } = require("../repositories/calendarEventRepositorySqlite");
+const { getMissingEventsForUser, backfillUserEvents } = require("../services/userBackfillService");
 const { db } = require("../db/database");
 
 const TARGET_EMAIL = process.env.TARGET_USER;
@@ -39,19 +37,9 @@ const APPLY = process.env.CONFIRM === "1" || process.env.CONFIRM === "true";
 const MAX = process.env.MAX ? parseInt(process.env.MAX, 10) : Infinity;
 const DELAY_MS = process.env.DELAY_MS ? parseInt(process.env.DELAY_MS, 10) : 150;
 
-function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
-
-function isInvalidGrant(err) {
-  const msg = String(err?.message || "").toLowerCase();
-  const respErr = String(err?.response?.data?.error || "").toLowerCase();
-  const code = String(err?.code || "").toLowerCase();
-  return msg.includes("invalid_grant") || respErr === "invalid_grant" || code === "invalid_grant";
-}
-
-function isRateLimit(err) {
-  const status = err?.code || err?.response?.status;
-  const reason = String(err?.response?.data?.error?.errors?.[0]?.reason || "").toLowerCase();
-  return status === 429 || reason.includes("ratelimit") || reason.includes("userratelimit") || reason.includes("quota");
+function tagOf(m) {
+  const name = (m.eventName || (m.homeParticipantName ? m.homeParticipantName + " vs " + m.awayParticipantName : m.competitionName) || "").slice(0, 40);
+  return `${m.providerMatchId} "${name}"`;
 }
 
 async function main() {
@@ -72,79 +60,35 @@ async function main() {
   const userId = acc.userId;
   console.log(`[backfill] userId=${userId}  fanschedule_calendar_id=${acc.fanschedule_calendar_id === null ? "NULL (se creará uno nuevo)" : acc.fanschedule_calendar_id}`);
 
-  const relevant = await getMatchesForUser(userId);
-  const existing = await calendarEventRepository.getByUserId(userId);
-  const existingIds = new Set(existing.map((ce) => ce.providerMatchId));
-  const missingAll = relevant.filter((m) => !existingIds.has(m.providerMatchId));
-
-  // Misma ventana que el flujo normal (syncLeague): [fromDate, toDate] = hoy .. hoy+30d.
-  // Compara la FECHA (YYYY-MM-DD) de currentStartUtc (canónico; fallback scheduledStartUtc),
-  // igual que theSportsDb.js:24-27 filtra dateEvent. Descarta pasados y futuros-lejanos.
-  const { fromDate, toDate } = getSyncDateRange();
-  const matchDate = (m) => (m.currentStartUtc || m.scheduledStartUtc || "").slice(0, 10);
-  const missing = missingAll.filter((m) => {
-    const d = matchDate(m);
-    return d && d >= fromDate && d <= toDate;
-  });
-  const discardedPast   = missingAll.filter((m) => { const d = matchDate(m); return d && d < fromDate; }).length;
-  const discardedFuture = missingAll.filter((m) => { const d = matchDate(m); return d && d > toDate;  }).length;
-  const discardedNoDate = missingAll.filter((m) => !matchDate(m)).length;
-  const discarded = missingAll.length - missing.length;
-
-  console.log(`[backfill] ventana de sync: ${fromDate} .. ${toDate}`);
-  console.log(`[backfill] relevantMatches=${relevant.length}  calendar_events actuales=${existing.length}`);
-  console.log(`[backfill] faltantes(total)=${missingAll.length}  descartados fuera de ventana=${discarded} (pasados=${discardedPast}, futuros-lejanos=${discardedFuture}, sin-fecha=${discardedNoDate})  FALTANTES(en ventana)=${missing.length}`);
+  // Cálculo de faltantes en ventana (mismo servicio que usa el scheduler).
+  const info = await getMissingEventsForUser(userId);
+  const discarded = info.missingAll.length - info.missing.length;
+  console.log(`[backfill] ventana de sync: ${info.fromDate} .. ${info.toDate}`);
+  console.log(`[backfill] relevantMatches=${info.relevant.length}  calendar_events actuales=${info.existing.length}`);
+  console.log(`[backfill] faltantes(total)=${info.missingAll.length}  descartados fuera de ventana=${discarded} (pasados=${info.discardedPast}, futuros-lejanos=${info.discardedFuture}, sin-fecha=${info.discardedNoDate})  FALTANTES(en ventana)=${info.missing.length}`);
 
   if (!APPLY) {
     const by = {};
-    for (const m of missing) { const k = `${m.sport}/${m.competitionKey}`; by[k] = (by[k] || 0) + 1; }
-    console.log(`[backfill] DRY-RUN: crearía ${Math.min(missing.length, MAX)} eventos (de ${missing.length} faltantes) — por sport/liga: ${JSON.stringify(by)}`);
+    for (const m of info.missing) { const k = `${m.sport}/${m.competitionKey}`; by[k] = (by[k] || 0) + 1; }
+    console.log(`[backfill] DRY-RUN: crearía ${Math.min(info.missing.length, MAX)} eventos (de ${info.missing.length} faltantes) — por sport/liga: ${JSON.stringify(by)}`);
     console.log("[backfill] Nada se creó. Re-ejecuta con CONFIRM=1 para aplicar.");
     return;
   }
 
-  let created = 0, skipped = 0, errors = 0;
-  const toProcess = missing.slice(0, MAX);
-  for (let i = 0; i < toProcess.length; i++) {
-    const m = toProcess[i];
-    const tag = `${m.providerMatchId} "${(m.eventName || (m.homeParticipantName ? m.homeParticipantName + " vs " + m.awayParticipantName : m.competitionName) || "").slice(0, 40)}"`;
-    try {
-      // Doble-chequeo per-usuario por si otra corrida/proceso ya lo creó (idempotencia).
-      const already = await calendarEventRepository.getByUserIdAndProviderMatchId(userId, m.providerMatchId);
-      if (already) { skipped++; console.log(`[backfill] skipped ${tag} (ya existe)`); continue; }
+  // Aplicar: delega en el servicio compartido; el logging por partido se hace vía onLog.
+  const total = Math.min(info.missing.length, MAX);
+  let n = 0;
+  const onLog = (kind, m, err) => {
+    const tag = m ? tagOf(m) : "(calendario del usuario)";
+    if (kind === "created")      { n++; console.log(`[backfill] created ${tag}`); }
+    else if (kind === "skipped") { n++; console.log(`[backfill] skipped ${tag} (ya existe)`); }
+    else if (kind === "error")   { n++; console.error(`[backfill] error ${tag}: ${err && err.message}`); }
+    else if (kind === "ratelimit") { console.log(`[backfill] rate-limit en ${tag} — espero 2s y reintento`); return; }
+    else if (kind === "abort")   { console.error("[backfill] Token de Google inválido (invalid_grant). Reconecta la cuenta. Abortando."); return; }
+    if (n % 20 === 0) console.log(`[backfill] progreso ${n}/${total}`);
+  };
 
-      const calendarId = await googleCalendarProvider.getOrCreateFanscheduleCalendar({ userId });
-
-      let createdEvent;
-      try {
-        createdEvent = await googleCalendarProvider.createEvent({ userId, calendarId, match: m });
-      } catch (e) {
-        if (isRateLimit(e)) {
-          console.log(`[backfill] rate-limit en ${tag} — espero 2s y reintento`);
-          await sleep(2000);
-          createdEvent = await googleCalendarProvider.createEvent({ userId, calendarId, match: m });
-        } else { throw e; }
-      }
-
-      await calendarEventRepository.create({
-        userId,
-        providerMatchId: m.providerMatchId,
-        calendarProvider: "google",
-        calendarEventId: createdEvent.calendarEventId,
-      });
-      created++;
-      console.log(`[backfill] created ${tag}`);
-    } catch (e) {
-      errors++;
-      console.error(`[backfill] error ${tag}: ${e.message}`);
-      if (isInvalidGrant(e)) {
-        console.error("[backfill] Token de Google inválido (invalid_grant). Reconecta la cuenta. Abortando.");
-        break;
-      }
-    }
-    if (DELAY_MS > 0) await sleep(DELAY_MS);
-    if ((i + 1) % 20 === 0) console.log(`[backfill] progreso ${i + 1}/${toProcess.length}  created=${created} skipped=${skipped} errors=${errors}`);
-  }
+  const r = await backfillUserEvents(userId, { max: MAX, delayMs: DELAY_MS, onLog });
 
   // Reporte final + chequeo de duplicados (para cazar una race con el scheduler).
   const finalLinks = await calendarEventRepository.getByUserId(userId);
@@ -153,7 +97,7 @@ async function main() {
   const duplicates = [...counts.entries()].filter(([, c]) => c > 1).map(([providerMatchId, count]) => ({ providerMatchId, count }));
 
   console.log("─".repeat(56));
-  console.log(`[backfill] created=${created}  skipped=${skipped}  errors=${errors}`);
+  console.log(`[backfill] created=${r.created}  skipped=${r.skipped}  errors=${r.errors}`);
   console.log(`[backfill] filas calendar_events finales=${finalLinks.length}`);
   console.log(`[backfill] duplicados=${duplicates.length}${duplicates.length ? " " + JSON.stringify(duplicates) : ""}`);
   console.log("[backfill] Listo.");

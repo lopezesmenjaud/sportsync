@@ -19,6 +19,32 @@ function isInvalidGrant(err) {
 // y ambas crear el evento, generando filas duplicadas en calendar_events.
 const calendarEventCreateMutex = createMutex();
 
+// Sección crítica ATÓMICA per-usuario (check existencia → crear en Google → insertar fila),
+// bajo el mutex compartido. La usan tanto syncMatchToCalendars como el backfill per-usuario
+// (userBackfillService), para no crear duplicados en carreras entre el sync y el backfill.
+// Devuelve { kind: "existing" | "created", ... }. NO actualiza — el update lo decide el caller.
+async function createCalendarEventIfMissing({ userId, calendarId, match }) {
+  return calendarEventCreateMutex(async () => {
+    const existingCalendarEvent =
+      await calendarEventRepository.getByUserIdAndProviderMatchId(userId, match.providerMatchId);
+
+    if (existingCalendarEvent) {
+      return { kind: "existing", existingCalendarEvent };
+    }
+
+    const created = await googleCalendarProvider.createEvent({ userId, calendarId, match });
+
+    const link = await calendarEventRepository.create({
+      userId,
+      providerMatchId: match.providerMatchId,
+      calendarProvider: "google",
+      calendarEventId: created.calendarEventId,
+    });
+
+    return { kind: "created", created, link };
+  });
+}
+
 // skipUserIds: Set compartido dentro de una misma corrida de sync. Un usuario que
 // ya disparó invalid_grant se agrega ahí para no reintentarlo ni re-loguearlo en
 // los partidos siguientes de esa corrida. Llamadas sueltas usan un Set vacío nuevo.
@@ -34,32 +60,7 @@ async function syncMatchToCalendars(match, skipUserIds = new Set()) {
     try {
       const calendarId = await googleCalendarProvider.getOrCreateFanscheduleCalendar({ userId });
 
-      const lockResult = await calendarEventCreateMutex(async () => {
-        const existingCalendarEvent =
-          await calendarEventRepository.getByUserIdAndProviderMatchId(
-            userId,
-            match.providerMatchId
-          );
-
-        if (existingCalendarEvent) {
-          return { kind: "existing", existingCalendarEvent };
-        }
-
-        const created = await googleCalendarProvider.createEvent({
-          userId,
-          calendarId,
-          match
-        });
-
-        const link = await calendarEventRepository.create({
-          userId,
-          providerMatchId: match.providerMatchId,
-          calendarProvider: "google",
-          calendarEventId: created.calendarEventId
-        });
-
-        return { kind: "created", created, link };
-      });
+      const lockResult = await createCalendarEventIfMissing({ userId, calendarId, match });
 
       if (lockResult.kind === "created") {
         results.push({
@@ -117,4 +118,4 @@ async function syncMatchToCalendars(match, skipUserIds = new Set()) {
   return results;
 }
 
-module.exports = { syncMatchToCalendars };
+module.exports = { syncMatchToCalendars, createCalendarEventIfMissing, isInvalidGrant };
