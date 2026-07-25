@@ -329,4 +329,4 @@ async function syncSport(sport) {
   return allResults;
 }
 
-module.exports = { syncMatches, syncSport, syncLeague, syncTeam, normalizeSport };
+module.exports = { syncMatches, syncSport, syncLeague, syncTeam, normalizeSport, getSyncDateRange };

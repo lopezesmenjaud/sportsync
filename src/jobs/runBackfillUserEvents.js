@@ -31,6 +31,7 @@ const { getMatchesForUser } = require("../services/subscriptionMatchService");
 const { calendarEventRepository } = require("../repositories/calendarEventRepositorySqlite");
 const { googleAccountRepository } = require("../repositories/googleAccountRepositorySqlite");
 const googleCalendarProvider = require("../services/googleCalendarProvider");
+const { getSyncDateRange } = require("../services/syncService");
 const { db } = require("../db/database");
 
 const TARGET_EMAIL = process.env.TARGET_USER;
@@ -74,9 +75,25 @@ async function main() {
   const relevant = await getMatchesForUser(userId);
   const existing = await calendarEventRepository.getByUserId(userId);
   const existingIds = new Set(existing.map((ce) => ce.providerMatchId));
-  const missing = relevant.filter((m) => !existingIds.has(m.providerMatchId));
+  const missingAll = relevant.filter((m) => !existingIds.has(m.providerMatchId));
 
-  console.log(`[backfill] relevantMatches=${relevant.length}  calendar_events actuales=${existing.length}  FALTANTES=${missing.length}`);
+  // Misma ventana que el flujo normal (syncLeague): [fromDate, toDate] = hoy .. hoy+30d.
+  // Compara la FECHA (YYYY-MM-DD) de currentStartUtc (canónico; fallback scheduledStartUtc),
+  // igual que theSportsDb.js:24-27 filtra dateEvent. Descarta pasados y futuros-lejanos.
+  const { fromDate, toDate } = getSyncDateRange();
+  const matchDate = (m) => (m.currentStartUtc || m.scheduledStartUtc || "").slice(0, 10);
+  const missing = missingAll.filter((m) => {
+    const d = matchDate(m);
+    return d && d >= fromDate && d <= toDate;
+  });
+  const discardedPast   = missingAll.filter((m) => { const d = matchDate(m); return d && d < fromDate; }).length;
+  const discardedFuture = missingAll.filter((m) => { const d = matchDate(m); return d && d > toDate;  }).length;
+  const discardedNoDate = missingAll.filter((m) => !matchDate(m)).length;
+  const discarded = missingAll.length - missing.length;
+
+  console.log(`[backfill] ventana de sync: ${fromDate} .. ${toDate}`);
+  console.log(`[backfill] relevantMatches=${relevant.length}  calendar_events actuales=${existing.length}`);
+  console.log(`[backfill] faltantes(total)=${missingAll.length}  descartados fuera de ventana=${discarded} (pasados=${discardedPast}, futuros-lejanos=${discardedFuture}, sin-fecha=${discardedNoDate})  FALTANTES(en ventana)=${missing.length}`);
 
   if (!APPLY) {
     const by = {};
