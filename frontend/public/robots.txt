@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /profile
+Disallow: /admin
+Disallow: /upcoming
+Disallow: /nearby
+Disallow: /travel
+
+Sitemap: https://fanschedule.com/sitemap.xml
