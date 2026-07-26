@@ -34,8 +34,8 @@ const SPORT_SCHEDULES = [
     label:   "cada 12 horas"
   },
   {
-    name:    "F1, Combate, Rugby, Hockey, Voleibol, Golf",
-    sports:  ["motorsport", "fighting", "rugby", "ice hockey", "volleyball", "golf"],
+    name:    "F1, Combate, Rugby, Hockey, Voleibol, Golf, Ciclismo",
+    sports:  ["motorsport", "fighting", "rugby", "ice hockey", "volleyball", "golf", "cycling"],
     cron:    "0 0 * * *",        // una vez al día a medianoche
     label:   "cada 24 horas"
   }

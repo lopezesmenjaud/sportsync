@@ -10,7 +10,7 @@ const { ANTHROPIC_MODEL, readAnthropicText } = require("../config/aiModel");
 //  - Por DEPORTE (escala solo): motor y combate nunca tienen octavos/cuartos.
 //  - Por LIGA: temporadas regulares donde intRound = semana/jornada.
 // Para estas, getRoundLabel devuelve null sin llamar a la IA ni escribir en round_labels.
-const BLOCKED_SPORTS = new Set(["motorsport", "fighting"]);
+const BLOCKED_SPORTS = new Set(["motorsport", "fighting", "cycling"]);
 const BLOCKED_COMPETITIONS = new Set(["4424" /* MLB */]);
 
 const memCache = new Map(); // `${competitionKey}::${intRound}` -> (string|null)

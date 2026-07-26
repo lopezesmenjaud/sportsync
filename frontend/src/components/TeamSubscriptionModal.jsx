@@ -4,12 +4,14 @@ const SPORT_EMOJI = {
   futbol: '⚽', basketball: '🏀', futbol_americano: '🏈',
   automovilismo: '🏎️', baseball: '⚾', tenis: '🎾',
   combate: '🥊', rugby: '🏉', hockey: '🏒', voleibol: '🏐',
+  ciclismo: '🚴',
 }
 
 const SPORT_LABEL = {
   futbol: 'Fútbol', basketball: 'Basketball', futbol_americano: 'Fútbol americano',
   automovilismo: 'Automovilismo', baseball: 'Baseball', tenis: 'Tenis',
   combate: 'Combate', rugby: 'Rugby', hockey: 'Hockey', voleibol: 'Voleibol',
+  ciclismo: 'Ciclismo',
 }
 
 function getAllDesc(sport, leagueName, teamName) {

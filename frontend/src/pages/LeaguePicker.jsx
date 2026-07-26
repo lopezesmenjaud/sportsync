@@ -16,6 +16,7 @@ const SPORT_LABELS = {
   hockey:            { emoji: '🏒', name: 'Hockey' },
   voleibol:          { emoji: '🏐', name: 'Voleibol' },
   golf:              { emoji: '⛳', name: 'Golf' },
+  ciclismo:          { emoji: '🚴', name: 'Ciclismo' },
 }
 
 const LEAGUES_BY_SPORT = {
@@ -177,6 +178,11 @@ const LEAGUES_BY_SPORT = {
       { id: '4553', name: 'LPGA Tour',      apiName: 'LPGA Tour',     country: 'Mundial', type: 'cup' },
       { id: '4426', name: 'DP World Tour',  apiName: 'European Tour', country: 'Mundial', type: 'cup' },
       { id: '5329', name: 'LIV Golf',       apiName: 'LIV Golf',     country: 'Mundial', type: 'cup' },
+    ]},
+  ],
+  ciclismo: [
+    { id: 'ciclismo_all', title: 'Competiciones', leagues: [
+      { id: '4465', name: 'UCI World Tour', apiName: 'UCI World Tour', country: 'Internacional', type: 'cup' },
     ]},
   ],
 }

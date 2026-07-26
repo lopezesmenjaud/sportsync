@@ -46,7 +46,8 @@ const SPORT_MAP = {
   rugby:            "Rugby",
   hockey:           "Ice Hockey",
   voleibol:         "Volleyball",
-  golf:             "Golf"
+  golf:             "Golf",
+  ciclismo:         "Cycling"
 };
 
 const COUNTRY_ES_TO_EN = {
