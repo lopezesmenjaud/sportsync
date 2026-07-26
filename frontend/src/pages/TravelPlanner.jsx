@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Sidebar from '../components/Sidebar'
 import MatchCard from '../components/MatchCard'
 import { API_BASE } from '../config'
+import { getUserId } from '../auth'
 import { geocodeCity } from '../utils/geocoding'
 
 export default function TravelPlanner() {
@@ -28,7 +29,7 @@ export default function TravelPlanner() {
       const res = await fetch(`${API_BASE}/api/nearby`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lat: geo.lat, lon: geo.lon, city: geo.city, country: geo.country })
+        body: JSON.stringify({ lat: geo.lat, lon: geo.lon, city: geo.city, country: geo.country, userId: getUserId() })
       })
       const data = await res.json()
       if (data.ok) {

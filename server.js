@@ -10,6 +10,7 @@ const { googleAccountRepository } = require("./src/repositories/googleAccountRep
 const { syncMatchToCalendars } = require("./src/services/calendarSyncService");
 const { invalidate: invalidateRoundLabel } = require("./src/services/roundLabelService");
 const { syncMatches, syncLeague, syncTeam, normalizeSport } = require("./src/services/syncService");
+const { getUserSide } = require("./src/services/subscriptionMatchService");
 const { matchRepository } = require("./src/repositories/matchRepositorySqlite");
 const { startScheduler } = require("./src/services/scheduler");
 const { calendarEventRepository } = require("./src/repositories/calendarEventRepositorySqlite");
@@ -610,6 +611,13 @@ app.get("/api/match/:matchId", async (req, res) => {
   try {
     const match = await matchRepository.getByProviderMatchId(req.params.matchId);
     if (!match) return res.status(404).json({ ok: false, error: "Match not found" });
+    // userId opcional: si viene, calcula de qué lado juega el equipo seguido; si no, null.
+    const userId = req.query.userId;
+    if (userId) {
+      match.userSide = getUserSide(match, await subscriptionRepository.getByUserId(userId));
+    } else {
+      match.userSide = null;
+    }
     res.json({ ok: true, match });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
@@ -692,7 +700,7 @@ function guessSeasonsForLeague(league) {
 app.post("/api/nearby", async (req, res) => {
   console.log("[nearby] *** ENDPOINT HIT ***", req.body);
   try {
-    const { lat, lon, city, country } = req.body;
+    const { lat, lon, city, country, userId } = req.body;
 
     if (!lat || !lon || !country) {
       return res.status(400).json({ ok: false, error: "Se requieren lat, lon y country." });
@@ -1012,7 +1020,14 @@ app.post("/api/nearby", async (req, res) => {
       };
     });
 
-    res.json({ ok: true, location, matches });
+    // userId opcional en el body: enriquece cada partido con userSide (local/visitante para el user).
+    let matchesOut = matches;
+    if (userId) {
+      const subs = await subscriptionRepository.getByUserId(userId);
+      matchesOut = matches.map(m => ({ ...m, userSide: getUserSide(m, subs) }));
+    }
+
+    res.json({ ok: true, location, matches: matchesOut });
   } catch (error) {
     console.error("[nearby] Error:", error.message);
     res.status(500).json({ ok: false, error: error.message });
@@ -1606,10 +1621,12 @@ app.get("/matches/:userId", async (req, res) => {
     const IN_PROGRESS_WINDOW_HOURS = 3;
     const tz = req.query.timezone || 'America/Mexico_City'; // recibido del cliente; ya no se usa para el filtro
     const cutoffIso = new Date(Date.now() - IN_PROGRESS_WINDOW_HOURS * 60 * 60 * 1000).toISOString();
-    const upcomingMatches = relevantMatches.filter(m => {
-      const d = m.currentStartUtc || m.scheduledStartUtc;
-      return d && d >= cutoffIso;
-    });
+    const upcomingMatches = relevantMatches
+      .filter(m => {
+        const d = m.currentStartUtc || m.scheduledStartUtc;
+        return d && d >= cutoffIso;
+      })
+      .map(m => ({ ...m, userSide: getUserSide(m, subscriptions) }));
 
     res.json({ ok: true, matches: upcomingMatches });
   } catch (error) {

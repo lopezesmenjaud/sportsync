@@ -58,9 +58,17 @@ export default function MatchCard({ match, showDate = true }) {
 
       {/* Header */}
       <div style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e5e7eb' }}>
-        <span style={{ fontSize: 11, fontWeight: 500, color: '#F18006', background: '#FEF3E2', padding: '3px 10px', borderRadius: 20 }}>
-          ⚽ {match.competitionName}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 500, color: '#F18006', background: '#FEF3E2', padding: '3px 10px', borderRadius: 20 }}>
+            ⚽ {match.competitionName}
+          </span>
+          {match.userSide === 'home' && (
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', background: '#dcfce7', padding: '3px 10px', borderRadius: 20 }}>🏠 Local</span>
+          )}
+          {match.userSide === 'away' && (
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#2563eb', background: '#dbeafe', padding: '3px 10px', borderRadius: 20 }}>✈️ Visitante</span>
+          )}
+        </div>
         <span style={{ fontSize: 12, color: '#6b7280' }}>
           {showDate ? `${dateStr} · ` : ''}{timeStr} CDMX
         </span>
@@ -73,14 +81,14 @@ export default function MatchCard({ match, showDate = true }) {
             <div style={{ width: 48, height: 48, borderRadius: 12, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, color: '#374151' }}>
               {homeInitials}
             </div>
-            <div style={{ fontSize: 14, fontWeight: 500, color: '#111827', textAlign: 'center' }}>{match.homeParticipantName}</div>
+            <div style={{ fontSize: 14, fontWeight: match.userSide === 'home' ? 700 : 500, color: match.userSide === 'home' ? '#F18006' : '#111827', textAlign: 'center' }}>{match.homeParticipantName}</div>
           </div>
           <div style={{ padding: '0 16px', fontSize: 20, fontWeight: 500, color: '#d1d5db' }}>vs</div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flex: 1 }}>
             <div style={{ width: 48, height: 48, borderRadius: 12, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, color: '#374151' }}>
               {awayInitials}
             </div>
-            <div style={{ fontSize: 14, fontWeight: 500, color: '#111827', textAlign: 'center' }}>{match.awayParticipantName}</div>
+            <div style={{ fontSize: 14, fontWeight: match.userSide === 'away' ? 700 : 500, color: match.userSide === 'away' ? '#F18006' : '#111827', textAlign: 'center' }}>{match.awayParticipantName}</div>
           </div>
         </div>
       ) : (

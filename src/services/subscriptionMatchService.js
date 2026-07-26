@@ -40,7 +40,22 @@ async function getMatchesForUser(userId) {
   return relevantMatches;
 }
 
+// Devuelve de qué lado juega el equipo que sigue el usuario: 'home' | 'away' | null.
+// null si: sigue la liga (sin equipo), sigue a los DOS equipos, o no hay dos equipos (F1/ciclismo).
+function getUserSide(match, subscriptions) {
+  const home = (match.homeParticipantName || "").toLowerCase();
+  const away = (match.awayParticipantName || "").toLowerCase();
+  if (!home || !away) return null;
+  const teams = (subscriptions || []).filter((s) => s.teamName).map((s) => s.teamName.toLowerCase());
+  const followsHome = teams.includes(home);
+  const followsAway = teams.includes(away);
+  if (followsHome && !followsAway) return "home";
+  if (followsAway && !followsHome) return "away";
+  return null;
+}
+
 module.exports = {
   getMatchesForUser,
-  matchAppliesToSubscription
+  matchAppliesToSubscription,
+  getUserSide,
 };

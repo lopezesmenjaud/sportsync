@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Sidebar from '../components/Sidebar'
 import MatchCard from '../components/MatchCard'
 import { API_BASE } from '../config'
+import { getUserId } from '../auth'
 import { geocodeCity, reverseGeocode } from '../utils/geocoding'
 
 export default function NearbyMatches() {
@@ -47,7 +48,7 @@ export default function NearbyMatches() {
       const res = await fetch(`${API_BASE}/api/nearby`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(params)
+        body: JSON.stringify({ ...params, userId: getUserId() })
       })
       const data = await res.json()
       if (data.ok) {
