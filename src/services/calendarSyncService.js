@@ -1,8 +1,28 @@
 const { getAffectedUserIdsForMatch } = require("./affectedUsersService");
 const { calendarEventRepository } = require("../repositories/calendarEventRepositorySqlite");
 const { googleAccountRepository } = require("../repositories/googleAccountRepositorySqlite");
+const { subscriptionRepository } = require("../repositories/subscriptionRepositorySqlite");
 const googleCalendarProvider = require("./googleCalendarProvider");
+const { getUserSide } = require("./subscriptionMatchService");
 const { createMutex } = require("./mutex");
+
+// Carga PEREZOSA y memoizada de las suscripciones de un usuario dentro de una corrida.
+// La primera vez que se pide un userId consulta la DB y cachea el resultado en subsCache;
+// las siguientes lo reusan → una sola lectura por usuario por corrida, NO por partido, y sin
+// precargar a todos los usuarios (escala a ~100K). Si la lectura falla, cachea [] y sigue: el
+// userSide caerá en null (título sin prefijo), nunca revienta la creación del evento.
+async function getSubsForUser(userId, subsCache) {
+  if (subsCache.has(userId)) return subsCache.get(userId);
+  let subs = [];
+  try {
+    subs = await subscriptionRepository.getByUserId(userId);
+  } catch (e) {
+    console.error(`[calendar] No se pudieron leer subs de ${userId} (userSide→null): ${e.message}`);
+    subs = [];
+  }
+  subsCache.set(userId, subs);
+  return subs;
+}
 
 // Detecta el error invalid_grant de Google (refresh token expirado/revocado).
 // Puede llegar como message, como response.data.error o como código.
@@ -23,7 +43,7 @@ const calendarEventCreateMutex = createMutex();
 // bajo el mutex compartido. La usan tanto syncMatchToCalendars como el backfill per-usuario
 // (userBackfillService), para no crear duplicados en carreras entre el sync y el backfill.
 // Devuelve { kind: "existing" | "created", ... }. NO actualiza — el update lo decide el caller.
-async function createCalendarEventIfMissing({ userId, calendarId, match }) {
+async function createCalendarEventIfMissing({ userId, calendarId, match, userSide = null }) {
   return calendarEventCreateMutex(async () => {
     const existingCalendarEvent =
       await calendarEventRepository.getByUserIdAndProviderMatchId(userId, match.providerMatchId);
@@ -32,7 +52,7 @@ async function createCalendarEventIfMissing({ userId, calendarId, match }) {
       return { kind: "existing", existingCalendarEvent };
     }
 
-    const created = await googleCalendarProvider.createEvent({ userId, calendarId, match });
+    const created = await googleCalendarProvider.createEvent({ userId, calendarId, match, userSide });
 
     const link = await calendarEventRepository.create({
       userId,
@@ -48,7 +68,10 @@ async function createCalendarEventIfMissing({ userId, calendarId, match }) {
 // skipUserIds: Set compartido dentro de una misma corrida de sync. Un usuario que
 // ya disparó invalid_grant se agrega ahí para no reintentarlo ni re-loguearlo en
 // los partidos siguientes de esa corrida. Llamadas sueltas usan un Set vacío nuevo.
-async function syncMatchToCalendars(match, skipUserIds = new Set()) {
+// subsCache: Map compartido por la corrida para memoizar las subs por usuario (ver
+// getSubsForUser). Es OPCIONAL: si un caller no lo pasa, se crea uno interno y todo
+// funciona igual (degradación limpia, sin romper a los callers existentes).
+async function syncMatchToCalendars(match, skipUserIds = new Set(), subsCache = new Map()) {
   const affectedUserIds = await getAffectedUserIdsForMatch(match);
 
   const results = [];
@@ -60,7 +83,11 @@ async function syncMatchToCalendars(match, skipUserIds = new Set()) {
     try {
       const calendarId = await googleCalendarProvider.getOrCreateFanscheduleCalendar({ userId });
 
-      const lockResult = await createCalendarEventIfMissing({ userId, calendarId, match });
+      // Perspectiva Local/Visitante de ESTE usuario (o null si no sigue a ninguno de los
+      // dos equipos, o solo sigue ligas). getUserSide es puro; subs vía memo perezoso.
+      const userSide = getUserSide(match, await getSubsForUser(userId, subsCache));
+
+      const lockResult = await createCalendarEventIfMissing({ userId, calendarId, match, userSide });
 
       if (lockResult.kind === "created") {
         results.push({
@@ -79,7 +106,8 @@ async function syncMatchToCalendars(match, skipUserIds = new Set()) {
         userId,
         calendarId,
         calendarEventId: existingCalendarEvent.calendarEventId,
-        match
+        match,
+        userSide
       });
 
       // Si updateEvent cayó al fallback de insert, el calendarEventId nuevo difiere

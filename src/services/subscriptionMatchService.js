@@ -27,8 +27,10 @@ function matchAppliesToSubscription(match, subscription) {
   return true;
 }
 
-async function getMatchesForUser(userId) {
-  const subscriptions = await subscriptionRepository.getByUserId(userId);
+// subscriptions es OPCIONAL: si el caller ya las cargó (para reusarlas y no leer dos veces
+// por usuario en la misma corrida, p.ej. userBackfillService), las pasa; si no, se cargan aquí.
+async function getMatchesForUser(userId, subscriptions) {
+  if (!subscriptions) subscriptions = await subscriptionRepository.getByUserId(userId);
   const matches = await matchRepository.getAll();
 
   const relevantMatches = matches.filter((match) =>

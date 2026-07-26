@@ -96,9 +96,20 @@ async function main() {
     [TARGET_USER]
   );
 
-  const { getMatchesForUser } = require("../services/subscriptionMatchService");
+  const { getMatchesForUser, getUserSide } = require("../services/subscriptionMatchService");
+  const { subscriptionRepository } = require("../repositories/subscriptionRepositorySqlite");
+  // Subs del TARGET_USER UNA sola vez (no por partido): se reusan para filtrar los partidos
+  // y para calcular userSide en la recreación. Si la lectura falla, cae en [] y sigue SIN
+  // prefijo (mismo criterio que getSubsForUser) — el reset nunca debe tronar por esto.
+  let targetSubs = [];
+  try {
+    targetSubs = await subscriptionRepository.getByUserId(TARGET_USER);
+  } catch (e) {
+    console.error(`[reset] No se pudieron leer subs de ${TARGET_USER} (userSide→null, sin prefijo): ${e.message}`);
+    targetSubs = [];
+  }
   const nowIso = new Date().toISOString();
-  const futureMatches = (await getMatchesForUser(TARGET_USER)).filter(
+  const futureMatches = (await getMatchesForUser(TARGET_USER, targetSubs)).filter(
     (m) => (m.currentStartUtc || m.scheduledStartUtc || "") >= nowIso
   );
 
@@ -171,7 +182,9 @@ async function main() {
       const existing = await calendarEventRepository.getByUserIdAndProviderMatchId(TARGET_USER, m.providerMatchId);
       if (existing) { skipped++; continue; }
 
-      const created = await googleCalendarProvider.createEvent({ userId: TARGET_USER, calendarId, match: m });
+      // Perspectiva Local/Visitante de ESTE usuario (subs cargadas una vez arriba).
+      const userSide = getUserSide(m, targetSubs);
+      const created = await googleCalendarProvider.createEvent({ userId: TARGET_USER, calendarId, match: m, userSide });
       await calendarEventRepository.create({
         userId: TARGET_USER,
         providerMatchId: m.providerMatchId,

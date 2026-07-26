@@ -66,7 +66,22 @@ async function getCalendarClientForUser(userId) {
   return google.calendar({ version: "v3", auth: userClient });
 }
 
-async function buildEventFromMatch(match) {
+// Prefijo Local/Visitante desde la perspectiva del equipo que sigue el usuario.
+// STRIP-then-APPLY: primero quita cualquier prefijo conocido que ya traiga el título, luego
+// aplica el que corresponda según userSide (o ninguno si es null). Así se auto-corrige si el
+// usuario deja de seguir al equipo. Exportada para reusar en el backfill (fase 2B).
+const USER_SIDE_PREFIXES = ["🏠 Local · ", "✈️ Visitante · "];
+function applyUserSidePrefix(title, userSide) {
+  let base = title;
+  for (const p of USER_SIDE_PREFIXES) {
+    if (base.startsWith(p)) { base = base.slice(p.length); break; }
+  }
+  if (userSide === "home") return `🏠 Local · ${base}`;
+  if (userSide === "away") return `✈️ Visitante · ${base}`;
+  return base;
+}
+
+async function buildEventFromMatch(match, userSide = null) {
   const startDate = new Date(match.currentStartUtc || match.scheduledStartUtc);
   const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
 
@@ -79,7 +94,10 @@ async function buildEventFromMatch(match) {
   const roundLabel = await getRoundLabel(
     match.competitionKey, match.competitionName, match.intRound, match.sport
   );
-  const summary = roundLabel ? `${baseSummary} (${roundLabel})` : baseSummary;
+  // El prefijo Local/Visitante va HASTA EL PRINCIPIO; el roundLabel se queda donde está.
+  // Ej.: "🏠 Local · Atlas vs Monterrey (Cuartos)".
+  const baseWithRound = roundLabel ? `${baseSummary} (${roundLabel})` : baseSummary;
+  const summary = applyUserSidePrefix(baseWithRound, userSide);
 
   const matchUrl = `https://fanschedule.com/match/${match.providerMatchId}`;
 
@@ -125,10 +143,10 @@ function isGoneStatus(err) {
   return status === 404 || status === 410;
 }
 
-async function createEvent({ userId, calendarId, match }) {
+async function createEvent({ userId, calendarId, match, userSide = null }) {
   if (!calendarId) throw new Error("createEvent: calendarId is required");
   const calendar = await getCalendarClientForUser(userId);
-  const requestBody = await buildEventFromMatch(match);
+  const requestBody = await buildEventFromMatch(match, userSide);
 
   try {
     const response = await calendar.events.insert({ calendarId, requestBody });
@@ -153,10 +171,10 @@ async function createEvent({ userId, calendarId, match }) {
   }
 }
 
-async function updateEvent({ userId, calendarId, calendarEventId, match }) {
+async function updateEvent({ userId, calendarId, calendarEventId, match, userSide = null }) {
   if (!calendarId) throw new Error("updateEvent: calendarId is required");
   const calendar = await getCalendarClientForUser(userId);
-  const requestBody = await buildEventFromMatch(match);
+  const requestBody = await buildEventFromMatch(match, userSide);
 
   try {
     const response = await calendar.events.update({
@@ -173,7 +191,7 @@ async function updateEvent({ userId, calendarId, calendarEventId, match }) {
     if (!isGoneStatus(err)) throw err;
 
     console.log(`[google] Event ${calendarEventId} gone for ${userId} — recreating via insert`);
-    return await createEvent({ userId, calendarId, match });
+    return await createEvent({ userId, calendarId, match, userSide });
   }
 }
 
@@ -248,4 +266,6 @@ module.exports = {
   getCalendarClientForUser,
   getOrCreateFanscheduleCalendar,
   invalidateFanscheduleCalendarCache,
+  applyUserSidePrefix,
+  buildEventFromMatch,
 };

@@ -85,10 +85,11 @@ function startScheduler() {
     console.log("[scheduler] Running initial sync on startup...");
     try {
       const skipUserIds = new Set();
+      const subsCache = new Map(); // subs memoizadas por usuario para toda la corrida
       const results = await syncMatches();
       for (const result of results) {
         try {
-          await syncMatchToCalendars(result.newMatch, skipUserIds);
+          await syncMatchToCalendars(result.newMatch, skipUserIds, subsCache);
         } catch (e) {
           console.error(`[scheduler] Calendar sync error for ${result.matchId}:`, e.message);
         }
@@ -104,12 +105,13 @@ function startScheduler() {
     cron.schedule(schedule.cron, async () => {
       console.log(`[scheduler] Running sync for: ${schedule.name} (${schedule.label})`);
       const skipUserIds = new Set();
+      const subsCache = new Map(); // subs memoizadas por usuario para toda la corrida
       for (const sport of schedule.sports) {
         try {
           const results = await syncSport(sport);
           for (const result of results) {
             try {
-              await syncMatchToCalendars(result.newMatch, skipUserIds);
+              await syncMatchToCalendars(result.newMatch, skipUserIds, subsCache);
             } catch (e) {
               console.error(`[scheduler] Calendar sync error for ${result.matchId}:`, e.message);
             }
