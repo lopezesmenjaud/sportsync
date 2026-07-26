@@ -31,7 +31,7 @@ export default function Dashboard() {
   const [subscriptions, setSubscriptions] = useState([])
   const [loading, setLoading] = useState(true)
   const [deletingId, setDeletingId] = useState(null)
-  const [googleStatus, setGoogleStatus] = useState({ connected: false, email: null, needsReauth: false, loading: true })
+  const [googleStatus, setGoogleStatus] = useState({ connected: false, email: null, needsReauth: false, hasCalendarScope: false, loading: true })
   const userId = getUserId()
 
   useEffect(() => {
@@ -43,7 +43,7 @@ export default function Dashboard() {
 
     fetch(`${API_BASE}/auth/google/status/${userId}`)
       .then(res => res.json())
-      .then(data => { if (data.ok) setGoogleStatus({ connected: data.connected, email: data.email, needsReauth: data.needsReauth, loading: false }) })
+      .then(data => { if (data.ok) setGoogleStatus({ connected: data.connected, email: data.email, needsReauth: data.needsReauth, hasCalendarScope: data.hasCalendarScope, loading: false }) })
       .catch(() => setGoogleStatus(prev => ({ ...prev, loading: false })))
   }, [])
 
@@ -121,7 +121,7 @@ export default function Dashboard() {
         </div>
 
         {/* Banner Google Calendar */}
-        {!googleStatus.loading && !googleStatus.connected && (
+        {!googleStatus.loading && !googleStatus.needsReauth && (!googleStatus.connected || !googleStatus.hasCalendarScope) && (
           <div style={{
             background: '#ffffff',
             border: '1px solid #e5e7eb',

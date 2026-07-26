@@ -6,7 +6,7 @@ import { getUser, getUserId, clearUser } from '../auth'
 export default function Profile() {
   const user = getUser()
   const userId = getUserId()
-  const [google, setGoogle] = useState({ connected: false, email: null, loading: true })
+  const [google, setGoogle] = useState({ connected: false, email: null, hasCalendarScope: false, loading: true })
   const [subscriptions, setSubscriptions] = useState([])
   const [matchCount, setMatchCount] = useState(0)
   const [deletingId, setDeletingId] = useState(null)
@@ -18,7 +18,7 @@ export default function Profile() {
   useEffect(() => {
     fetch(`${API_BASE}/auth/google/status/${userId}`)
       .then(res => res.json())
-      .then(data => { if (data.ok) setGoogle({ connected: data.connected, email: data.email, loading: false }) })
+      .then(data => { if (data.ok) setGoogle({ connected: data.connected, email: data.email, hasCalendarScope: data.hasCalendarScope, loading: false }) })
       .catch(() => setGoogle(prev => ({ ...prev, loading: false })))
 
     fetch(`${API_BASE}/subscriptions/${userId}`)
@@ -190,7 +190,7 @@ export default function Profile() {
         {/* BOTONES */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
           {!google.loading && (
-            google.connected ? (
+            google.connected && google.hasCalendarScope ? (
               <button
                 onClick={() => { if (window.confirm('¿Desconectar Google Calendar? Tus eventos NO se eliminarán del calendario.')) { /* TODO: endpoint de desconexión */ } }}
                 style={{ width: '100%', background: '#fff', border: '1px solid #fecaca', borderRadius: 12, padding: '14px', fontSize: 14, fontWeight: 500, color: '#dc2626', cursor: 'pointer' }}

@@ -289,6 +289,9 @@ app.get("/auth/google/callback", async (req, res) => {
     console.log(`[auth] Profile: email=${profile.email} name=${profile.name}`);
 
     const userId = profile.email;
+    const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
+    const hasCalendarScope = (tokens.scope || "").includes(CALENDAR_SCOPE);
+
     await googleAccountRepository.upsert({
       userId,
       googleEmail: profile.email,
@@ -298,8 +301,13 @@ app.get("/auth/google/callback", async (req, res) => {
       expiryDate: tokens.expiry_date,
     });
 
-    // Token fresco: limpiar cualquier flag de reconexión pendiente.
-    await googleAccountRepository.clearNeedsReauth(userId);
+    // Solo damos la conexión por "buena" si el usuario otorgó el scope de Calendar.
+    // Si NO lo otorgó, no limpiamos needsReauth: la UI lo mostrará como "no conectado".
+    if (hasCalendarScope) {
+      await googleAccountRepository.clearNeedsReauth(userId);
+    } else {
+      console.warn(`[auth] ${userId} conectó SIN scope de Calendar (scope=${tokens.scope})`);
+    }
 
     const userObj = { userId, email: profile.email, name: profile.name || profile.email.split("@")[0] };
     const userParam = encodeURIComponent(JSON.stringify(userObj));
@@ -318,11 +326,13 @@ app.get("/auth/google/callback", async (req, res) => {
 app.get("/auth/google/status/:userId", async (req, res) => {
   try {
     const account = await googleAccountRepository.getByUserId(req.params.userId);
+    const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
     res.json({
       ok: true,
       connected: !!account,
       email: account?.googleEmail || null,
       needsReauth: !!account?.needsReauth,
+      hasCalendarScope: !!account && (account.scope || "").includes(CALENDAR_SCOPE),
     });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
