@@ -1,8 +1,10 @@
-import { BrowserRouter, Routes, Route, useSearchParams, useNavigate, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useSearchParams, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import { useState, useEffect } from 'react'
-import { setUser, isLoggedIn } from './auth'
+import { setUser, isLoggedIn, getUserId } from './auth'
+import { API_BASE } from './config'
 import EmailConsentModal from './components/EmailConsentModal'
+import CalendarConnectModal from './components/CalendarConnectModal'
 import LandingPage from './pages/LandingPage'
 import Dashboard from './pages/Dashboard'
 import LeaguePicker from './pages/LeaguePicker'
@@ -80,11 +82,48 @@ function EmailConsentGate() {
   return <EmailConsentModal onAccept={handleAccept} onDecline={handleDecline} />
 }
 
+// Gate de conexión de calendario: bloquea a un usuario logueado y conectado que NO otorgó
+// el scope de Calendar (sin él la app no agenda nada). Decisión ASÍNCRONA (status endpoint).
+function CalendarConnectGate() {
+  const { pathname } = useLocation()
+  const [status, setStatus] = useState({ loading: true, connected: false, hasCalendarScope: false })
+  const [dismissed, setDismissed] = useState(() => sessionStorage.getItem('fanschedule_calendar_gate_dismissed') === 'true')
+
+  useEffect(() => {
+    if (!isLoggedIn()) { setStatus(s => ({ ...s, loading: false })); return }
+    fetch(`${API_BASE}/auth/google/status/${getUserId()}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok) setStatus({ loading: false, connected: d.connected, hasCalendarScope: d.hasCalendarScope })
+        else setStatus(s => ({ ...s, loading: false }))
+      })
+      .catch(() => setStatus(s => ({ ...s, loading: false })))
+  }, [])
+
+  // No bloquear en rutas públicas: el usuario debe poder leer la política/términos antes de dar permiso.
+  const PUBLIC_PATHS = ['/privacy', '/terms']
+  if (PUBLIC_PATHS.includes(pathname)) return null
+
+  // No mostrar: sin sesión, mientras carga (evita parpadeo), si ya lo descartó esta sesión,
+  // o si ya tiene el scope. Solo bloquea si está conectado SIN scope de Calendar.
+  if (!isLoggedIn() || status.loading || dismissed) return null
+  if (!(status.connected && !status.hasCalendarScope)) return null
+
+  const handleConnect = () => { window.location.href = `${API_BASE}/auth/google` }
+  const handleExplore = () => {
+    sessionStorage.setItem('fanschedule_calendar_gate_dismissed', 'true')
+    setDismissed(true)
+  }
+
+  return <CalendarConnectModal onConnect={handleConnect} onExplore={handleExplore} />
+}
+
 function App() {
   return (
     <BrowserRouter>
       <Analytics />
       <CleanOAuthParams />
+      <CalendarConnectGate />
       <EmailConsentGate />
       <Routes>
         <Route path="/" element={<RootRoute />} />
