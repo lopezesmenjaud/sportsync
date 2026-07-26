@@ -1590,13 +1590,15 @@ app.get("/matches/:userId", async (req, res) => {
       })
     );
 
-    // Filtrar solo partidos desde "hoy" en la timezone del usuario
-    const tz = req.query.timezone || 'America/Mexico_City';
-    const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
-    const nowIso = now.toISOString();
+    // "Próximos partidos" = los que aún no empiezan + los que están EN CURSO. Se da un
+    // margen hacia atrás (IN_PROGRESS_WINDOW_HOURS) para que un partido que arrancó hace
+    // rato siga visible mientras se juega. Corte en UTC REAL (currentStartUtc también es UTC).
+    const IN_PROGRESS_WINDOW_HOURS = 3;
+    const tz = req.query.timezone || 'America/Mexico_City'; // recibido del cliente; ya no se usa para el filtro
+    const cutoffIso = new Date(Date.now() - IN_PROGRESS_WINDOW_HOURS * 60 * 60 * 1000).toISOString();
     const upcomingMatches = relevantMatches.filter(m => {
       const d = m.currentStartUtc || m.scheduledStartUtc;
-      return d && d >= nowIso;
+      return d && d >= cutoffIso;
     });
 
     res.json({ ok: true, matches: upcomingMatches });
