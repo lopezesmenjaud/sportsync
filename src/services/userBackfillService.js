@@ -100,4 +100,4 @@ async function backfillUserEvents(userId, opts = {}) {
   return { created, skipped, errors, attempted: toProcess.length, missingTotal: missing.length };
 }
 
-module.exports = { getMissingEventsForUser, backfillUserEvents };
+module.exports = { getMissingEventsForUser, backfillUserEvents, isRateLimit };

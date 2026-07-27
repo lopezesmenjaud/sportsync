@@ -132,4 +132,4 @@ function startScheduler() {
   console.log("[scheduler] All jobs scheduled. Sync running automatically.");
 }
 
-module.exports = { startScheduler };
+module.exports = { startScheduler, shouldSkipUser };

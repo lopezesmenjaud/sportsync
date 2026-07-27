@@ -147,4 +147,4 @@ function invalidate(competitionKey, intRound) {
   memCache.delete(key(competitionKey, intRound));
 }
 
-module.exports = { getRoundLabel, invalidate };
+module.exports = { getRoundLabel, invalidate, BLOCKED_SPORTS };
