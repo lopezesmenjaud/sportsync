@@ -267,5 +267,6 @@ module.exports = {
   getOrCreateFanscheduleCalendar,
   invalidateFanscheduleCalendarCache,
   applyUserSidePrefix,
+  USER_SIDE_PREFIXES,
   buildEventFromMatch,
 };

@@ -48,7 +48,7 @@ const { getUserSide } = require("../services/subscriptionMatchService");
 const { isInvalidGrant } = require("../services/calendarSyncService");
 const { shouldSkipUser } = require("../services/scheduler");   // reusado, no duplicado
 const { isRateLimit } = require("../services/userBackfillService"); // reusado, no duplicado
-const { BLOCKED_SPORTS } = require("../services/roundLabelService"); // fuente única, no duplicado
+const { BLOCKED_SPORTS, BLOCKED_COMPETITIONS } = require("../services/roundLabelService"); // fuente única, no duplicado
 
 const CONFIRM = process.env.CONFIRM === "1" || process.env.CONFIRM === "true";
 const ALL_USERS = process.env.ALL_USERS === "1" || process.env.ALL_USERS === "true";
@@ -63,6 +63,10 @@ function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 // los selectores de variación del emoji (U+FE0E/U+FE0F), que algunos clientes de calendario
 // añaden o quitan. Así "ya correcto" no se marca como cambio por una diferencia de encoding.
 const normForCompare = (s) => (s || "").normalize("NFC").replace(/[\uFE0E\uFE0F]/g, "");
+
+// El titulo ya empieza con un prefijo conocido de Local/Visitante? Comparacion por startsWith
+// (no se manipula el texto para reconstruirlo). Reusa la constante de googleCalendarProvider.
+const hasKnownPrefix = (title) => googleCalendarProvider.USER_SIDE_PREFIXES.some((p) => (title || "").startsWith(p));
 
 // ¿Existe ya una fila en round_labels para (competitionKey, intRound)? (lectura pura)
 function roundLabelRowExists(competitionKey, intRound) {
@@ -84,7 +88,7 @@ async function computeDesiredSummary(match, userSide, allowWrite) {
   if (!allowWrite) {
     const ck = match.competitionKey;
     const ir = match.intRound;
-    const readOnly = !ck || !ir || BLOCKED_SPORTS.has(match.sport) || await roundLabelRowExists(ck, ir);
+    const readOnly = !ck || !ir || BLOCKED_SPORTS.has(match.sport) || BLOCKED_COMPETITIONS.has(String(ck)) || await roundLabelRowExists(ck, ir);
     if (!readOnly) return null;
   }
   const body = await googleCalendarProvider.buildEventFromMatch(match, userSide);
@@ -161,7 +165,7 @@ async function main() {
 
   let budget = MAX; // presupuesto GLOBAL de relabels (writes en CONFIRM / previstos en dry-run)
   const processedUsers = []; // emails de usuarios sobre los que SÍ se corrió (no saltados sin permiso)
-  const totals = { users: 0, future: 0, correct: 0, changed: 0, pendingMax: 0, noPermission: 0, missingInGoogle: 0, errors: 0 };
+  const totals = { users: 0, future: 0, correct: 0, changed: 0, outOfScope: 0, pendingMax: 0, noPermission: 0, missingInGoogle: 0, errors: 0 };
 
   for (const acc of accounts) {
     const userId = acc.userId;
@@ -198,7 +202,7 @@ async function main() {
       // Títulos actuales (una llamada events.list, paginada).
       const currentTitles = await listFutureEventSummaries(userId, calendarId, nowIso);
 
-      let uCorrect = 0, uChanged = 0, uPending = 0, uMissing = 0, uErrors = 0;
+      let uCorrect = 0, uChanged = 0, uOutOfScope = 0, uPending = 0, uMissing = 0, uErrors = 0;
       const samples = [];
 
       for (const r of futureRows) {
@@ -209,6 +213,13 @@ async function main() {
         // Está en nuestra DB pero ya NO en Google: el usuario lo borró a mano. NO se recrea (el
         // job solo REETIQUETA lo que existe). Se cuenta aparte y se reporta, pero no se toca.
         if (current === undefined) { uMissing++; totals.missingInGoogle++; continue; }
+
+        // ACOTAMIENTO al nombre del job: SOLO reetiquetar Local/Visitante. Se toca el evento solo
+        // si el prefijo es relevante: (a) el usuario sigue a uno de los dos equipos (userSide !=
+        // null), o (b) el titulo ya trae un prefijo conocido (para poder quitarlo si dejo de
+        // seguirlo). Si no, se salta -> asi NO arrastramos backfill de otras funciones (etiquetas
+        // de fase, etc.), que es una decision aparte que no se ha tomado.
+        if (userSide === null && !hasKnownPrefix(current)) { uOutOfScope++; totals.outOfScope++; continue; }
 
         const desired = await computeDesiredSummary(m, userSide, CONFIRM);
         const needsChange = desired === null ? true : normForCompare(desired) !== normForCompare(current);
@@ -250,6 +261,7 @@ async function main() {
       console.log(`  eventos futuros: ${futureRows.length}`);
       console.log(`  ${CONFIRM ? "actualizados" : "se actualizarían"}: ${uChanged}`);
       console.log(`  ya correctos (saltados): ${uCorrect}`);
+      if (uOutOfScope) console.log(`  sin cambio de Local/Visitante (saltados): ${uOutOfScope}`);
       if (uPending) console.log(`  pendientes por MAX: ${uPending}`);
       if (uMissing) console.log(`  en DB pero ya no en Google (saltados, no recreados): ${uMissing}`);
       if (uErrors) console.log(`  errores: ${uErrors}`);
@@ -270,6 +282,7 @@ async function main() {
   console.log(`  eventos futuros totales: ${totals.future}`);
   console.log(`  ${CONFIRM ? "actualizados" : "se actualizarían"}: ${totals.changed}`);
   console.log(`  ya correctos: ${totals.correct}`);
+  if (totals.outOfScope) console.log(`  sin cambio de Local/Visitante (saltados): ${totals.outOfScope}`);
   if (totals.pendingMax) console.log(`  pendientes por MAX: ${totals.pendingMax}`);
   if (totals.missingInGoogle) console.log(`  en DB pero ya no en Google (saltados, no recreados): ${totals.missingInGoogle}`);
   console.log(`  errores: ${totals.errors}`);
