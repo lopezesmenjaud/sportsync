@@ -9,8 +9,8 @@ const { subscriptionRepository } = require("./src/repositories/subscriptionRepos
 const { googleAccountRepository } = require("./src/repositories/googleAccountRepositorySqlite");
 const { syncMatchToCalendars } = require("./src/services/calendarSyncService");
 const { invalidate: invalidateRoundLabel } = require("./src/services/roundLabelService");
-const { syncMatches, syncLeague, syncTeam, normalizeSport } = require("./src/services/syncService");
-const { getUserSide } = require("./src/services/subscriptionMatchService");
+const { syncMatches, syncLeague, syncTeam } = require("./src/services/syncService");
+const { getUserSide, isInclusionReason } = require("./src/services/subscriptionMatchService");
 const { matchRepository } = require("./src/repositories/matchRepositorySqlite");
 const { startScheduler } = require("./src/services/scheduler");
 const { calendarEventRepository } = require("./src/repositories/calendarEventRepositorySqlite");
@@ -1605,17 +1605,12 @@ app.get("/matches/:userId", async (req, res) => {
     const { userId }      = req.params;
     const subscriptions   = await subscriptionRepository.getByUserId(userId);
     const allMatches      = await matchRepository.getAll();
-    // Filtrar por suscripciones
+    // Filtrar por suscripciones — MISMA definición de "visible" que hoy, ahora vía el helper
+    // compartido isInclusionReason (única fuente de verdad para la visibilidad Y la atribución
+    // de abajo). No cambia qué se muestra respecto a antes: un partido se muestra si alguna
+    // suscripción es razón de inclusión.
     const relevantMatches = allMatches.filter(match =>
-      subscriptions.some(sub => {
-        if (normalizeSport(sub.sport) !== normalizeSport(match.sport)) return false;
-        if (sub.teamName) {
-          return match.homeParticipantName === sub.teamName ||
-                 match.awayParticipantName === sub.teamName;
-        }
-        if (sub.competitionKey) return match.competitionKey === sub.competitionKey;
-        return true;
-      })
+      subscriptions.some(sub => isInclusionReason(match, sub))
     );
 
     // "Próximos partidos" = los que aún no empiezan + los que están EN CURSO. Se da un
@@ -1629,9 +1624,27 @@ app.get("/matches/:userId", async (req, res) => {
         const d = m.currentStartUtc || m.scheduledStartUtc;
         return d && d >= cutoffIso;
       })
-      .map(m => ({ ...m, userSide: getUserSide(m, subscriptions) }));
+      .map(m => ({
+        ...m,
+        userSide: getUserSide(m, subscriptions),
+        // inclusionReasonIds = CUÁLES favoritos son la razón por la que este partido se muestra.
+        // MISMO predicado que la visibilidad de arriba → todo partido mostrado trae al menos un
+        // id aquí (nunca vacío), así el filtro nunca esconde un partido visible para siempre.
+        inclusionReasonIds: subscriptions
+          .filter(sub => isInclusionReason(m, sub))
+          .map(sub => sub.id),
+      }));
 
-    res.json({ ok: true, matches: upcomingMatches });
+    // Favoritos del usuario en la MISMA respuesta (misma foto: los ids del filtro y los de la
+    // atribución siempre cuadran, aunque el usuario cambie sus favoritos entre peticiones).
+    // Etiqueta idéntica a la del Dashboard: teamName || competitionName || 'Liga completa'.
+    const favorites = subscriptions.map(sub => ({
+      id: sub.id,
+      label: sub.teamName || sub.competitionName || 'Liga completa',
+      sport: sub.sport,
+    }));
+
+    res.json({ ok: true, matches: upcomingMatches, favorites });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

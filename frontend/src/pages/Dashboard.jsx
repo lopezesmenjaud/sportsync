@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import { API_BASE } from '../config'
 import { getUserId } from '../auth'
+import { SPORT_EMOJI } from '../sportEmoji'
 
 const SPORTS = [
   { emoji: '⚽', name: 'Fútbol',            sub: 'La Liga, Premier, Champions...', key: 'futbol'           },
@@ -18,13 +19,6 @@ const SPORTS = [
   { emoji: '⛳', name: 'Golf',              sub: 'PGA, LPGA, LIV Golf...',        key: 'golf'             },
   { emoji: '🚴', name: 'Ciclismo',          sub: 'UCI World Tour...',              key: 'ciclismo'         },
 ]
-
-const SPORT_EMOJI = {
-  futbol: '⚽', basketball: '🏀', futbol_americano: '🏈',
-  automovilismo: '🏎️', baseball: '⚾', tenis: '🎾',
-  combate: '🥊', rugby: '🏉', hockey: '🏒', voleibol: '🏐',
-  golf: '⛳', ciclismo: '🚴'
-}
 
 export default function Dashboard() {
   const navigate = useNavigate()
