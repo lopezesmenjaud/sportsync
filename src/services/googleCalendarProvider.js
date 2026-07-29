@@ -5,6 +5,10 @@ const { googleAccountRepository } = require("../repositories/googleAccountReposi
 const { createMutex } = require("./mutex");
 const { getRoundLabel } = require("./roundLabelService");
 
+// Minutos antes del partido para el recordatorio (popup) de los eventos de FanSchedule. El
+// calendario secundario no tiene defaultReminders, así que lo mandamos explícito en cada evento.
+const DEFAULT_REMINDER_MINUTES = 60;
+
 // Lock global para serializar la sección check-then-insert que crea
 // el calendario "FanSchedule" en la cuenta del usuario. Sin esto, dos flujos
 // concurrentes pueden ver "no existe" y crear dos calendarios distintos.
@@ -127,6 +131,12 @@ async function buildEventFromMatch(match, userSide = null) {
     source: {
       title: "Ver en FanSchedule",
       url: matchUrl
+    },
+    reminders: {
+      useDefault: false,
+      overrides: [
+        { method: "popup", minutes: DEFAULT_REMINDER_MINUTES }
+      ]
     },
   };
 }
