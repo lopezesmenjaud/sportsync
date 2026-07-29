@@ -205,6 +205,25 @@ async function updateEvent({ userId, calendarId, calendarEventId, match, userSid
   }
 }
 
+// events.patch enviando ÚNICAMENTE el campo `reminders`. Al ser un patch, summary/start/end/
+// description/location NO viajan en la petición, así que es IMPOSIBLE que cambien. Usado por el
+// backfill de recordatorios sobre eventos ya existentes. NO reconstruye el evento desde el match.
+async function patchEventReminders({ userId, calendarId, calendarEventId }) {
+  if (!calendarId) throw new Error("patchEventReminders: calendarId is required");
+  const calendar = await getCalendarClientForUser(userId);
+  const response = await calendar.events.patch({
+    calendarId,
+    eventId: calendarEventId,
+    requestBody: {
+      reminders: {
+        useDefault: false,
+        overrides: [{ method: "popup", minutes: DEFAULT_REMINDER_MINUTES }],
+      },
+    },
+  });
+  return { calendarEventId: response.data.id };
+}
+
 async function deleteEvent({ userId, calendarId, calendarEventId }) {
   if (!calendarId) throw new Error("deleteEvent: calendarId is required");
   const calendar = await getCalendarClientForUser(userId);
@@ -272,7 +291,9 @@ async function getOrCreateFanscheduleCalendar({ userId, skipCache = false } = {}
 module.exports = {
   createEvent,
   updateEvent,
+  patchEventReminders,
   deleteEvent,
+  DEFAULT_REMINDER_MINUTES,
   getCalendarClientForUser,
   getOrCreateFanscheduleCalendar,
   invalidateFanscheduleCalendarCache,
