@@ -185,6 +185,9 @@ async function initializeDatabase() {
     await addColumnIfNotExists("google_accounts", "fanschedule_calendar_id", "TEXT");
     // Flag: el refresh token del usuario expiró/se revocó (invalid_grant) y necesita reconectar.
     await addColumnIfNotExists("google_accounts", "needsReauth", "INTEGER DEFAULT 0");
+    // Minutos de recordatorio por usuario para eventos de FanSchedule. DEFAULT 30; NULL = sin
+    // recordatorio. Las filas existentes toman el default (30) al agregarse la columna.
+    await addColumnIfNotExists("google_accounts", "reminder_minutes", "INTEGER DEFAULT 30");
     console.log("✅ Google accounts table ready");
 
     await runAsync(`
