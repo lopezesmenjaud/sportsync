@@ -168,6 +168,24 @@ class GoogleAccountRepositorySqlite {
       );
     });
   }
+
+  setReminderMinutes(userId, minutes) {
+    return new Promise((resolve, reject) => {
+      const now = new Date().toISOString();
+      db.run(
+        `
+        UPDATE google_accounts
+        SET reminder_minutes = ?, updatedAtUtc = ?
+        WHERE userId = ?
+        `,
+        [minutes, now, userId],
+        (err) => {
+          if (err) return reject(err);
+          resolve();
+        }
+      );
+    });
+  }
 }
 
 const googleAccountRepository = new GoogleAccountRepositorySqlite();

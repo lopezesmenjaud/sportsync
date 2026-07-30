@@ -224,6 +224,20 @@ async function patchEventReminders({ userId, calendarId, calendarEventId }) {
   return { calendarEventId: response.data.id };
 }
 
+// Fija los defaultReminders del calendario secundario FanSchedule (propiedad de CalendarList,
+// per-usuario). minutes===null limpia el aviso (defaultReminders: []); un número pone popup a esos
+// minutos. Es la llamada que ya validamos a mano en el Shell de Render.
+async function applyCalendarDefaultReminders({ userId, calendarId, minutes }) {
+  if (!calendarId) throw new Error("applyCalendarDefaultReminders: calendarId is required");
+  const calendar = await getCalendarClientForUser(userId);
+  const defaultReminders = minutes === null ? [] : [{ method: "popup", minutes }];
+  const response = await calendar.calendarList.patch({
+    calendarId,
+    requestBody: { defaultReminders },
+  });
+  return { defaultReminders: response.data.defaultReminders };
+}
+
 async function deleteEvent({ userId, calendarId, calendarEventId }) {
   if (!calendarId) throw new Error("deleteEvent: calendarId is required");
   const calendar = await getCalendarClientForUser(userId);
@@ -292,6 +306,7 @@ module.exports = {
   createEvent,
   updateEvent,
   patchEventReminders,
+  applyCalendarDefaultReminders,
   deleteEvent,
   DEFAULT_REMINDER_MINUTES,
   getCalendarClientForUser,
