@@ -1445,6 +1445,53 @@ app.post("/api/consent", async (req, res) => {
   }
 });
 
+app.get("/api/reminders/:userId", async (req, res) => {
+  try {
+    const account = await googleAccountRepository.getByUserId(req.params.userId);
+    if (!account) return res.status(404).json({ error: "Cuenta no encontrada" });
+    res.json({ minutes: account.reminder_minutes });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put("/api/reminders/:userId", async (req, res) => {
+  try {
+    const ALLOWED = [60, 45, 30, 15, 10, 5, 0];
+    const { minutes } = req.body || {};
+    // Válido: null, o exactamente uno de los enteros permitidos. 0 y null SON válidos;
+    // undefined/ausente, strings, NaN u otros números NO lo son.
+    const isValid = minutes === null || (typeof minutes === "number" && ALLOWED.includes(minutes));
+    if (!isValid) {
+      return res.status(400).json({ error: "minutes inválido: usa 60, 45, 30, 15, 10, 5, 0 o null" });
+    }
+
+    const account = await googleAccountRepository.getByUserId(req.params.userId);
+    if (!account) return res.status(404).json({ error: "Cuenta no encontrada" });
+    const userId = account.userId;
+
+    // 1. Guardar SIEMPRE primero la preferencia (queda persistida aunque Google falle).
+    await googleAccountRepository.setReminderMinutes(userId, minutes);
+
+    // 2. Sin calendario FanSchedule: ni se intenta aplicar a Google.
+    const calendarId = account.fanschedule_calendar_id;
+    if (!calendarId) {
+      return res.json({ saved: true, applied: false, minutes, reason: "sin calendario FanSchedule" });
+    }
+
+    // 3. Intentar aplicar a Google. Un fallo del patch NO tumba la respuesta ni pierde lo guardado.
+    try {
+      await googleCalendarProvider.applyCalendarDefaultReminders({ userId, calendarId, minutes });
+      return res.json({ saved: true, applied: true, minutes });
+    } catch (e) {
+      console.error(`[reminders] applyCalendarDefaultReminders falló para ${userId}: ${e.message}`);
+      return res.json({ saved: true, applied: false, minutes, reason: "no se pudo aplicar a Google Calendar" });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post("/subscriptions", async (req, res) => {
   try {
     const { userId, sport, competitionKey, competitionName, teamName } = req.body;
