@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Sidebar from '../components/Sidebar'
 import { API_BASE } from '../config'
 import { getUser, getUserId, clearUser } from '../auth'
@@ -12,6 +12,9 @@ export default function Profile() {
   const [deletingId, setDeletingId] = useState(null)
   const [emailNotif, setEmailNotif] = useState(() => localStorage.getItem('fanschedule_email_notif') === 'true')
   const [partnerNotif, setPartnerNotif] = useState(() => localStorage.getItem('fanschedule_partner_notif') === 'true')
+  const [reminderMinutes, setReminderMinutes] = useState(30) // entero o null; se sobreescribe al cargar
+  const [reminderMsg, setReminderMsg] = useState(null)       // { text, color } | null — feedback de guardado
+  const reminderTimer = useRef(null)                         // limpia el mensaje de éxito tras ~3s
 
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
@@ -29,6 +32,11 @@ export default function Profile() {
     fetch(`${API_BASE}/matches/${userId}?timezone=${encodeURIComponent(timezone)}`)
       .then(res => res.json())
       .then(data => { if (data.ok) setMatchCount(data.matches?.length || 0) })
+      .catch(() => {})
+
+    fetch(`${API_BASE}/api/reminders/${userId}`)
+      .then(res => res.json())
+      .then(data => { if (data && 'minutes' in data) setReminderMinutes(data.minutes) })
       .catch(() => {})
   }, [])
 
@@ -53,6 +61,35 @@ export default function Profile() {
     const next = !partnerNotif
     setPartnerNotif(next)
     localStorage.setItem('fanschedule_partner_notif', String(next))
+  }
+
+  // Auto-guardado del recordatorio: guarda al cambiar, sin botón. El value del <select> siempre es
+  // string; "null" -> null y el resto -> Number() (NO parseInt sobre "null").
+  const handleReminderChange = async (e) => {
+    const raw = e.target.value
+    const next = raw === 'null' ? null : Number(raw)
+    const prev = reminderMinutes
+    if (reminderTimer.current) { clearTimeout(reminderTimer.current); reminderTimer.current = null }
+    setReminderMinutes(next)
+    setReminderMsg({ text: 'Guardando...', color: '#6b7280' })
+    try {
+      const res = await fetch(`${API_BASE}/api/reminders/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minutes: next }),
+      })
+      if (!res.ok) throw new Error('bad status')
+      const data = await res.json()
+      if (data.applied === true) {
+        setReminderMsg({ text: 'Guardado ✓', color: '#16a34a' })
+      } else {
+        setReminderMsg({ text: 'Guardado. Se aplicará cuando conectes tu calendario.', color: '#6b7280' })
+      }
+      reminderTimer.current = setTimeout(() => setReminderMsg(null), 3000)
+    } catch {
+      setReminderMinutes(prev) // revertir el select al valor anterior
+      setReminderMsg({ text: 'No se pudo guardar', color: '#dc2626' })
+    }
   }
 
   const uniqueSports = [...new Set(subscriptions.map(s => s.sport))]
@@ -115,6 +152,33 @@ export default function Profile() {
               <div style={{ fontSize: 28, fontWeight: 600, color: '#F18006' }}>{uniqueSports.length}</div>
               <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Deportes</div>
             </div>
+          </div>
+        </div>
+
+        {/* RECORDATORIOS */}
+        <div style={sectionStyle}>
+          <div style={labelStyle}>Recordatorios</div>
+          <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 14 }}>
+            Te avisamos antes de que empiece cada partido.
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <select
+              value={reminderMinutes === null ? 'null' : String(reminderMinutes)}
+              onChange={handleReminderChange}
+              style={{ fontSize: 14, color: '#1C2430', background: '#faf9f7', border: '1px solid #e8e8e8', borderRadius: 10, padding: '10px 14px', outline: 'none', cursor: 'pointer' }}
+            >
+              <option value="60">1 hora antes</option>
+              <option value="45">45 minutos antes</option>
+              <option value="30">30 minutos antes</option>
+              <option value="15">15 minutos antes</option>
+              <option value="10">10 minutos antes</option>
+              <option value="5">5 minutos antes</option>
+              <option value="0">Al empezar</option>
+              <option value="null">Sin recordatorio</option>
+            </select>
+            {reminderMsg && (
+              <span style={{ fontSize: 13, color: reminderMsg.color }}>{reminderMsg.text}</span>
+            )}
           </div>
         </div>
 
