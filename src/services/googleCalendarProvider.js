@@ -298,6 +298,16 @@ async function getOrCreateFanscheduleCalendar({ userId, skipCache = false } = {}
     FANSCHEDULE_CALENDAR_CACHE.set(userId, { calendarId: newId, expiresAt: Date.now() + FANSCHEDULE_CALENDAR_TTL_MS });
     console.log(`[google] Created FanSchedule calendar ${newId} for ${userId}`);
 
+    // SOLO al CREAR: nacer con el recordatorio del usuario. account ya está cargado (SELECT *).
+    // === undefined (fila sin la columna) -> 30; null se preserva (-> sin aviso); 0 se preserva.
+    // Un fallo aquí NO impide que el calendario quede creado (ya se persistió arriba).
+    const minutes = account.reminder_minutes === undefined ? 30 : account.reminder_minutes;
+    try {
+      await applyCalendarDefaultReminders({ userId, calendarId: newId, minutes });
+    } catch (err) {
+      console.error(`[google] No se pudo aplicar defaultReminders al calendario nuevo de ${userId}: ${err.message}`);
+    }
+
     return newId;
   });
 }
