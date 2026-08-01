@@ -32,6 +32,23 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Guard de red: solo permite conexiones desde el loopback del propio contenedor (el Shell de
+// Render pegándole a localhost:$PORT). Detrás del proxy de Render, el tráfico de internet llega
+// con la IP del proxy (no 127.0.0.1) y se rechaza con 403 — comprobado con curl externo el
+// 2026-08-01. Lee req.socket.remoteAddress (el peer TCP real), NO headers, así que no es
+// spoofeable con X-Forwarded-For. Fuente única del guard (resync-user + endpoints internos).
+function localhostOnly(req, res, next) {
+  const remote = req.socket.remoteAddress || "";
+  const isLocal =
+    remote === "127.0.0.1" ||
+    remote === "::1" ||
+    remote === "::ffff:127.0.0.1";
+  if (!isLocal) {
+    return res.status(403).json({ ok: false, error: "Forbidden (localhost-only)" });
+  }
+  next();
+}
+
 initializeDatabase().then(() => {
   startScheduler();
 });
@@ -438,7 +455,7 @@ País: ${country}`
 });
 
 // ── Limpiar caché de broadcasting ──
-app.delete("/api/broadcasting/:competitionKey/:country", (req, res) => {
+app.delete("/api/broadcasting/:competitionKey/:country", localhostOnly, (req, res) => {
   const { competitionKey, country } = req.params;
   db.run(
     `DELETE FROM broadcasting_cache WHERE competitionKey = ? AND country = ?`,
@@ -1118,13 +1135,8 @@ app.get("/api/admin/stats", async (req, res) => {
   }
 });
 
-app.get("/api/admin/sync-status", async (req, res) => {
+app.get("/api/admin/sync-status", localhostOnly, async (req, res) => {
   try {
-    const adminUser = req.headers['x-admin-user'];
-    if (adminUser !== 'lopezesmenjaud@gmail.com') {
-      return res.status(403).json({ ok: false, error: 'Forbidden' });
-    }
-
     const nowIso  = new Date().toISOString();
     const in30Iso = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -1182,11 +1194,7 @@ app.get("/api/admin/sync-status", async (req, res) => {
 });
 
 // ── Admin: listar etiquetas de ronda (para revisar lo generado por IA) ──
-app.get("/api/admin/round-labels", async (req, res) => {
-  const adminUser = req.headers['x-admin-user'];
-  if (adminUser !== 'lopezesmenjaud@gmail.com') {
-    return res.status(403).json({ ok: false, error: 'Forbidden' });
-  }
+app.get("/api/admin/round-labels", localhostOnly, async (req, res) => {
   db.all(
     `SELECT id, competitionKey, intRound, label, source, createdAtUtc
      FROM round_labels
@@ -1200,11 +1208,7 @@ app.get("/api/admin/round-labels", async (req, res) => {
 });
 
 // ── Admin: corregir una etiqueta manualmente (label + source='manual') ──
-app.put("/api/admin/round-labels", async (req, res) => {
-  const adminUser = req.headers['x-admin-user'];
-  if (adminUser !== 'lopezesmenjaud@gmail.com') {
-    return res.status(403).json({ ok: false, error: 'Forbidden' });
-  }
+app.put("/api/admin/round-labels", localhostOnly, async (req, res) => {
   const { competitionKey, intRound, label } = req.body || {};
   if (!competitionKey || !intRound) {
     return res.status(400).json({ ok: false, error: 'competitionKey e intRound son requeridos' });
@@ -1223,13 +1227,8 @@ app.put("/api/admin/round-labels", async (req, res) => {
   );
 });
 
-app.get("/api/admin/cleanup-calendar", async (req, res) => {
+app.get("/api/admin/cleanup-calendar", localhostOnly, async (req, res) => {
   try {
-    const adminUser = req.headers['x-admin-user'];
-    if (adminUser !== 'lopezesmenjaud@gmail.com') {
-      return res.status(403).json({ ok: false, error: 'Forbidden' });
-    }
-
     const accounts = await googleAccountRepository.getAll();
     let totalDeleted = 0;
     const details = [];
@@ -1325,16 +1324,7 @@ app.get("/api/admin/cleanup-calendar", async (req, res) => {
 // ── Re-sincronización per-usuario (solo localhost — pensado para el shell de Render) ──
 // Corre en el mismo proceso que el server, así reutiliza el mutex en memoria de
 // calendarSyncService y previene duplicados aunque el scheduler dispare en paralelo.
-app.post("/api/admin/resync-user", async (req, res) => {
-  const remote = req.socket.remoteAddress || "";
-  const isLocal =
-    remote === "127.0.0.1" ||
-    remote === "::1" ||
-    remote === "::ffff:127.0.0.1";
-  if (!isLocal) {
-    return res.status(403).json({ ok: false, error: "Forbidden (localhost-only)" });
-  }
-
+app.post("/api/admin/resync-user", localhostOnly, async (req, res) => {
   const { email } = req.body || {};
   if (!email) {
     return res.status(400).json({ ok: false, error: "email is required in body" });
