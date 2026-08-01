@@ -87,6 +87,30 @@ class SubscriptionRepositorySqlite {
     });
   }
 
+  // Borrado SIN comprobar propiedad. NO USAR para peticiones con sesión — para eso está
+  // deleteByIdForUser.
+  //
+  // Existe solo para la ventana de migración: DELETE /subscriptions/:id es el único endpoint que
+  // hoy no recibe userId por ningún lado (ni ruta, ni cuerpo, ni query — ver Dashboard.jsx y
+  // Profile.jsx, que mandan un DELETE pelón). El principio de la ventana es que una petición
+  // vieja se comporte EXACTAMENTE como antes, y antes borraba por id a secas. Cerrar aquí la
+  // propiedad sin que llegue la sesión no protegería nada: dejaría de borrar y devolvería 404,
+  // o sea el mismo agujero pero además roto.
+  //
+  // Se borra junto con la rama legacy cuando ALLOW_LEGACY_USERID pase a false.
+  deleteById(id) {
+    return new Promise((resolve, reject) => {
+      db.get(`SELECT * FROM subscriptions WHERE id = ?`, [id], (err, row) => {
+        if (err) return reject(err);
+        if (!row) return resolve(null);
+        db.run(`DELETE FROM subscriptions WHERE id = ?`, [id], function (err2) {
+          if (err2) return reject(err2);
+          resolve(row);
+        });
+      });
+    });
+  }
+
   // Borra SOLO si la suscripción es del usuario. El id es INTEGER AUTOINCREMENT (secuencial y
   // adivinable), así que sin esta comprobación cualquiera borra las de todos.
   //

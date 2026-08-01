@@ -1568,12 +1568,27 @@ app.get("/subscriptions/:userId", requireUser(), async (req, res) => {
   }
 });
 
-app.delete("/subscriptions/:id", requireUser(), async (req, res) => {
+// legacyAnonymous: este endpoint es el ÚNICO que hoy no recibe userId por ningún lado — el
+// frontend manda un DELETE pelón, sin cuerpo ni query (Dashboard.jsx, Profile.jsx). Sin esta
+// excepción, requireUser respondería 401 en modo legacy y darse de baja de un equipo quedaría
+// roto en producción hasta que se despliegue el frontend nuevo.
+app.delete("/subscriptions/:id", requireUser({ legacyAnonymous: true }), async (req, res) => {
   try {
     const subId   = parseInt(req.params.id, 10);
-    // Ownership: solo borra si la suscripción es de quien pide. 404 (no 403) cuando no lo es —
-    // un 403 confirmaría que ese id existe y es de alguien más.
-    const deleted = await subscriptionRepository.deleteByIdForUser(subId, req.auth.userId);
+
+    // DELIBERADO, no se te ocurra "arreglarlo": la comprobación de propiedad entra cuando entra
+    // la sesión, no antes.
+    //
+    // - Con sesión → ownership. 404 (no 403) cuando la sub es de alguien más: un 403 confirmaría
+    //   que ese id existe y no es tuyo.
+    // - En legacy → el comportamiento de SIEMPRE, borrar por id sin comprobar nada. Aquí no hay
+    //   identidad que comprobar contra qué: exigirla no protegería nada y solo dejaría de borrar
+    //   devolviendo 404, que es peor que el agujero — sería el agujero MÁS la función rota.
+    //
+    // La rama legacy y deleteById() se van juntas al poner ALLOW_LEGACY_USERID=false.
+    const deleted = req.auth.source === "session"
+      ? await subscriptionRepository.deleteByIdForUser(subId, req.auth.userId)
+      : await subscriptionRepository.deleteById(subId);
     if (!deleted) return res.status(404).json({ ok: false, error: "Subscription not found" });
 
     console.log(`[sub] Deleted subscription ${subId}: ${deleted.sport} / ${deleted.teamName || deleted.competitionKey}`);
