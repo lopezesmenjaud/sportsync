@@ -21,6 +21,23 @@ function isRateLimit(err) {
   return status === 429 || reason.includes("ratelimit") || reason.includes("userratelimit") || reason.includes("quota");
 }
 
+// Ejecuta fn; si Google responde rate limit, espera 2 s y reintenta UNA vez. Mismo criterio y
+// misma forma que el reintento del backfill (abajo, línea del isRateLimit dentro del bucle).
+// Vive aquí, junto a isRateLimit y sleep, para no tener tres copias del mismo patrón regadas.
+// tag: prefijo del log, para saber quién está reintentando.
+async function withRateLimitRetry(fn, tag = "[ratelimit]") {
+  try {
+    return await fn();
+  } catch (e) {
+    if (isRateLimit(e)) {
+      console.log(`${tag} rate limit de Google — esperando 2s y reintentando una vez…`);
+      await sleep(2000);
+      return await fn();
+    }
+    throw e;
+  }
+}
+
 // SOLO LECTURA: calcula los faltantes EN VENTANA para un usuario (sin Google, sin escribir).
 // Misma ventana que el flujo normal (syncLeague): [fromDate, toDate] = hoy .. hoy+30d, comparando
 // la FECHA (YYYY-MM-DD) de currentStartUtc (canónico; fallback scheduledStartUtc).
@@ -100,4 +117,4 @@ async function backfillUserEvents(userId, opts = {}) {
   return { created, skipped, errors, attempted: toProcess.length, missingTotal: missing.length };
 }
 
-module.exports = { getMissingEventsForUser, backfillUserEvents, isRateLimit };
+module.exports = { getMissingEventsForUser, backfillUserEvents, isRateLimit, withRateLimitRetry, sleep };

@@ -17,11 +17,17 @@ const { calendarEventRepository } = require("./src/repositories/calendarEventRep
 const googleCalendarProvider = require("./src/services/googleCalendarProvider");
 const { sessionRepository } = require("./src/repositories/sessionRepositorySqlite");
 const { requireUser, optionalUser, isLegacyAllowed } = require("./src/middleware/auth");
+const { withRateLimitRetry, sleep } = require("./src/services/userBackfillService");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 const SPORTSDB_KEY = process.env.THE_SPORTS_DB_API_KEY || process.env.SPORTSDB_API_KEY || "123";
+
+// Pausa entre borrados de eventos en el cleanup de DELETE /subscriptions/:id. Google Calendar
+// tolera del orden de cientos de peticiones por minuto y por usuario; a 150 ms van ~400/min, con
+// margen. Limpiar 500 eventos tarda ~75 s, que para una tarea en background no le duele a nadie.
+const CLEANUP_DELETE_PAUSE_MS = Number(process.env.CLEANUP_DELETE_PAUSE_MS || 150);
 
 app.use(cors({
   origin: [
@@ -1617,28 +1623,54 @@ app.delete("/subscriptions/:id", requireUser({ legacyAnonymous: true }), async (
         // Eliminar eventos de Google Calendar para el usuario
         const calEvents = await calendarEventRepository.getByUserIdAndMatchIds(deleted.userId, orphanIds);
         const calendarIdByUser = new Map();
+        let confirmados = 0, conservados = 0;
+
         for (const ce of calEvents) {
+          // La fila de calendar_events es el ÚNICO puntero al evento de Google. Solo se borra si
+          // Google CONFIRMÓ el borrado. Ver el mismo criterio, ya probado, en
+          // src/jobs/runCleanupUserCalendar.js:141-172.
+          let confirmadoPorGoogle = false;
           try {
             let calendarId = calendarIdByUser.get(ce.userId);
             if (!calendarId) {
               calendarId = await googleCalendarProvider.getOrCreateFanscheduleCalendar({ userId: ce.userId });
               calendarIdByUser.set(ce.userId, calendarId);
             }
-            await googleCalendarProvider.deleteEvent({ userId: ce.userId, calendarId, calendarEventId: ce.calendarEventId });
-            await calendarEventRepository.deleteById(ce.id);
-            console.log(`[sub] Deleted calendar event ${ce.calendarEventId} for match ${ce.providerMatchId}`);
+            // deleteEvent ya trata 404/410 como ÉXITO y no lanza (googleCalendarProvider.js:217-221):
+            // si el evento ya no existe, la fila efectivamente sobra y se debe borrar. Ese caso
+            // llega aquí, no al catch.
+            await withRateLimitRetry(
+              () => googleCalendarProvider.deleteEvent({ userId: ce.userId, calendarId, calendarEventId: ce.calendarEventId }),
+              "[sub]"
+            );
+            confirmadoPorGoogle = true;
           } catch (err) {
-            console.error(`[sub] Failed to delete calendar event ${ce.calendarEventId}:`, err.message);
-            // Borrar el registro de la DB aunque falle en Google
-            await calendarEventRepository.deleteById(ce.id);
+            console.error(`[sub] Google NO confirmó el borrado de ${ce.calendarEventId}: ${err.message}`);
+            console.error(`[sub] ⤷ La fila ${ce.id} se MANTIENE a propósito. Borrarla dejaría el evento vivo en Google y sin puntero: huérfano para siempre, invisible para el sistema y duplicado en la próxima suscripción.`);
           }
+
+          if (confirmadoPorGoogle) {
+            await calendarEventRepository.deleteById(ce.id);
+            confirmados++;
+            console.log(`[sub] Deleted calendar event ${ce.calendarEventId} for match ${ce.providerMatchId}`);
+          } else {
+            conservados++;
+          }
+
+          // Control de ritmo: sin esto, cientos de borrados salen de golpe y Google responde rate
+          // limit en ráfaga (fue lo que pasó el 2026-08-01 con ~500 eventos por limpieza).
+          if (CLEANUP_DELETE_PAUSE_MS > 0) await sleep(CLEANUP_DELETE_PAUSE_MS);
+        }
+
+        if (conservados > 0) {
+          console.warn(`[sub] ${conservados} filas conservadas por fallo de Google: sus eventos SIGUEN en el calendario y la fila sigue apuntándolos (recuperable, no huérfano).`);
         }
 
         // Eliminar partidos huérfanos de la DB
         for (const match of orphanMatches) {
           await matchRepository.deleteByProviderMatchId(match.providerMatchId);
         }
-        console.log(`[sub] Cleaned ${orphanMatches.length} orphan matches and ${calEvents.length} calendar events`);
+        console.log(`[sub] Cleaned ${orphanMatches.length} orphan matches | eventos: ${confirmados} borrados (confirmados por Google), ${conservados} conservados por fallo, de ${calEvents.length}`);
       } catch (err) {
         console.error("[sub] Cleanup error:", err.message);
       }
