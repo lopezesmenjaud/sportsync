@@ -275,6 +275,43 @@ async function initializeDatabase() {
     }
     console.log("✅ Round labels table ready (Champions precargado)");
 
+    // Sesiones de servidor. tokenHash = SHA-256 del token opaco; el token en claro NUNCA se
+    // guarda (ver sessionRepositorySqlite). PRIMARY KEY sobre tokenHash → la búsqueda por token
+    // va por índice. expiresAtUtc es DESLIZANTE: se empuja de forma perezosa, máximo una vez
+    // cada 24 h por sesión.
+    //
+    // OJO: esta tabla NO se vacía en el arranque, a diferencia de broadcasting_cache (arriba) y
+    // venue_city_cache. Copiar ese patrón aquí tiraría a todos los usuarios en cada deploy.
+    await runAsync(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        tokenHash    TEXT PRIMARY KEY,
+        userId       TEXT NOT NULL,
+        createdAtUtc TEXT NOT NULL,
+        expiresAtUtc TEXT NOT NULL,
+        lastSeenUtc  TEXT NOT NULL,
+        userAgent    TEXT,
+        revokedAtUtc TEXT
+      )
+    `);
+    await runAsync(`CREATE INDEX IF NOT EXISTS idx_sessions_userId ON sessions(userId)`);
+    console.log("✅ Sessions table ready");
+
+    // Medición de la ventana de migración: cuántas peticiones entran por sesión y cuántas por la
+    // forma vieja. Es lo que permite CERRAR ALLOW_LEGACY_USERID con un dato en vez de una
+    // corazonada. El endpoint se guarda como etiqueta de ruta ("GET /matches/:userId"), no como
+    // URL concreta: sin correos y sin explosión de filas.
+    await runAsync(`
+      CREATE TABLE IF NOT EXISTS auth_usage_daily (
+        day          TEXT NOT NULL,
+        source       TEXT NOT NULL,
+        endpoint     TEXT NOT NULL,
+        count        INTEGER NOT NULL DEFAULT 0,
+        updatedAtUtc TEXT NOT NULL,
+        PRIMARY KEY (day, source, endpoint)
+      )
+    `);
+    console.log("✅ Auth usage table ready");
+
   })();
 
   return initializationPromise;

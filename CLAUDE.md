@@ -76,6 +76,8 @@ para la campaña de captación.
   tabla COMPLETA de partidos y filtran en JS, por petición y por usuario. Es el
   cuello de botella principal de escalabilidad.
 - La tabla `matches` nunca se purga.
+- La tabla `sessions` tampoco se purga: las vencidas y las revocadas se acumulan
+  para siempre. Con 7 usuarios da igual; con miles no.
 - El frontend llama a `/subscriptions/sync` (sync GLOBAL) al suscribirse, aunque
   `POST /subscriptions` ya trae un sync inmediato. Probablemente redundante.
 - `GET /api/admin/cleanup-calendar` es un GET que borra datos. Cambiar a POST.

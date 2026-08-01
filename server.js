@@ -15,6 +15,8 @@ const { matchRepository } = require("./src/repositories/matchRepositorySqlite");
 const { startScheduler } = require("./src/services/scheduler");
 const { calendarEventRepository } = require("./src/repositories/calendarEventRepositorySqlite");
 const googleCalendarProvider = require("./src/services/googleCalendarProvider");
+const { sessionRepository } = require("./src/repositories/sessionRepositorySqlite");
+const { requireUser, optionalUser, isLegacyAllowed } = require("./src/middleware/auth");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -48,6 +50,14 @@ function localhostOnly(req, res, next) {
   }
   next();
 }
+
+// Estado del interruptor de la ventana de migración, visible en el log de cada arranque: con ver
+// el log de un deploy se sabe en qué modo corre, sin adivinar.
+console.log(
+  isLegacyAllowed()
+    ? "[auth] ALLOW_LEGACY_USERID=true — forma vieja ACEPTADA (ventana de migración abierta)"
+    : "[auth] ALLOW_LEGACY_USERID=false — forma vieja CERRADA (solo sesión)"
+);
 
 initializeDatabase().then(() => {
   startScheduler();
@@ -329,8 +339,22 @@ app.get("/auth/google/callback", async (req, res) => {
 
     const userObj = { userId, email: profile.email, name: profile.name || profile.email.split("@")[0] };
     const userParam = encodeURIComponent(JSON.stringify(userObj));
-    const finalUrl = `${frontendBase}/dashboard?google=connected&user=${userParam}`;
-    console.log(`[auth] SUCCESS. Redirecting to: ${finalUrl}`);
+
+    // Único punto de todo el sistema donde la identidad es real (Google verificó al usuario con
+    // el `code`). Aquí se emite la sesión de servidor.
+    //
+    // El token viaja en el FRAGMENTO (#), no en el query: el navegador nunca manda el fragmento
+    // al servidor, así que no aparece en los logs de acceso de Render ni de Vercel, ni en el
+    // header Referer. El frontend lo lee y limpia el hash antes de renderizar.
+    const { token } = await sessionRepository.create({
+      userId,
+      userAgent: req.headers["user-agent"] || null,
+    });
+    const finalUrl = `${frontendBase}/dashboard?google=connected&user=${userParam}#token=${token}`;
+
+    // Se registra la URL SIN el fragmento a propósito. Loguear finalUrl completo metería el token
+    // de 90 días en los logs de Render — justo lo que el fragmento evita.
+    console.log(`[auth] SUCCESS. Redirecting to: ${frontendBase}/dashboard?google=connected&user=<user>#token=<omitido>`);
     res.redirect(finalUrl);
   } catch (error) {
     console.error("[auth] OAuth callback ERROR:", error.message);
@@ -341,9 +365,11 @@ app.get("/auth/google/callback", async (req, res) => {
   }
 });
 
-app.get("/auth/google/status/:userId", async (req, res) => {
+// El :userId de la ruta se conserva para no cambiar la forma de la petición durante la migración,
+// pero YA NO SE USA: la identidad sale de req.auth. Se quita en la limpieza posterior.
+app.get("/auth/google/status/:userId", requireUser(), async (req, res) => {
   try {
-    const account = await googleAccountRepository.getByUserId(req.params.userId);
+    const account = await googleAccountRepository.getByUserId(req.auth.userId);
     const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
     res.json({
       ok: true,
@@ -624,12 +650,14 @@ app.get("/api/players/:leagueId", async (req, res) => {
 });
 
 // ── Detalle de un partido ──
-app.get("/api/match/:matchId", async (req, res) => {
+// Sesión OPCIONAL: la página de un partido es pública (ruta /match/:matchId sin Protected en el
+// frontend) y debe seguir abriéndose para cualquiera, con o sin login.
+app.get("/api/match/:matchId", optionalUser(), async (req, res) => {
   try {
     const match = await matchRepository.getByProviderMatchId(req.params.matchId);
     if (!match) return res.status(404).json({ ok: false, error: "Match not found" });
     // userId opcional: si viene, calcula de qué lado juega el equipo seguido; si no, null.
-    const userId = req.query.userId;
+    const userId = req.auth.userId;
     if (userId) {
       match.userSide = getUserSide(match, await subscriptionRepository.getByUserId(userId));
     } else {
@@ -714,10 +742,12 @@ function guessSeasonsForLeague(league) {
 }
 
 // ── Partidos por ubicación (Cerca de mí + Planear viaje) ──
-app.post("/api/nearby", async (req, res) => {
+// Sesión OPCIONAL: el userId solo enriquece la respuesta con userSide.
+app.post("/api/nearby", optionalUser(), async (req, res) => {
   console.log("[nearby] *** ENDPOINT HIT ***", req.body);
   try {
-    const { lat, lon, city, country, userId } = req.body;
+    const { lat, lon, city, country } = req.body;
+    const userId = req.auth.userId;
 
     if (!lat || !lon || !country) {
       return res.status(400).json({ ok: false, error: "Se requieren lat, lon y country." });
@@ -1417,10 +1447,10 @@ app.post("/api/admin/resync-user", localhostOnly, async (req, res) => {
   }
 });
 
-app.post("/api/consent", async (req, res) => {
+app.post("/api/consent", requireUser(), async (req, res) => {
   try {
-    const { userId, emailFanschedule, emailPartners } = req.body;
-    if (!userId) return res.status(400).json({ ok: false, error: "userId is required" });
+    const { emailFanschedule, emailPartners } = req.body;
+    const userId = req.auth.userId;
     const now = new Date().toISOString();
     await new Promise((resolve, reject) => {
       db.run(
@@ -1435,9 +1465,9 @@ app.post("/api/consent", async (req, res) => {
   }
 });
 
-app.get("/api/reminders/:userId", async (req, res) => {
+app.get("/api/reminders/:userId", requireUser(), async (req, res) => {
   try {
-    const account = await googleAccountRepository.getByUserId(req.params.userId);
+    const account = await googleAccountRepository.getByUserId(req.auth.userId);
     if (!account) return res.status(404).json({ error: "Cuenta no encontrada" });
     res.json({ minutes: account.reminder_minutes });
   } catch (error) {
@@ -1445,7 +1475,7 @@ app.get("/api/reminders/:userId", async (req, res) => {
   }
 });
 
-app.put("/api/reminders/:userId", async (req, res) => {
+app.put("/api/reminders/:userId", requireUser(), async (req, res) => {
   try {
     const ALLOWED = [60, 45, 30, 15, 10, 5, 0];
     const { minutes } = req.body || {};
@@ -1456,7 +1486,7 @@ app.put("/api/reminders/:userId", async (req, res) => {
       return res.status(400).json({ error: "minutes inválido: usa 60, 45, 30, 15, 10, 5, 0 o null" });
     }
 
-    const account = await googleAccountRepository.getByUserId(req.params.userId);
+    const account = await googleAccountRepository.getByUserId(req.auth.userId);
     if (!account) return res.status(404).json({ error: "Cuenta no encontrada" });
     const userId = account.userId;
 
@@ -1482,10 +1512,11 @@ app.put("/api/reminders/:userId", async (req, res) => {
   }
 });
 
-app.post("/subscriptions", async (req, res) => {
+app.post("/subscriptions", requireUser(), async (req, res) => {
   try {
-    const { userId, sport, competitionKey, competitionName, teamName } = req.body;
-    if (!userId || !sport) return res.status(400).json({ error: "userId and sport are required" });
+    const { sport, competitionKey, competitionName, teamName } = req.body;
+    const userId = req.auth.userId;
+    if (!sport) return res.status(400).json({ error: "sport is required" });
     const existing  = await subscriptionRepository.getByUserId(userId);
     const duplicate = existing.find(s =>
       s.sport === sport &&
@@ -1528,19 +1559,21 @@ app.post("/subscriptions", async (req, res) => {
   }
 });
 
-app.get("/subscriptions/:userId", async (req, res) => {
+app.get("/subscriptions/:userId", requireUser(), async (req, res) => {
   try {
-    const subscriptions = await subscriptionRepository.getByUserId(req.params.userId);
+    const subscriptions = await subscriptionRepository.getByUserId(req.auth.userId);
     res.json({ ok: true, subscriptions });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.delete("/subscriptions/:id", async (req, res) => {
+app.delete("/subscriptions/:id", requireUser(), async (req, res) => {
   try {
     const subId   = parseInt(req.params.id, 10);
-    const deleted = await subscriptionRepository.deleteById(subId);
+    // Ownership: solo borra si la suscripción es de quien pide. 404 (no 403) cuando no lo es —
+    // un 403 confirmaría que ese id existe y es de alguien más.
+    const deleted = await subscriptionRepository.deleteByIdForUser(subId, req.auth.userId);
     if (!deleted) return res.status(404).json({ ok: false, error: "Subscription not found" });
 
     console.log(`[sub] Deleted subscription ${subId}: ${deleted.sport} / ${deleted.teamName || deleted.competitionKey}`);
@@ -1600,7 +1633,10 @@ app.delete("/subscriptions/:id", async (req, res) => {
   }
 });
 
-app.post("/subscriptions/sync", async (req, res) => {
+// legacyAnonymous: este endpoint hoy no lleva userId de ningún tipo, así que durante la ventana
+// de migración sigue aceptando peticiones sin identidad (como hoy) y solo se cuentan como legacy.
+// Al cerrar ALLOW_LEGACY_USERID pasa a exigir sesión.
+app.post("/subscriptions/sync", requireUser({ legacyAnonymous: true }), async (req, res) => {
   try {
     // Paso 1: descargar partidos nuevos/actualizados de TheSportsDB
     const results = await syncMatches();
@@ -1637,9 +1673,9 @@ app.post("/subscriptions/sync", async (req, res) => {
   }
 });
 
-app.get("/matches/:userId", async (req, res) => {
+app.get("/matches/:userId", requireUser(), async (req, res) => {
   try {
-    const { userId }      = req.params;
+    const userId          = req.auth.userId;
     const subscriptions   = await subscriptionRepository.getByUserId(userId);
     const allMatches      = await matchRepository.getAll();
     // Filtrar por suscripciones — MISMA definición de "visible" que hoy, ahora vía el helper

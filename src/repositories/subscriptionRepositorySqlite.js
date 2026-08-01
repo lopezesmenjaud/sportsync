@@ -87,14 +87,20 @@ class SubscriptionRepositorySqlite {
     });
   }
 
-  deleteById(id) {
+  // Borra SOLO si la suscripción es del usuario. El id es INTEGER AUTOINCREMENT (secuencial y
+  // adivinable), así que sin esta comprobación cualquiera borra las de todos.
+  //
+  // Las dos condiciones van también en el DELETE, no solo en el SELECT: así no hay ventana entre
+  // comprobar y borrar. Devuelve null tanto si no existe como si no es de ese usuario — el
+  // endpoint responde 404 en ambos casos y no revela cuál de los dos fue.
+  deleteByIdForUser(id, userId) {
     return new Promise((resolve, reject) => {
-      db.get(`SELECT * FROM subscriptions WHERE id = ?`, [id], (err, row) => {
+      db.get(`SELECT * FROM subscriptions WHERE id = ? AND userId = ?`, [id, userId], (err, row) => {
         if (err) return reject(err);
         if (!row) return resolve(null);
-        db.run(`DELETE FROM subscriptions WHERE id = ?`, [id], function (err2) {
+        db.run(`DELETE FROM subscriptions WHERE id = ? AND userId = ?`, [id, userId], function (err2) {
           if (err2) return reject(err2);
-          resolve(row);
+          resolve(this.changes === 1 ? row : null);
         });
       });
     });
