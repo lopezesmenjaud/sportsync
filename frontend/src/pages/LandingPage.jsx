@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { API_BASE } from '../config'
+import { consumirSesionExpirada } from '../api'
 
 const TICKER_ITEMS = [
   'Real Madrid vs Barcelona · Hoy 21:00',
@@ -41,12 +42,22 @@ const GoogleIcon = () => (
 export default function LandingPage() {
   const tickerRef = useRef(null)
 
+  // Si llegamos aquí porque la sesión se venció, hay que decirlo. Sin esto la persona aterriza en
+  // el landing sin explicación y parece que la app la desconectó sola. Se lee una sola vez.
+  const [sesionExpirada] = useState(() => consumirSesionExpirada())
+
   const handleLogin = () => {
     window.location.href = `${API_BASE}/auth/google`
   }
 
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', color: '#fff' }}>
+
+      {sesionExpirada && (
+        <div style={{ background: '#F18006', color: '#fff', padding: '12px 28px', fontSize: 14, textAlign: 'center' }}>
+          Tu sesión expiró. Vuelve a conectar tu cuenta de Google para seguir donde ibas.
+        </div>
+      )}
 
       {/* Nav */}
       <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 28px', background: '#1C2430' }}>

@@ -3,7 +3,7 @@ import { Analytics } from '@vercel/analytics/react'
 import { useState, useEffect } from 'react'
 import { setUser, setToken, isLoggedIn, getUserId } from './auth'
 import { API_BASE } from './config'
-import { apiFetch } from './api'
+import { apiFetch, consumirDestino } from './api'
 import EmailConsentModal from './components/EmailConsentModal'
 import CalendarConnectModal from './components/CalendarConnectModal'
 import LandingPage from './pages/LandingPage'
@@ -58,7 +58,11 @@ function CleanOAuthParams() {
 
   useEffect(() => {
     if (params.get('user') || params.get('google')) {
-      navigate('/dashboard', { replace: true })
+      // Si la sesión se venció mientras alguien iba a una pantalla concreta, después de
+      // reconectar vuelve AHÍ y no al dashboard. El caso típico: abrió /match/123 desde el link
+      // del evento en su Google Calendar.
+      const destino = consumirDestino()
+      navigate(destino || '/dashboard', { replace: true })
     }
   }, [params, navigate])
 

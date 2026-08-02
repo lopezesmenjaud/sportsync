@@ -26,7 +26,10 @@ export default function MatchDetail() {
   const [loadingTickets, setLoadingTickets] = useState(false)
 
   useEffect(() => {
-    apiFetch(`/api/match/${matchId}?userId=${encodeURIComponent(getUserId() || '')}`)
+    // publica: esta pantalla se abre desde links compartidos y desde el evento del calendario.
+    // Con un token vencido, apiFetch tira el token y reintenta sin él en vez de mandar a
+    // reconectar — un token muerto no debe volver privada una página pública (ver api.js).
+    apiFetch(`/api/match/${matchId}?userId=${encodeURIComponent(getUserId() || '')}`, { publica: true })
       .then(res => res.json())
       .then(data => {
         if (data.ok) setMatch(data.match)
