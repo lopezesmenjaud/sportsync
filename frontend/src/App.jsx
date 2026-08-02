@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, useSearchParams, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import { useState, useEffect } from 'react'
-import { setUser, isLoggedIn, getUserId } from './auth'
+import { setUser, setToken, isLoggedIn, getUserId } from './auth'
 import { API_BASE } from './config'
 import EmailConsentModal from './components/EmailConsentModal'
 import CalendarConnectModal from './components/CalendarConnectModal'
@@ -27,6 +27,23 @@ function saveUserFromUrl() {
       const user = JSON.parse(decodeURIComponent(userParam))
       setUser(user)
     } catch { /* ignore */ }
+  }
+
+  // El token de sesión viaja en el FRAGMENTO (#token=), no en el query. El navegador nunca manda
+  // el fragmento al servidor, así que no aparece en los logs de Render ni de Vercel ni en el
+  // Referer — por eso el backend lo pone ahí (server.js, callback de OAuth).
+  //
+  // Se lee y se BORRA aquí mismo, en el bloque síncrono que corre al importar este módulo. Eso
+  // ocurre antes de que main.jsx llame a render(), o sea antes de que <Analytics /> se monte e
+  // inyecte el script de Vercel. Ninguna librería alcanza a ver el token, sin importar qué
+  // capture: la garantía es el ORDEN, no confiar en lo que haga el script de terceros.
+  // También lo saca de la barra de direcciones y del historial de esta entrada.
+  if (url.hash) {
+    const token = new URLSearchParams(url.hash.slice(1)).get('token')
+    if (token) setToken(token)
+    // replaceState y no location.hash = '': no recarga, no deja un '#' colgando y no agrega una
+    // entrada nueva al historial.
+    window.history.replaceState(null, '', url.pathname + url.search)
   }
 }
 
