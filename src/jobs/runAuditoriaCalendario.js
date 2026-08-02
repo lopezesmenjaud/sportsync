@@ -121,6 +121,37 @@ const findMatch = db.prepare(`
 const rowsFor = (userId) =>
   db.prepare("SELECT id, calendarEventId, providerMatchId FROM calendar_events WHERE userId = ?").all(userId);
 
+// Comprobación puntual de UN evento. La usa el job de borrado para re-verificar la condición de
+// huérfano justo antes de borrar, y no solo en el momento del descubrimiento.
+const hasCalendarEventRow = (userId, calendarEventId) =>
+  !!db.prepare("SELECT 1 FROM calendar_events WHERE userId = ? AND calendarEventId = ? LIMIT 1")
+    .get(userId, calendarEventId);
+
+// LA MITAD DIFÍCIL, compartida: lista el calendario de FanSchedule de la cuenta y lo cruza contra
+// calendar_events en las dos direcciones. Exportada para que runBorrarHuerfanos.js reuse el
+// descubrimiento en vez de duplicarlo.
+//   orphans → eventos vivos en Google SIN fila (invisibles para el sistema)
+//   ghosts  → filas cuyo evento YA NO está en Google (el sistema los cree agendados)
+// Solo lee. El calendarId sale de fanschedule_calendar_id; nunca "primary".
+async function auditAccount(account) {
+  if (!account.fanschedule_calendar_id) {
+    throw new Error(`${account.userId} no tiene fanschedule_calendar_id`);
+  }
+  const calendar = calendarClientFor(account);
+  const events = await listAllEvents(calendar, account.fanschedule_calendar_id);
+  const rows = rowsFor(account.userId);
+  const idsInDb = new Set(rows.map((r) => r.calendarEventId));
+  const idsInGoogle = new Set(events.map((e) => e.id));
+  return {
+    calendar,
+    calendarId: account.fanschedule_calendar_id,
+    events,
+    rows,
+    orphans: events.filter((e) => !idsInDb.has(e.id)),
+    ghosts: rows.filter((r) => !idsInGoogle.has(r.calendarEventId)),
+  };
+}
+
 async function run() {
   console.log("=".repeat(100));
   console.log("AUDITORÍA DE CALENDARIO — SOLO LECTURA (no escribe en la base ni en Google)");
@@ -160,17 +191,15 @@ async function run() {
       // ── 2. Eventos reales en Google ──
       console.log("\n===== 2. Eventos REALES en Google =====");
       console.log(`Calendario: ${target.fanschedule_calendar_id}`);
-      const events = await listAllEvents(calendarClientFor(target), target.fanschedule_calendar_id);
+      const audit = await auditAccount(target);
+      const events = audit.events;
       console.log(`TOTAL en Google: ${events.length}`);
       console.table(tally(events, competitionOf).map((r) => ({ competencia: r.competencia, eventos: r.n })));
-
-      const idsInDb = new Set(targetRows.map((r) => r.calendarEventId));
-      const idsInGoogle = new Set(events.map((e) => e.id));
 
       // ── 3a. Huérfanos ──
       console.log("\n===== 3a. HUÉRFANOS: vivos en Google, SIN fila en calendar_events =====");
       console.log("    (invisibles para el sistema; al re-suscribirse se crea un DUPLICADO encima)");
-      const orphans = events.filter((e) => !idsInDb.has(e.id));
+      const orphans = audit.orphans;
       console.log(`HUÉRFANOS: ${orphans.length} de ${events.length} eventos en Google`);
       if (orphans.length) {
         console.table(tally(orphans, competitionOf).map((r) => ({ competencia: r.competencia, huérfanos: r.n })));
@@ -188,9 +217,7 @@ async function run() {
       console.log("    (el sistema cree que ya está agendado y NUNCA lo vuelve a crear)");
       // La clasificación NO puede salir del evento (ya no existe): sale del partido en matches.
       // Si el partido tampoco está, se reporta aparte en vez de contarlo como "otra competencia".
-      const ghosts = targetRows
-        .filter((r) => !idsInGoogle.has(r.calendarEventId))
-        .map((r) => ({ row: r, match: findMatch.get(r.providerMatchId) || null }));
+      const ghosts = audit.ghosts.map((r) => ({ row: r, match: findMatch.get(r.providerMatchId) || null }));
       console.log(`FANTASMAS: ${ghosts.length} de ${targetRows.length} filas en la base`);
       if (ghosts.length) {
         console.table(tally(ghosts, (g) => (g.match ? (g.match.competitionName || g.match.competitionKey) : "(el partido ya no está en matches)"))
@@ -231,14 +258,12 @@ async function run() {
 
     await sleep(PAUSE_MS);
     try {
-      const evs = await listAllEvents(calendarClientFor(account), account.fanschedule_calendar_id);
-      const dbIds = new Set(rows.map((r) => r.calendarEventId));
-      const gIds = new Set(evs.map((e) => e.id));
+      const a = await auditAccount(account);
       summary.push({
         ...base,
-        enGoogle: evs.length,
-        huérfanos: evs.filter((e) => !dbIds.has(e.id)).length,
-        fantasmas: rows.filter((r) => !gIds.has(r.calendarEventId)).length,
+        enGoogle: a.events.length,
+        huérfanos: a.orphans.length,
+        fantasmas: a.ghosts.length,
         estado: "medido",
       });
     } catch (err) {
@@ -265,7 +290,23 @@ async function run() {
   console.log("\nFIN. Nada fue modificado.");
 }
 
-run().catch((err) => {
-  console.error("AUDITORÍA FALLÓ:", err.message);
-  process.exit(1);
-});
+// Solo audita cuando se invoca como script. Al importarlo (lo hace runBorrarHuerfanos.js para
+// reusar auditAccount) NO debe correr nada.
+if (require.main === module) {
+  run().catch((err) => {
+    console.error("AUDITORÍA FALLÓ:", err.message);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  db,
+  auditAccount,
+  hasCalendarEventRow,
+  calendarClientFor,
+  listAllEvents,
+  competitionOf,
+  matchIdOf,
+  rowsFor,
+  tally,
+};
