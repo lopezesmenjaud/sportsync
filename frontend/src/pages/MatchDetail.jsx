@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import WatchPanel from '../components/WatchPanel'
 import { API_BASE } from '../config'
 import { getUserId } from '../auth'
@@ -7,6 +7,15 @@ import { getUserId } from '../auth'
 export default function MatchDetail() {
   const { matchId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+
+  // Esta página es pública y mucha gente llega directo desde el link del evento en su Google
+  // Calendar, en una pestaña nueva: ahí NO hay historial previo de la app y navigate(-1) no
+  // lleva a ningún lado. react-router marca esa primera entrada con key === 'default'.
+  // En ese caso mandamos al home; RootRoute ya decide qué mostrar (landing si no hay sesión,
+  // dashboard si la hay).
+  const sinHistorialPrevio = location.key === 'default'
+  const handleBack = () => (sinHistorialPrevio ? navigate('/') : navigate(-1))
   const [match, setMatch] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -73,7 +82,7 @@ export default function MatchDetail() {
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 20px' }}>
 
         {/* Back */}
-        <button onClick={() => navigate(-1)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#666666', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 24, padding: 0 }}>
+        <button onClick={handleBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#666666', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 24, padding: 0 }}>
           ← Volver
         </button>
 
