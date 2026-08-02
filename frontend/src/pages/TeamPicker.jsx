@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import TeamSubscriptionModal from '../components/TeamSubscriptionModal'
-import { API_BASE } from '../config'
+import { apiFetch } from '../api'
 import { getUserId } from '../auth'
 
 export default function TeamPicker() {
@@ -36,9 +36,9 @@ export default function TeamPicker() {
     setTeamsError(null)
     const leagueName = encodeURIComponent(league.apiName || league.name || '')
     const endpoint = isTennis ? 'players' : 'teams'
-    const url = `${API_BASE}/api/${endpoint}/${leagueId}?leagueName=${leagueName}`
+    const url = `/api/${endpoint}/${leagueId}?leagueName=${leagueName}`
     console.log(`Fetching ${endpoint} from:`, url)
-    fetch(url)
+    apiFetch(url)
       .then(res => res.json())
       .then(data => {
         console.log(`${endpoint} response:`, data)
@@ -55,7 +55,7 @@ export default function TeamPicker() {
 
   // Cargar suscripciones existentes
   useEffect(() => {
-    fetch(`${API_BASE}/subscriptions/${userId}`)
+    apiFetch(`/subscriptions/${userId}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok) {
@@ -84,7 +84,7 @@ export default function TeamPicker() {
       teamName: isFullLeague ? null : team.name,
     }
     try {
-      const res  = await fetch(`${API_BASE}/subscriptions`, {
+      const res  = await apiFetch('/subscriptions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(subscription)
@@ -99,7 +99,7 @@ export default function TeamPicker() {
   const handleSaveAndSync = async () => {
     setSaving(true)
     try {
-      const res  = await fetch(`${API_BASE}/subscriptions/sync`, {
+      const res  = await apiFetch('/subscriptions/sync', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }
       })
       const data = await res.json()
@@ -118,7 +118,7 @@ export default function TeamPicker() {
     setTeamsError(null)
     const leagueName = encodeURIComponent(league.apiName || league.name || '')
     const endpoint = isTennis ? 'players' : 'teams'
-    fetch(`${API_BASE}/api/${endpoint}/${leagueId}?leagueName=${leagueName}`)
+    apiFetch(`/api/${endpoint}/${leagueId}?leagueName=${leagueName}`)
       .then(r => r.json())
       .then(d => { setTeams((isTennis ? d.players : d.teams) || []); setLoadingTeams(false) })
       .catch(() => { setTeamsError('Error de conexión.'); setLoadingTeams(false) })

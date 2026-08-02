@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import WatchPanel from '../components/WatchPanel'
-import { API_BASE } from '../config'
+import { apiFetch } from '../api'
 import { getUserId } from '../auth'
 
 export default function MatchDetail() {
@@ -26,7 +26,7 @@ export default function MatchDetail() {
   const [loadingTickets, setLoadingTickets] = useState(false)
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/match/${matchId}?userId=${encodeURIComponent(getUserId() || '')}`)
+    apiFetch(`/api/match/${matchId}?userId=${encodeURIComponent(getUserId() || '')}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok) setMatch(data.match)
@@ -39,7 +39,7 @@ export default function MatchDetail() {
   useEffect(() => {
     if (!match) return
     setLoadingSummary(true)
-    fetch(`${API_BASE}/summary/${match.providerMatchId}`, {
+    apiFetch(`/summary/${match.providerMatchId}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }
     })
       .then(res => res.json())
@@ -48,7 +48,7 @@ export default function MatchDetail() {
       .finally(() => setLoadingSummary(false))
 
     setLoadingTickets(true)
-    fetch(`${API_BASE}/api/tickets/${match.providerMatchId}`)
+    apiFetch(`/api/tickets/${match.providerMatchId}`)
       .then(res => res.json())
       .then(data => { if (data.ok) setTickets(data) })
       .catch(() => {})

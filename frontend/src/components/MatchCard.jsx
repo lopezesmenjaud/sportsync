@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import WatchPanel from './WatchPanel'
-import { API_BASE } from '../config'
+import { apiFetch } from '../api'
 
 export default function MatchCard({ match, showDate = true }) {
   const navigate = useNavigate()
@@ -19,7 +19,7 @@ export default function MatchCard({ match, showDate = true }) {
     if (opening && !summary && !loadingSummary) {
       setLoadingSummary(true)
       try {
-        const res  = await fetch(`${API_BASE}/summary/${match.providerMatchId}`, {
+        const res  = await apiFetch(`/summary/${match.providerMatchId}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }
         })
         const data = await res.json()
@@ -38,7 +38,7 @@ export default function MatchCard({ match, showDate = true }) {
     if (opening && !tickets && !loadingTickets) {
       setLoadingTickets(true)
       try {
-        const res  = await fetch(`${API_BASE}/api/tickets/${match.providerMatchId}`)
+        const res  = await apiFetch(`/api/tickets/${match.providerMatchId}`)
         const data = await res.json()
         if (data.ok) setTickets(data)
       } catch { /* ignore */ }

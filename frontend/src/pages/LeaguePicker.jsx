@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
-import { API_BASE } from '../config'
+import { apiFetch } from '../api'
 import { getUserId } from '../auth'
 
 const SPORT_LABELS = {
@@ -249,7 +249,7 @@ export default function LeaguePicker() {
     if (subscribingId) return
     setSubscribingId(league.id)
     try {
-      await fetch(`${API_BASE}/subscriptions`, {
+      await apiFetch('/subscriptions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: userId, sport, competitionKey: league.id, competitionName: league.name, teamName: null })
@@ -263,7 +263,7 @@ export default function LeaguePicker() {
     if (!selectedCountry || !nationalMode || subscribingNational) return
     setSubscribingNational(true)
     try {
-      await fetch(`${API_BASE}/subscriptions`, {
+      await apiFetch('/subscriptions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: userId, sport, competitionKey: `national_${nationalMode}`, competitionName: `Selección ${selectedCountry.name}`, teamName: selectedCountry.name })

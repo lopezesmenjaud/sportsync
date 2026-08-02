@@ -1,10 +1,10 @@
-import { API_BASE } from '../config'
 import { getUserId } from '../auth'
+import { apiFetch } from '../api'
 
 function saveConsent(emailFanschedule, emailPartners) {
   const userId = getUserId()
   if (!userId) return
-  fetch(`${API_BASE}/api/consent`, {
+  apiFetch('/api/consent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId, emailFanschedule, emailPartners })

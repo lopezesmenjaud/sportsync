@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { AVAILABLE_COUNTRIES } from '../data/broadcasters'
-import { API_BASE } from '../config'
+import { apiFetch } from '../api'
 
 export default function WatchPanel({ sport, competitionKey, competitionName, isOpen }) {
   const [country, setCountry]                     = useState(null)
@@ -14,7 +14,7 @@ export default function WatchPanel({ sport, competitionKey, competitionName, isO
     if (!isOpen || country) return
     const saved = localStorage.getItem('fanschedule_country')
     if (saved) { setCountry(saved); return }
-    fetch(`${API_BASE}/api/detect-country`)
+    apiFetch('/api/detect-country')
       .then(res => res.json())
       .then(data => {
         const detected = data.ok && data.country ? data.country : 'Mexico'
@@ -33,7 +33,7 @@ export default function WatchPanel({ sport, competitionKey, competitionName, isO
     setLoading(true)
     setFetched(true)
     const name = encodeURIComponent(competitionName || competitionKey)
-    fetch(`${API_BASE}/api/broadcasting/${competitionKey}/${encodeURIComponent(country)}?competitionName=${name}`)
+    apiFetch(`/api/broadcasting/${competitionKey}/${encodeURIComponent(country)}?competitionName=${name}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok) setBroadcasts(data.data)

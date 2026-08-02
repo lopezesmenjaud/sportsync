@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import MatchCard from '../components/MatchCard'
-import { API_BASE } from '../config'
+import { apiFetch } from '../api'
 import { getUserId } from '../auth'
 import { SPORT_EMOJI } from '../sportEmoji'
 
@@ -31,7 +31,7 @@ export default function UpcomingMatches() {
 
   useEffect(() => {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
-    fetch(`${API_BASE}/matches/${userId}?timezone=${encodeURIComponent(tz)}`)
+    apiFetch(`/matches/${userId}?timezone=${encodeURIComponent(tz)}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok) {

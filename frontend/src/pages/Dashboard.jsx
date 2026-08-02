@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import { API_BASE } from '../config'
+import { apiFetch } from '../api'
 import { getUserId } from '../auth'
 import { SPORT_EMOJI } from '../sportEmoji'
 
@@ -29,13 +30,13 @@ export default function Dashboard() {
   const userId = getUserId()
 
   useEffect(() => {
-    fetch(`${API_BASE}/subscriptions/${userId}`)
+    apiFetch(`/subscriptions/${userId}`)
       .then(res => res.json())
       .then(data => { if (data.ok) setSubscriptions(data.subscriptions) })
       .catch(err => console.error('Error loading subscriptions:', err))
       .finally(() => setLoading(false))
 
-    fetch(`${API_BASE}/auth/google/status/${userId}`)
+    apiFetch(`/auth/google/status/${userId}`)
       .then(res => res.json())
       .then(data => { if (data.ok) setGoogleStatus({ connected: data.connected, email: data.email, needsReauth: data.needsReauth, hasCalendarScope: data.hasCalendarScope, loading: false }) })
       .catch(() => setGoogleStatus(prev => ({ ...prev, loading: false })))
@@ -46,7 +47,7 @@ export default function Dashboard() {
     if (!window.confirm(`¿Eliminar "${label}" de tus favoritos?`)) return
     setDeletingId(sub.id)
     try {
-      const res = await fetch(`${API_BASE}/subscriptions/${sub.id}`, { method: 'DELETE' })
+      const res = await apiFetch(`/subscriptions/${sub.id}`, { method: 'DELETE' })
       const data = await res.json()
       if (data.ok) setSubscriptions(prev => prev.filter(s => s.id !== sub.id))
     } catch (err) {

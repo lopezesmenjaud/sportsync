@@ -3,6 +3,7 @@ import { Analytics } from '@vercel/analytics/react'
 import { useState, useEffect } from 'react'
 import { setUser, setToken, isLoggedIn, getUserId } from './auth'
 import { API_BASE } from './config'
+import { apiFetch } from './api'
 import EmailConsentModal from './components/EmailConsentModal'
 import CalendarConnectModal from './components/CalendarConnectModal'
 import LandingPage from './pages/LandingPage'
@@ -108,7 +109,7 @@ function CalendarConnectGate() {
 
   useEffect(() => {
     if (!isLoggedIn()) { setStatus(s => ({ ...s, loading: false })); return }
-    fetch(`${API_BASE}/auth/google/status/${getUserId()}`)
+    apiFetch(`/auth/google/status/${getUserId()}`)
       .then(r => r.json())
       .then(d => {
         if (d.ok) setStatus({ loading: false, connected: d.connected, hasCalendarScope: d.hasCalendarScope })

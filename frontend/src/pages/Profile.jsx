@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Sidebar from '../components/Sidebar'
 import { API_BASE } from '../config'
+import { apiFetch } from '../api'
 import { getUser, getUserId, clearUser } from '../auth'
 
 export default function Profile() {
@@ -19,22 +20,22 @@ export default function Profile() {
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
   useEffect(() => {
-    fetch(`${API_BASE}/auth/google/status/${userId}`)
+    apiFetch(`/auth/google/status/${userId}`)
       .then(res => res.json())
       .then(data => { if (data.ok) setGoogle({ connected: data.connected, email: data.email, hasCalendarScope: data.hasCalendarScope, loading: false }) })
       .catch(() => setGoogle(prev => ({ ...prev, loading: false })))
 
-    fetch(`${API_BASE}/subscriptions/${userId}`)
+    apiFetch(`/subscriptions/${userId}`)
       .then(res => res.json())
       .then(data => { if (data.ok) setSubscriptions(data.subscriptions) })
       .catch(() => {})
 
-    fetch(`${API_BASE}/matches/${userId}?timezone=${encodeURIComponent(timezone)}`)
+    apiFetch(`/matches/${userId}?timezone=${encodeURIComponent(timezone)}`)
       .then(res => res.json())
       .then(data => { if (data.ok) setMatchCount(data.matches?.length || 0) })
       .catch(() => {})
 
-    fetch(`${API_BASE}/api/reminders/${userId}`)
+    apiFetch(`/api/reminders/${userId}`)
       .then(res => res.json())
       .then(data => { if (data && 'minutes' in data) setReminderMinutes(data.minutes) })
       .catch(() => {})
@@ -44,7 +45,7 @@ export default function Profile() {
     if (!window.confirm(`¿Desuscribirte de "${sub.competitionName || sub.teamName || 'esta liga'}"?`)) return
     setDeletingId(sub.id)
     try {
-      const res = await fetch(`${API_BASE}/subscriptions/${sub.id}`, { method: 'DELETE' })
+      const res = await apiFetch(`/subscriptions/${sub.id}`, { method: 'DELETE' })
       const data = await res.json()
       if (data.ok) setSubscriptions(prev => prev.filter(s => s.id !== sub.id))
     } catch (e) { console.error(e) }
@@ -73,7 +74,7 @@ export default function Profile() {
     setReminderMinutes(next)
     setReminderMsg({ text: 'Guardando...', color: '#6b7280' })
     try {
-      const res = await fetch(`${API_BASE}/api/reminders/${userId}`, {
+      const res = await apiFetch(`/api/reminders/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ minutes: next }),

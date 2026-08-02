@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { API_BASE } from '../config'
 import { getUser, getUserId, clearUser } from '../auth'
+import { apiFetch } from '../api'
 
 const NAV_ITEMS = [
   { label: 'Mis favoritos',     path: '/dashboard' },
@@ -49,7 +50,7 @@ export default function Sidebar({ activePath }) {
   const user = getUser()
 
   useEffect(() => {
-    fetch(`${API_BASE}/auth/google/status/${userId}`)
+    apiFetch(`/auth/google/status/${userId}`)
       .then(res => res.json())
       .then(data => { if (data.ok) setGoogle({ connected: data.connected, email: data.email, needsReauth: data.needsReauth, hasCalendarScope: data.hasCalendarScope }) })
       .catch(() => {})
