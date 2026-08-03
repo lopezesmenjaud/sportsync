@@ -30,6 +30,7 @@ const { google } = require("googleapis");
 const Database = require("better-sqlite3");
 const { decrypt } = require("../config/tokenCrypto");
 const { sleep } = require("../services/userBackfillService");
+const { matchAppliesToSubscription } = require("../services/subscriptionMatchService");
 
 const DB_PATH = process.env.DB_PATH || "/var/data/sportsync.db";
 const TARGET_USER = process.env.TARGET_USER || "lopezesmenjaud@gmail.com";
@@ -126,6 +127,81 @@ const rowsFor = (userId) =>
 const hasCalendarEventRow = (userId, calendarEventId) =>
   !!db.prepare("SELECT 1 FROM calendar_events WHERE userId = ? AND calendarEventId = ? LIMIT 1")
     .get(userId, calendarEventId);
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// REGLA DE DISEÑO QUE ORDENA TODO ESTO:
+//
+//   El calendario de un usuario depende ÚNICAMENTE de las suscripciones de ese usuario.
+//   Lo que hagan o dejen de hacer los demás no lo toca nunca.
+//
+// El cleanup de DELETE /subscriptions/:id (server.js) todavía viola esta regla: usa
+// subscriptionRepository.getAll() y pregunta "¿ALGUIEN sigue esta liga?" en vez de "¿ESTE usuario
+// todavía quiere este evento?". Por eso jcgviejo@gmail.com se dio de baja de la Champions y sus
+// eventos siguen en su calendario: lopezesmenjaud la sigue, así que esos partidos nunca contaron
+// como huérfanos. A escala, con alguien siguiendo cada liga popular, la limpieza al darse de baja
+// deja de correr para nadie, nunca, y sin un solo error en ningún log.
+//
+// ABANDONADO es esa tercera categoría, distinta de huérfano y fantasma: la fila existe Y el evento
+// existe en Google —perfectamente consistentes— pero ninguna suscripción ACTUAL de ese usuario lo
+// reclama.
+//
+// El predicado vive aquí y se EXPORTA para que el job de borrado use exactamente el mismo. Si la
+// medición y el borrado calcularan distinto, el ensayo dejaría de significar algo.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+//
+// Consulta ACOTADA: solo las filas de ESE usuario, con JOIN por providerMatchId (que es PRIMARY
+// KEY de matches, así que va por índice). Nada de getAll(): el cleanup de hoy carga la tabla
+// completa de partidos y todas las suscripciones de todos en cada baja.
+//
+// La decisión se toma en JS con matchAppliesToSubscription, ÚNICA fuente de verdad del predicado.
+// Se puede expresar en SQL con un NOT EXISTS, pero normalizeSport() es lógica JS: traducirla
+// crearía dos definiciones del mismo predicado que un día se separan en silencio.
+function classifyUserEvents(userId) {
+  // Las suscripciones se leen por ESTA conexión (readonly, abierta en DB_PATH) y no con
+  // subscriptionRepository.getByUserId, que lee por la conexión de src/db/database — cuya ruta la
+  // decide NODE_ENV. Si las dos no coinciden, estaríamos cruzando calendar_events de una base con
+  // suscripciones de OTRA, y el resultado saldría mal sin avisar. Es la misma consulta, en la
+  // conexión correcta.
+  const subs = db.prepare("SELECT * FROM subscriptions WHERE userId = ?").all(userId);
+
+  const filas = db.prepare(`
+    SELECT ce.id, ce.calendarEventId, ce.providerMatchId,
+           m.providerMatchId AS matchExiste,
+           m.sport, m.competitionKey, m.competitionName,
+           m.homeParticipantName, m.awayParticipantName,
+           COALESCE(m.currentStartUtc, m.scheduledStartUtc) AS inicio
+    FROM calendar_events ce
+    LEFT JOIN matches m ON m.providerMatchId = ce.providerMatchId
+    WHERE ce.userId = ?
+  `).all(userId);
+
+  const ahora = Date.now();
+  const cubiertos = [], abandonadosFuturos = [], abandonadosPasados = [], inevaluables = [];
+
+  for (const fila of filas) {
+    // INEVALUABLE: el cleanup viejo ya borró el partido de matches, así que no hay sport ni
+    // competitionKey ni equipos contra qué evaluar. NO va a abandonados ni a cubiertos: un número
+    // falso es peor que un hueco declarado. Mismo criterio que el "no medible" de los usuarios.
+    if (fila.matchExiste === null || fila.matchExiste === undefined) {
+      inevaluables.push(fila);
+      continue;
+    }
+
+    if (subs.some((sub) => matchAppliesToSubscription(fila, sub))) {
+      cubiertos.push(fila);
+      continue;
+    }
+
+    // Solo vamos a actuar sobre los FUTUROS: borrarle a alguien su historial sería una sorpresa
+    // desagradable y no aporta nada. Un partido sin fecha legible cuenta como pasado a propósito,
+    // que es el lado en el que nunca se toca.
+    const inicio = Date.parse(fila.inicio || "");
+    if (Number.isFinite(inicio) && inicio > ahora) abandonadosFuturos.push(fila);
+    else abandonadosPasados.push(fila);
+  }
+
+  return { subs, filas, cubiertos, abandonadosFuturos, abandonadosPasados, inevaluables };
+}
 
 // LA MITAD DIFÍCIL, compartida: lista el calendario de FanSchedule de la cuenta y lo cruza contra
 // calendar_events en las dos direcciones. Exportada para que runBorrarHuerfanos.js reuse el
@@ -239,14 +315,67 @@ async function run() {
     }
   }
 
-  // ── 4. Todos los usuarios, las dos direcciones ──
-  console.log("\n===== 4. Todos los usuarios: las dos direcciones =====");
-  console.log("    'no medible' NO significa sano: significa que no se pudo comprobar.");
-  const summary = [];
-  for (const account of accounts) {
-    const rows = rowsFor(account.userId);
-    const base = { usuario: account.userId, enBase: rows.length };
+  // ── 3c. Abandonados del usuario objetivo ──
+  // FUERA del try de arriba a propósito: esto NO consulta Google, sale solo de la base. Aunque el
+  // calendario del usuario sea ilegible, esta medición se puede dar igual.
+  console.log("\n===== 3c. ABANDONADOS: con fila Y en Google, pero ninguna suscripción actual los cubre =====");
+  console.log("    (el cleanup de la baja no los borró porque pregunta si ALGUIEN sigue la liga)");
+  const clas = classifyUserEvents(TARGET_USER);
+  console.log(`Suscripciones actuales de ${TARGET_USER}: ${clas.subs.length}`);
+  console.log(`  cubiertos por alguna suscripción suya : ${clas.cubiertos.length}`);
+  console.log(`  ABANDONADOS futuros (accionables)     : ${clas.abandonadosFuturos.length}`);
+  console.log(`  abandonados pasados (NO se tocan)     : ${clas.abandonadosPasados.length}`);
+  console.log(`  inevaluables (el partido ya no está en matches): ${clas.inevaluables.length}`);
 
+  if (clas.abandonadosFuturos.length) {
+    console.log("\nAbandonados FUTUROS por competencia:");
+    console.table(tally(clas.abandonadosFuturos, (f) => f.competitionName || f.competitionKey || "(sin competencia)")
+      .map((r) => ({ competencia: r.competencia, abandonados: r.n })));
+    console.log(`muestra de ${Math.min(MUESTRA, clas.abandonadosFuturos.length)}:`);
+    console.table(clas.abandonadosFuturos.slice(0, MUESTRA).map((f) => ({
+      partido: f.providerMatchId,
+      titulo: `${f.homeParticipantName || ""} vs ${f.awayParticipantName || ""}`.slice(0, 42),
+      fecha: (f.inicio || "").slice(0, 16),
+      competencia: (f.competitionName || "?").slice(0, 18),
+    })));
+  }
+  if (clas.abandonadosPasados.length) {
+    console.log("\nAbandonados PASADOS por competencia (solo informativo, no se actúa sobre ellos):");
+    console.table(tally(clas.abandonadosPasados, (f) => f.competitionName || f.competitionKey || "(sin competencia)")
+      .map((r) => ({ competencia: r.competencia, abandonados: r.n })));
+  }
+
+  // ── 4. Todos los usuarios ──
+  // Se recorre la UNIÓN de google_accounts y de los userId que tienen filas en calendar_events:
+  // alguien puede tener eventos y no tener cuenta de Google utilizable, y su cifra de abandonados
+  // se puede medir igual porque no depende de la API.
+  console.log("\n===== 4. Todos los usuarios: las tres categorías =====");
+  console.log("    'no medible' NO significa sano: significa que no se pudo comprobar.");
+  console.log("    Los abandonados SÍ se miden siempre: salen de la base, no de Google.");
+  const userIds = db.prepare(`
+    SELECT userId FROM google_accounts
+    UNION
+    SELECT DISTINCT userId FROM calendar_events
+    ORDER BY userId
+  `).all().map((r) => r.userId);
+
+  const summary = [];
+  for (const userId of userIds) {
+    const account = accounts.find((a) => a.userId === userId) || null;
+    const rows = rowsFor(userId);
+    const c = classifyUserEvents(userId);
+    const base = {
+      usuario: userId,
+      enBase: rows.length,
+      abandFuturos: c.abandonadosFuturos.length,
+      abandPasados: c.abandonadosPasados.length,
+      inevaluables: c.inevaluables.length,
+    };
+
+    if (!account) {
+      summary.push({ ...base, enGoogle: "—", huérfanos: "—", fantasmas: "—", estado: "no medible: sin cuenta de Google" });
+      continue;
+    }
     if (!account.fanschedule_calendar_id) {
       summary.push({ ...base, enGoogle: "—", huérfanos: "—", fantasmas: "—", estado: "no medible: sin calendario" });
       continue;
@@ -276,16 +405,27 @@ async function run() {
   const noMedibles = summary.filter((s) => s.estado !== "medido");
   const totalHuerfanos = medidos.reduce((a, s) => a + s.huérfanos, 0);
   const totalFantasmas = medidos.reduce((a, s) => a + s.fantasmas, 0);
+  // Los abandonados se suman sobre TODOS, medibles o no: no dependen de Google.
+  const totalAbandFuturos = summary.reduce((a, s) => a + s.abandFuturos, 0);
+  const totalAbandPasados = summary.reduce((a, s) => a + s.abandPasados, 0);
+  const totalInevaluables = summary.reduce((a, s) => a + s.inevaluables, 0);
 
   console.log("\n" + "=".repeat(100));
   console.log("RESUMEN");
   console.log("=".repeat(100));
-  console.log(`Usuarios medidos     : ${medidos.length} de ${summary.length}`);
-  console.log(`Huérfanos (total)    : ${totalHuerfanos}`);
-  console.log(`Fantasmas (total)    : ${totalFantasmas}`);
+  console.log(`Usuarios                        : ${summary.length} (${medidos.length} medibles contra Google)`);
+  console.log(`Huérfanos (total)               : ${totalHuerfanos}   ← solo de los medibles`);
+  console.log(`Fantasmas (total)               : ${totalFantasmas}   ← solo de los medibles`);
+  console.log(`ABANDONADOS futuros (total)     : ${totalAbandFuturos}   ← de TODOS, no depende de Google`);
+  console.log(`Abandonados pasados (total)     : ${totalAbandPasados}   ← informativo, no se actúa`);
+  console.log(`Inevaluables (sin fila en matches): ${totalInevaluables}`);
   if (noMedibles.length) {
-    console.log(`\n⚠  ${noMedibles.length} usuario(s) NO se pudieron medir — los totales de arriba los EXCLUYEN:`);
+    console.log(`\n⚠  ${noMedibles.length} usuario(s) NO se pudieron medir contra Google — huérfanos y fantasmas los EXCLUYEN:`);
     for (const s of noMedibles) console.log(`   - ${s.usuario}: ${s.estado}`);
+  }
+  if (totalInevaluables > 0) {
+    console.log(`\n⚠  ${totalInevaluables} fila(s) sin partido en la tabla matches: no se pueden clasificar como`);
+    console.log(`   abandonadas ni como cubiertas. Es rastro del cleanup viejo, que borraba de matches.`);
   }
   console.log("\nFIN. Nada fue modificado.");
 }
@@ -302,6 +442,7 @@ if (require.main === module) {
 module.exports = {
   db,
   auditAccount,
+  classifyUserEvents,
   hasCalendarEventRow,
   calendarClientFor,
   listAllEvents,
