@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { setUser, setToken, isLoggedIn, getUserId } from './auth'
 import { API_BASE } from './config'
 import { apiFetch, consumirDestino } from './api'
+import { PUBLIC_PATHS, isPublicPath } from './publicRoutes'
 import EmailConsentModal from './components/EmailConsentModal'
 import CalendarConnectModal from './components/CalendarConnectModal'
 import LandingPage from './pages/LandingPage'
@@ -108,10 +109,18 @@ function EmailConsentGate() {
 // el scope de Calendar (sin él la app no agenda nada). Decisión ASÍNCRONA (status endpoint).
 function CalendarConnectGate() {
   const { pathname } = useLocation()
+  const enRutaPublica = isPublicPath(pathname)
   const [status, setStatus] = useState({ loading: true, connected: false, hasCalendarScope: false })
   const [dismissed, setDismissed] = useState(() => sessionStorage.getItem('fanschedule_calendar_gate_dismissed') === 'true')
 
   useEffect(() => {
+    // En ruta pública NI SE PREGUNTA. Este componente vive fuera de <Routes>, así que corre en
+    // todas las pantallas — incluidas /match/:matchId, /privacy y /terms. Antes el chequeo de
+    // rutas públicas estaba abajo, en el render: evitaba mostrar el modal pero NO evitaba la
+    // petición. Y /auth/google/status exige sesión, así que con un token vencido daba 401 y
+    // disparaba la redirección global; abrir el link de un partido desde el calendario rebotaba
+    // al landing. La petición aquí sobra: mejor no hacerla que hacer suave su fallo.
+    if (enRutaPublica) { setStatus(s => ({ ...s, loading: false })); return }
     if (!isLoggedIn()) { setStatus(s => ({ ...s, loading: false })); return }
     apiFetch(`/auth/google/status/${getUserId()}`)
       .then(r => r.json())
@@ -120,11 +129,11 @@ function CalendarConnectGate() {
         else setStatus(s => ({ ...s, loading: false }))
       })
       .catch(() => setStatus(s => ({ ...s, loading: false })))
-  }, [])
+  }, [enRutaPublica])
 
-  // No bloquear en rutas públicas: el usuario debe poder leer la política/términos antes de dar permiso.
-  const PUBLIC_PATHS = ['/privacy', '/terms']
-  if (PUBLIC_PATHS.includes(pathname)) return null
+  // No bloquear en rutas públicas: el usuario debe poder leer el partido, la política o los
+  // términos sin que se le encime un modal de conectar calendario.
+  if (enRutaPublica) return null
 
   // No mostrar: sin sesión, mientras carga (evita parpadeo), si ya lo descartó esta sesión,
   // o si ya tiene el scope. Solo bloquea si está conectado SIN scope de Calendar.
@@ -140,6 +149,22 @@ function CalendarConnectGate() {
   return <CalendarConnectModal onConnect={handleConnect} onExplore={handleExplore} />
 }
 
+// QUÉ renderiza cada ruta pública. CUÁLES son las rutas públicas se decide en publicRoutes.js,
+// que es la lista que también consulta api.js — aquí no se puede agregar una ruta pública nueva.
+const ELEMENTOS_PUBLICOS = {
+  '/': <RootRoute />,
+  '/privacy': <PrivacyPolicy />,
+  '/terms': <TermsOfService />,
+  '/match/:matchId': <MatchDetail />,
+}
+
+// Si alguien agrega una ruta a PUBLIC_PATHS y olvida su elemento aquí, que se grite en la
+// consola en vez de renderizar una pantalla en blanco sin explicación.
+const PUBLICAS_SIN_ELEMENTO = PUBLIC_PATHS.filter(p => !ELEMENTOS_PUBLICOS[p])
+if (PUBLICAS_SIN_ELEMENTO.length) {
+  console.error(`[rutas] Rutas públicas sin elemento en App.jsx: ${PUBLICAS_SIN_ELEMENTO.join(', ')}`)
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -148,9 +173,12 @@ function App() {
       <CalendarConnectGate />
       <EmailConsentGate />
       <Routes>
-        <Route path="/" element={<RootRoute />} />
-        <Route path="/privacy" element={<PrivacyPolicy />} />
-        <Route path="/terms" element={<TermsOfService />} />
+        {/* Las rutas PÚBLICAS se generan recorriendo PUBLIC_PATHS: es la misma lista que usa
+            api.js para decidir qué hacer ante un 401. Si una página pública no está en el
+            arreglo, no existe — no hay forma de agregarla y olvidarse de la lista. */}
+        {PUBLIC_PATHS.map(path => (
+          <Route key={path} path={path} element={ELEMENTOS_PUBLICOS[path]} />
+        ))}
         <Route path="/dashboard"                   element={<Protected><Dashboard /></Protected>} />
         <Route path="/dashboard/:sport"            element={<Protected><LeaguePicker /></Protected>} />
         <Route path="/dashboard/:sport/:leagueId"  element={<Protected><TeamPicker /></Protected>} />
@@ -159,7 +187,6 @@ function App() {
         <Route path="/travel"                      element={<Protected><TravelPlanner /></Protected>} />
         <Route path="/profile"                     element={<Protected><Profile /></Protected>} />
         <Route path="/admin"                       element={<Protected><Admin /></Protected>} />
-        <Route path="/match/:matchId"              element={<MatchDetail />} />
       </Routes>
     </BrowserRouter>
   )
