@@ -1,5 +1,6 @@
 import { API_BASE } from './config'
 import { getToken, clearUser } from './auth'
+import { isPublicPath } from './publicRoutes'
 
 // Cliente único para hablar con NUESTRO backend.
 //
@@ -16,13 +17,16 @@ import { getToken, clearUser } from './auth'
 // aplanaría los 404 que traen mensaje propio (p.ej. "Partido no encontrado" en MatchDetail se
 // convertiría en "Error de conexión"). Cada llamador sigue decidiendo qué hacer, igual que hoy.
 //
-// opts.publica: solo para pantallas públicas (hoy únicamente el detalle de partido). Ver abajo.
+// Qué hacer ante un 401 lo decide la RUTA en la que está el usuario, no el sitio de llamada.
+// "¿Esta pantalla se puede ver sin sesión?" es una propiedad de la pantalla, y con una bandera
+// por llamada bastaba con que alguien agregara un apiFetch nuevo a una página pública y la
+// olvidara para que el bug volviera, en silencio.
 export async function apiFetch(path, options = {}) {
   if (typeof path !== 'string' || !path.startsWith('/')) {
     throw new Error(`[api] apiFetch espera una ruta relativa que empiece con "/", recibió: ${path}`)
   }
 
-  const { publica = false, ...init } = options
+  const init = options
   const headers = { ...(init.headers || {}) }
   const token = getToken()
   if (token) headers.Authorization = `Bearer ${token}`
@@ -32,13 +36,15 @@ export async function apiFetch(path, options = {}) {
   if (res.status === 401) {
     await avisarFallo(res, init.method || 'GET', path)
 
-    // Pantalla PÚBLICA con un token vencido: un token muerto NO debe convertir una página
-    // pública en privada. Alguien que abre /match/123 desde el link de su calendario o desde un
-    // link compartido tiene que ver el partido, no un muro de reconectar.
-    // Se tira el token malo y se reintenta UNA sola vez sin él: el backend la atiende como
-    // anónimo. Solo si HABÍA token — si no lo había y aun así respondió 401, reintentar sin él
-    // daría exactamente el mismo 401 en un bucle.
-    if (publica && token) {
+    // RUTA PÚBLICA: un token muerto NO puede convertir una página pública en privada. Alguien
+    // que abre /match/123 desde el link de su calendario tiene que ver el partido, no un muro de
+    // reconectar. Se tira el token malo y se reintenta UNA sola vez sin él; el backend la
+    // atiende como anónimo.
+    if (isPublicPath(window.location.pathname)) {
+      // Sin token no hay nada que tirar ni que reintentar: el 401 vendría de otra cosa y
+      // reintentar daría exactamente el mismo 401 en un bucle.
+      if (!token) return res
+
       clearUser()
       const reintento = await fetch(`${API_BASE}${path}`, { ...init, headers: { ...(init.headers || {}) } })
       if (!reintento.ok) await avisarFallo(reintento, init.method || 'GET', `${path} (reintento anónimo)`)
@@ -78,10 +84,7 @@ function manejarSesionInvalida() {
     if (destino && destino !== '/') sessionStorage.setItem(DESTINO_KEY, destino)
   } catch { /* sin sessionStorage: se pierde el destino, la redirección sigue igual */ }
 
-  if (window.location.pathname === '/') {
-    redirigiendo = false // ya estamos en el landing, no hay a dónde ir
-    return
-  }
+  // '/' ya está en PUBLIC_PATHS, así que un 401 estando ahí nunca llega hasta aquí.
   // replace y no href: no deja la pantalla rota en el historial, así el botón atrás no regresa a
   // ella. Recarga completa a propósito: descarta cualquier estado en memoria de la sesión muerta.
   window.location.replace('/')
