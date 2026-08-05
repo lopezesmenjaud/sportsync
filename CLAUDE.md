@@ -59,19 +59,37 @@ de Julio. Arreglar la autorización del backend propio NO cuenta como tocar esto
 - **Antes de push:** `node --check` en cada archivo de backend tocado y
   `npm run build` en frontend/ si tocaste frontend.
 - **Al validar un deploy:** en DevTools palomear "Disable cache" y confirmar que
-  la petición sea 200 y NO 304 antes de concluir que algo está roto.
+  la petición sea 200 y NO 304 antes de concluir que algo está roto. En esta app
+  "Disable cache" NO basta: hay que ir a Application → Service workers → Bypass
+  for network. Se detecta mirando si cambió el nombre del bundle en la columna
+  Initiator; si no cambió, estás viendo la versión vieja aunque el deploy ya haya
+  terminado.
 - **Degradación limpia y orden de despliegue:** si un campo nuevo del backend no
   llega, el frontend no debe romperse. Y un cambio que el frontend necesita se
   despliega PRIMERO en el backend, tolerando ambas formas durante la transición.
 - Decir cuándo algo es incertidumbre en vez de afirmarlo.
 
 ## Prioridad actual (ago 2026)
-Arreglar la autorización. El userId es el correo del usuario, viaja en la URL y
-los endpoints no verifican identidad — confirmado en producción. La auditoría
-completa de los 28 endpoints está en `AUDITORIA-AUTORIZACION.md`. Es bloqueante
-para la campaña de captación.
+- La vulnerabilidad de autorización está **CERRADA** (3 ago, `ALLOW_LEGACY_USERID=false`,
+  verificado en incógnito). Ya no bloquea nada. La auditoría original está en
+  `AUDITORIA-AUTORIZACION.md`, pero es una foto del estado ANTERIOR: varios de sus
+  renglones ya no describen el código de hoy.
+- **Prioridad técnica actual:** parte 2 del arreglo del cleanup de
+  `DELETE /subscriptions/:id` — calcular "huérfano" por usuario y no contra las
+  suscripciones de todos.
+- **El cuello de botella del proyecto YA NO es técnico.** Es conseguir usuarios:
+  probadores fríos, estrategia de captación, redes sociales. Nada de eso es código.
+  Así que al terminar una tarea, NO propongas ampliar el alcance técnico por inercia
+  — la lista técnica nunca se va a vaciar y ya no es lo que decide si el proyecto
+  avanza.
 
 ## Deuda técnica conocida (no tocar sin pedirlo)
+- **Rama legacy: NO barrerla todavía.** Con `ALLOW_LEGACY_USERID=false` ya no se
+  ejecuta (el camino viejo de `requireUser`, `deleteById` en
+  `subscriptionRepositorySqlite`, y los `legacyAnonymous` de `DELETE /subscriptions/:id`
+  y `POST /subscriptions/sync`). Se queda a propósito: es el camino de revertir si
+  algo sale mal cuando reconecten los tres usuarios que faltan. Se borra cuando los
+  tres hayan reconectado bien, en su propio commit.
 - `/matches/:userId` y el backfill hacen `matchRepository.getAll()`: cargan la
   tabla COMPLETA de partidos y filtran en JS, por petición y por usuario. Es el
   cuello de botella principal de escalabilidad.
