@@ -29,6 +29,15 @@ const SPORTSDB_KEY = process.env.THE_SPORTS_DB_API_KEY || process.env.SPORTSDB_A
 // margen. Limpiar 500 eventos tarda ~75 s, que para una tarea en background no le duele a nadie.
 const CLEANUP_DELETE_PAUSE_MS = Number(process.env.CLEANUP_DELETE_PAUSE_MS || 150);
 
+// Quién es administrador. Por variable de entorno para que la decisión de autorización deje de
+// ser una constante de código.
+//
+// OJO con el default, porque es lo CONTRARIO de ALLOW_LEGACY_USERID: allá ausente = tolerante,
+// a propósito, porque dejar fuera a los usuarios era peor que el statu quo. Aquí ausente = una
+// sola persona y nadie más, nunca "cualquiera". La razón es cuál fallo duele más: quedarse sin
+// panel es un rato de molestia; dejarlo abierto es una filtración de métricas de todos.
+const ADMIN_USER_ID = process.env.ADMIN_USER_ID || "lopezesmenjaud@gmail.com";
+
 app.use(cors({
   origin: [
     "http://localhost:5173",
@@ -64,6 +73,7 @@ console.log(
     ? "[auth] ALLOW_LEGACY_USERID=true — forma vieja ACEPTADA (ventana de migración abierta)"
     : "[auth] ALLOW_LEGACY_USERID=false — forma vieja CERRADA (solo sesión)"
 );
+console.log(`[admin] ADMIN_USER_ID=${ADMIN_USER_ID} — único usuario con acceso a /api/admin/stats`);
 
 initializeDatabase().then(() => {
   startScheduler();
@@ -1088,10 +1098,18 @@ app.post("/api/nearby", optionalUser(), async (req, res) => {
 });
 
 // ── Suscripciones ──
-app.get("/api/admin/stats", async (req, res) => {
+// Antes se "protegía" comparando el header x-admin-user contra un correo hardcodeado. Eso no era
+// una protección: el correo es público —de hecho viaja en el bundle de Vite— así que cualquiera
+// que mandara ese header pasaba. Ahora la identidad la pone la SESIÓN, que no se puede inventar.
+//
+// 403 y no 404: el 404 se usa donde revelaría la existencia de un recurso ajeno (ver
+// DELETE /subscriptions/:id). Aquí no hay id que ocultar y la ruta ya es pública en el JS del
+// navegador, así que fingir que no existe no esconde nada y solo confunde el diagnóstico.
+// Y es un 403, no un 401: la sesión es válida, lo que falta es el permiso — así el frontend
+// no lo confunde con una sesión muerta y no manda a reconectar.
+app.get("/api/admin/stats", requireUser(), async (req, res) => {
   try {
-    const adminUser = req.headers['x-admin-user'];
-    if (adminUser !== 'lopezesmenjaud@gmail.com') {
+    if (req.auth.userId !== ADMIN_USER_ID) {
       return res.status(403).json({ ok: false, error: 'Forbidden' });
     }
 

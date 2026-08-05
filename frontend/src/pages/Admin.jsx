@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Navigate } from 'react-router-dom'
-import { API_BASE } from '../config'
 import { getUserId } from '../auth'
+import { apiFetch } from '../api'
 
+// Guard de NAVEGACIÓN, no de seguridad: evita pedir métricas y comerse un 403 a quien no es
+// admin. Quien decide de verdad es el backend, comparando la SESIÓN contra ADMIN_USER_ID.
+// Ojo: si algún día ADMIN_USER_ID cambia por variable de entorno, esta constante hay que
+// cambiarla también o el nuevo admin se queda sin poder abrir la pantalla.
 const ADMIN_EMAIL = 'lopezesmenjaud@gmail.com'
 
 export default function Admin() {
@@ -13,9 +17,8 @@ export default function Admin() {
 
   useEffect(() => {
     if (userId !== ADMIN_EMAIL) return
-    fetch(`${API_BASE}/api/admin/stats`, {
-      headers: { 'X-Admin-User': userId }
-    })
+    // Sin header x-admin-user: la identidad va en el token de sesión que adjunta apiFetch.
+    apiFetch('/api/admin/stats')
       .then(res => res.json())
       .then(data => {
         if (data.ok) setStats(data)
