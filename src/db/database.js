@@ -312,9 +312,19 @@ async function initializeDatabase() {
     `);
     console.log("✅ Auth usage table ready");
 
+    // Índices de las dos consultas acotadas por usuario (userEventsService): las filas de
+    // calendar_events de UN usuario y sus suscripciones. Sin ellos son escaneos completos de esas
+    // dos tablas en cada baja. matches ya va por índice porque providerMatchId es su PRIMARY KEY.
+    await runAsync(`CREATE INDEX IF NOT EXISTS idx_calendar_events_userId ON calendar_events(userId)`);
+    await runAsync(`CREATE INDEX IF NOT EXISTS idx_subscriptions_userId ON subscriptions(userId)`);
+    console.log("✅ Indices por usuario ready");
+
   })();
 
   return initializationPromise;
 }
 
-module.exports = { db, initializeDatabase };
+// betterDb es la instancia CRUDA de better-sqlite3. Se exporta para los pocos casos que necesitan
+// `.prepare()` en vez de la capa de compatibilidad con callbacks — hoy userEventsService, que hace
+// una consulta acotada con JOIN. Para todo lo demás, usar `db`.
+module.exports = { db, betterDb, initializeDatabase };

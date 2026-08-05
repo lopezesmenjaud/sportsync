@@ -1618,32 +1618,40 @@ app.delete("/subscriptions/:id", requireUser({ legacyAnonymous: true }), async (
     console.log(`[sub] Deleted subscription ${subId}: ${deleted.sport} / ${deleted.teamName || deleted.competitionKey}`);
     res.json({ ok: true, deleted });
 
-    // Cleanup en background: partidos huérfanos + eventos de Google Calendar
+    // Cleanup en background: los eventos de ESTE usuario que su baja dejó sin cubrir.
+    //
+    // Antes esto preguntaba "¿ALGUIEN sigue esta liga?" (subscriptionRepository.getAll() +
+    // matchRepository.getAll()) y por eso no borraba nada mientras otro usuario siguiera la misma
+    // competencia — el caso de jcgviejo con la Champions. A escala eso significa que la limpieza
+    // deja de correr para nadie, nunca, sin un solo error en ningún log.
+    //
+    // Ahora usa el MISMO predicado que la auditoría y el job de abandonados
+    // (src/services/userEventsService): "¿alguna suscripción ACTUAL de ESTE usuario cubre este
+    // evento?". Consulta acotada a sus filas, sin ningún getAll().
     setImmediate(async () => {
       try {
-        const remaining = await subscriptionRepository.getAll();
-        const allMatches = await matchRepository.getAll();
+        const { classifyUserEvents } = require("./src/services/userEventsService");
+        const { betterDb } = require("./src/db/database");
 
-        // Encontrar partidos que ya no cubre ninguna suscripción
-        const { matchAppliesToSubscription } = require("./src/services/subscriptionMatchService");
-        const orphanMatches = allMatches.filter(match =>
-          !remaining.some(sub => matchAppliesToSubscription(match, sub))
-        );
+        // abandonadosFuturos = ya no los cubre ninguna suscripción suya Y todavía no se juegan.
+        // Los pasados quedan fuera a propósito: el historial de una persona no se toca, misma
+        // regla que runBorrarAbandonados. Los "inevaluables" (partido ausente de matches) también
+        // quedan fuera: sin datos del partido no se puede decidir, y ante la duda no se borra.
+        const clasificacion = classifyUserEvents(betterDb, deleted.userId);
+        const calEvents = clasificacion.abandonadosFuturos;
 
-        if (orphanMatches.length === 0) {
-          console.log(`[sub] No orphan matches to clean`);
+        if (calEvents.length === 0) {
+          console.log(`[sub] Nada que limpiar para ${deleted.userId}: ningún evento futuro quedó sin cubrir`);
           return;
         }
 
-        console.log(`[sub] Found ${orphanMatches.length} orphan matches, cleaning...`);
-        const orphanIds = orphanMatches.map(m => m.providerMatchId);
+        console.log(`[sub] ${calEvents.length} evento(s) futuros de ${deleted.userId} quedaron sin cubrir, limpiando...`);
 
-        // Eliminar eventos de Google Calendar para el usuario
-        const calEvents = await calendarEventRepository.getByUserIdAndMatchIds(deleted.userId, orphanIds);
         const calendarIdByUser = new Map();
         let confirmados = 0, conservados = 0;
 
         for (const ce of calEvents) {
+          ce.userId = deleted.userId; // las filas vienen acotadas a este usuario
           // La fila de calendar_events es el ÚNICO puntero al evento de Google. Solo se borra si
           // Google CONFIRMÓ el borrado. Ver el mismo criterio, ya probado, en
           // src/jobs/runCleanupUserCalendar.js:141-172.
@@ -1684,11 +1692,14 @@ app.delete("/subscriptions/:id", requireUser({ legacyAnonymous: true }), async (
           console.warn(`[sub] ${conservados} filas conservadas por fallo de Google: sus eventos SIGUEN en el calendario y la fila sigue apuntándolos (recuperable, no huérfano).`);
         }
 
-        // Eliminar partidos huérfanos de la DB
-        for (const match of orphanMatches) {
-          await matchRepository.deleteByProviderMatchId(match.providerMatchId);
-        }
-        console.log(`[sub] Cleaned ${orphanMatches.length} orphan matches | eventos: ${confirmados} borrados (confirmados por Google), ${conservados} conservados por fallo, de ${calEvents.length}`);
+        // La tabla `matches` NO se toca. Antes se borraban ahí las filas "huérfanas", y eso rompía
+        // el link "Ver partido" dentro de los eventos de Google Calendar de TODOS los usuarios:
+        // buildEventFromMatch mete fanschedule.com/match/<id> en la descripción, y
+        // GET /api/match/:matchId responde 404 si la fila no está. O sea, la baja de una persona
+        // le rompía el link a otra. Además era trabajo tirado: el siguiente sync vuelve a
+        // descargar el partido con el mismo providerMatchId.
+        // La purga de `matches` por antigüedad va aparte, como job.
+        console.log(`[sub] Limpieza de ${deleted.userId}: ${confirmados} evento(s) borrados (confirmados por Google), ${conservados} conservados por fallo, de ${calEvents.length}`);
       } catch (err) {
         console.error("[sub] Cleanup error:", err.message);
       }

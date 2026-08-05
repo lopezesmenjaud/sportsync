@@ -30,7 +30,7 @@ const { google } = require("googleapis");
 const Database = require("better-sqlite3");
 const { decrypt } = require("../config/tokenCrypto");
 const { sleep } = require("../services/userBackfillService");
-const { matchAppliesToSubscription } = require("../services/subscriptionMatchService");
+const { classifyUserEvents: clasificarEventos } = require("../services/userEventsService");
 
 const DB_PATH = process.env.DB_PATH || "/var/data/sportsync.db";
 const TARGET_USER = process.env.TARGET_USER || "lopezesmenjaud@gmail.com";
@@ -128,79 +128,13 @@ const hasCalendarEventRow = (userId, calendarEventId) =>
   !!db.prepare("SELECT 1 FROM calendar_events WHERE userId = ? AND calendarEventId = ? LIMIT 1")
     .get(userId, calendarEventId);
 
-// ─────────────────────────────────────────────────────────────────────────────────────────────
-// REGLA DE DISEÑO QUE ORDENA TODO ESTO:
-//
-//   El calendario de un usuario depende ÚNICAMENTE de las suscripciones de ese usuario.
-//   Lo que hagan o dejen de hacer los demás no lo toca nunca.
-//
-// El cleanup de DELETE /subscriptions/:id (server.js) todavía viola esta regla: usa
-// subscriptionRepository.getAll() y pregunta "¿ALGUIEN sigue esta liga?" en vez de "¿ESTE usuario
-// todavía quiere este evento?". Por eso jcgviejo@gmail.com se dio de baja de la Champions y sus
-// eventos siguen en su calendario: lopezesmenjaud la sigue, así que esos partidos nunca contaron
-// como huérfanos. A escala, con alguien siguiendo cada liga popular, la limpieza al darse de baja
-// deja de correr para nadie, nunca, y sin un solo error en ningún log.
-//
-// ABANDONADO es esa tercera categoría, distinta de huérfano y fantasma: la fila existe Y el evento
-// existe en Google —perfectamente consistentes— pero ninguna suscripción ACTUAL de ese usuario lo
-// reclama.
-//
-// El predicado vive aquí y se EXPORTA para que el job de borrado use exactamente el mismo. Si la
-// medición y el borrado calcularan distinto, el ensayo dejaría de significar algo.
-// ─────────────────────────────────────────────────────────────────────────────────────────────
-//
-// Consulta ACOTADA: solo las filas de ESE usuario, con JOIN por providerMatchId (que es PRIMARY
-// KEY de matches, así que va por índice). Nada de getAll(): el cleanup de hoy carga la tabla
-// completa de partidos y todas las suscripciones de todos en cada baja.
-//
-// La decisión se toma en JS con matchAppliesToSubscription, ÚNICA fuente de verdad del predicado.
-// Se puede expresar en SQL con un NOT EXISTS, pero normalizeSport() es lógica JS: traducirla
-// crearía dos definiciones del mismo predicado que un día se separan en silencio.
+// El predicado ya NO vive aquí: se movió a src/services/userEventsService.js para que también lo
+// pueda usar server.js, que no puede importar un job (los jobs abren su propia conexión al
+// cargarse y matan el proceso si no encuentran el archivo de base). Se sigue exportando desde
+// este módulo, ya ligado a la conexión readonly de la auditoría, para no romper a
+// runBorrarAbandonados.js, que lo consume de aquí.
 function classifyUserEvents(userId) {
-  // Las suscripciones se leen por ESTA conexión (readonly, abierta en DB_PATH) y no con
-  // subscriptionRepository.getByUserId, que lee por la conexión de src/db/database — cuya ruta la
-  // decide NODE_ENV. Si las dos no coinciden, estaríamos cruzando calendar_events de una base con
-  // suscripciones de OTRA, y el resultado saldría mal sin avisar. Es la misma consulta, en la
-  // conexión correcta.
-  const subs = db.prepare("SELECT * FROM subscriptions WHERE userId = ?").all(userId);
-
-  const filas = db.prepare(`
-    SELECT ce.id, ce.calendarEventId, ce.providerMatchId,
-           m.providerMatchId AS matchExiste,
-           m.sport, m.competitionKey, m.competitionName,
-           m.homeParticipantName, m.awayParticipantName,
-           COALESCE(m.currentStartUtc, m.scheduledStartUtc) AS inicio
-    FROM calendar_events ce
-    LEFT JOIN matches m ON m.providerMatchId = ce.providerMatchId
-    WHERE ce.userId = ?
-  `).all(userId);
-
-  const ahora = Date.now();
-  const cubiertos = [], abandonadosFuturos = [], abandonadosPasados = [], inevaluables = [];
-
-  for (const fila of filas) {
-    // INEVALUABLE: el cleanup viejo ya borró el partido de matches, así que no hay sport ni
-    // competitionKey ni equipos contra qué evaluar. NO va a abandonados ni a cubiertos: un número
-    // falso es peor que un hueco declarado. Mismo criterio que el "no medible" de los usuarios.
-    if (fila.matchExiste === null || fila.matchExiste === undefined) {
-      inevaluables.push(fila);
-      continue;
-    }
-
-    if (subs.some((sub) => matchAppliesToSubscription(fila, sub))) {
-      cubiertos.push(fila);
-      continue;
-    }
-
-    // Solo vamos a actuar sobre los FUTUROS: borrarle a alguien su historial sería una sorpresa
-    // desagradable y no aporta nada. Un partido sin fecha legible cuenta como pasado a propósito,
-    // que es el lado en el que nunca se toca.
-    const inicio = Date.parse(fila.inicio || "");
-    if (Number.isFinite(inicio) && inicio > ahora) abandonadosFuturos.push(fila);
-    else abandonadosPasados.push(fila);
-  }
-
-  return { subs, filas, cubiertos, abandonadosFuturos, abandonadosPasados, inevaluables };
+  return clasificarEventos(db, userId);
 }
 
 // LA MITAD DIFÍCIL, compartida: lista el calendario de FanSchedule de la cuenta y lo cruza contra
