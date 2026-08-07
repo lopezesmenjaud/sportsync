@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { API_BASE } from '../config'
 import { getUser, getUserId, clearUser } from '../auth'
-import { apiFetch } from '../api'
+import { useEstadoGoogle, invalidarEstadoGoogle } from '../googleStatus'
+import CalendarConnectModal from './CalendarConnectModal'
 
 const NAV_ITEMS = [
   { label: 'Mis favoritos',     path: '/dashboard' },
@@ -44,24 +45,15 @@ function BrandLogo({ symbolSize = 32, fontSize = 20 }) {
 
 export default function Sidebar({ activePath }) {
   const navigate = useNavigate()
-  // loading: true de entrada. Sin esto el estado inicial (connected/hasCalendarScope en false)
+  // cargando → no se pinta, y estado null (no sabemos) → tampoco. Sin eso, el estado inicial
   // pintaba "Google Calendar no conectado" con su botón en CADA carga de página, a TODOS —
   // incluida la gente que sí tiene el permiso — hasta que respondía /auth/google/status. Con
-  // Render dormido eso son varios segundos, no un parpadeo. Y empuja a reconectar a quien no lo
-  // necesita, que es una vuelta de más por la pantalla de permisos de Google.
-  // Mismo patrón que Dashboard.jsx (estado con loading + guard en el render): que los dos se
-  // comporten igual.
-  const [google, setGoogle] = useState({ connected: false, email: null, needsReauth: false, hasCalendarScope: false, loading: true })
+  // Render dormido eso son segundos, no un parpadeo, y empuja a reconectar a quien no lo necesita.
+  const { estado: google, cargando } = useEstadoGoogle()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [mostrarAviso, setMostrarAviso] = useState(false)
   const userId = getUserId()
   const user = getUser()
-
-  useEffect(() => {
-    apiFetch(`/auth/google/status/${userId}`)
-      .then(res => res.json())
-      .then(data => { if (data.ok) setGoogle({ connected: data.connected, email: data.email, needsReauth: data.needsReauth, hasCalendarScope: data.hasCalendarScope, loading: false }) })
-      .catch(() => setGoogle(prev => ({ ...prev, loading: false })))
-  }, [])
 
   const handleNav = (path) => {
     navigate(path)
@@ -137,7 +129,7 @@ export default function Sidebar({ activePath }) {
           </div>
         </div>
 
-        {google.needsReauth && (
+        {!cargando && google && google.needsReauth && (
           <div style={{
             background: '#FEF3E2', border: '1px solid #F18006', borderRadius: 8,
             padding: '8px 10px', margin: '4px 0 8px',
@@ -146,8 +138,11 @@ export default function Sidebar({ activePath }) {
               <span style={{ flexShrink: 0 }}>⚠️</span>
               <span>Tu conexión con Google expiró</span>
             </div>
+            {/* También abre el aviso: aquí la persona YA TENÍA el permiso, Google le vuelve a
+                mostrar el consentimiento, y si despaloma la casilla PIERDE algo que ya tenía.
+                Es el único camino por el que se puede retroceder. */}
             <button
-              onClick={() => { window.location.href = `${API_BASE}/auth/google` }}
+              onClick={() => setMostrarAviso(true)}
               style={{
                 width: '100%', marginTop: 6, padding: '5px 10px', borderRadius: 6,
                 border: 'none', background: '#F18006', color: '#fff',
@@ -159,7 +154,7 @@ export default function Sidebar({ activePath }) {
           </div>
         )}
 
-        {!google.loading && (google.connected && !google.needsReauth && google.hasCalendarScope ? (
+        {!cargando && google && (google.connected && !google.needsReauth && google.hasCalendarScope ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 8px 8px', fontSize: 10, color: 'rgba(74,222,128,0.9)' }}>
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#4ade80', flexShrink: 0 }} />
             Google Calendar conectado
@@ -170,8 +165,10 @@ export default function Sidebar({ activePath }) {
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#F18006', flexShrink: 0 }} />
             Google Calendar no conectado
           </div>
+          {/* Abre el aviso en vez de navegar: antes mandaba directo a la pantalla de permisos de
+              Google sin advertir nada de la casilla del calendario. */}
           <button
-            onClick={() => { window.location.href = `${API_BASE}/auth/google` }}
+            onClick={() => setMostrarAviso(true)}
             style={{
               width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
               padding: '8px 12px', margin: '2px 0 8px', borderRadius: 8,
@@ -292,6 +289,14 @@ export default function Sidebar({ activePath }) {
       }}>
         {sidebarContent}
       </div>
+
+      {mostrarAviso && (
+        <CalendarConnectModal
+          onConnect={() => { invalidarEstadoGoogle(); window.location.href = `${API_BASE}/auth/google` }}
+          onExplore={() => setMostrarAviso(false)}
+          etiquetaSecundaria="Ahora no"
+        />
+      )}
     </>
   )
 }

@@ -3,7 +3,8 @@ import { Analytics } from '@vercel/analytics/react'
 import { useState, useEffect } from 'react'
 import { setUser, setToken, isLoggedIn, getUserId } from './auth'
 import { API_BASE } from './config'
-import { apiFetch, consumirDestino } from './api'
+import { consumirDestino } from './api'
+import { useEstadoGoogle, invalidarEstadoGoogle } from './googleStatus'
 import { PUBLIC_PATHS, isPublicPath } from './publicRoutes'
 import EmailConsentModal from './components/EmailConsentModal'
 import CalendarConnectModal from './components/CalendarConnectModal'
@@ -110,37 +111,24 @@ function EmailConsentGate() {
 function CalendarConnectGate() {
   const { pathname } = useLocation()
   const enRutaPublica = isPublicPath(pathname)
-  const [status, setStatus] = useState({ loading: true, connected: false, hasCalendarScope: false })
   const [dismissed, setDismissed] = useState(() => sessionStorage.getItem('fanschedule_calendar_gate_dismissed') === 'true')
 
-  useEffect(() => {
-    // En ruta pública NI SE PREGUNTA. Este componente vive fuera de <Routes>, así que corre en
-    // todas las pantallas — incluidas /match/:matchId, /privacy y /terms. Antes el chequeo de
-    // rutas públicas estaba abajo, en el render: evitaba mostrar el modal pero NO evitaba la
-    // petición. Y /auth/google/status exige sesión, así que con un token vencido daba 401 y
-    // disparaba la redirección global; abrir el link de un partido desde el calendario rebotaba
-    // al landing. La petición aquí sobra: mejor no hacerla que hacer suave su fallo.
-    if (enRutaPublica) { setStatus(s => ({ ...s, loading: false })); return }
-    if (!isLoggedIn()) { setStatus(s => ({ ...s, loading: false })); return }
-    apiFetch(`/auth/google/status/${getUserId()}`)
-      .then(r => r.json())
-      .then(d => {
-        if (d.ok) setStatus({ loading: false, connected: d.connected, hasCalendarScope: d.hasCalendarScope })
-        else setStatus(s => ({ ...s, loading: false }))
-      })
-      .catch(() => setStatus(s => ({ ...s, loading: false })))
-  }, [enRutaPublica])
+  // En ruta pública NI SE PREGUNTA — el hook no dispara petición con activo=false. Este componente
+  // vive fuera de <Routes>, así que corre en todas las pantallas, incluidas /match/:matchId,
+  // /privacy y /terms; y /auth/google/status exige sesión, así que preguntar ahí con un token
+  // vencido daba 401 y disparaba la redirección global.
+  const { estado, cargando } = useEstadoGoogle(!enRutaPublica && isLoggedIn())
 
   // No bloquear en rutas públicas: el usuario debe poder leer el partido, la política o los
   // términos sin que se le encime un modal de conectar calendario.
   if (enRutaPublica) return null
 
-  // No mostrar: sin sesión, mientras carga (evita parpadeo), si ya lo descartó esta sesión,
-  // o si ya tiene el scope. Solo bloquea si está conectado SIN scope de Calendar.
-  if (!isLoggedIn() || status.loading || dismissed) return null
-  if (!(status.connected && !status.hasCalendarScope)) return null
+  // No mostrar: sin sesión, mientras carga (evita parpadeo), si no sabemos (estado null), si ya
+  // lo descartó esta sesión, o si ya tiene el scope. Solo bloquea si está conectado SIN scope.
+  if (!isLoggedIn() || cargando || !estado || dismissed) return null
+  if (!(estado.connected && !estado.hasCalendarScope)) return null
 
-  const handleConnect = () => { window.location.href = `${API_BASE}/auth/google` }
+  const handleConnect = () => { invalidarEstadoGoogle(); window.location.href = `${API_BASE}/auth/google` }
   const handleExplore = () => {
     sessionStorage.setItem('fanschedule_calendar_gate_dismissed', 'true')
     setDismissed(true)

@@ -1,13 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
 import Sidebar from '../components/Sidebar'
+import CalendarConnectModal from '../components/CalendarConnectModal'
 import { API_BASE } from '../config'
 import { apiFetch } from '../api'
+import { useEstadoGoogle, invalidarEstadoGoogle } from '../googleStatus'
 import { getUser, getUserId, clearUser } from '../auth'
 
 export default function Profile() {
   const user = getUser()
   const userId = getUserId()
-  const [google, setGoogle] = useState({ connected: false, email: null, hasCalendarScope: false, loading: true })
+  const { estado: google, cargando: googleCargando } = useEstadoGoogle()
+  const [mostrarAviso, setMostrarAviso] = useState(false)
   const [subscriptions, setSubscriptions] = useState([])
   const [matchCount, setMatchCount] = useState(0)
   const [deletingId, setDeletingId] = useState(null)
@@ -20,11 +23,8 @@ export default function Profile() {
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
   useEffect(() => {
-    apiFetch(`/auth/google/status/${userId}`)
-      .then(res => res.json())
-      .then(data => { if (data.ok) setGoogle({ connected: data.connected, email: data.email, hasCalendarScope: data.hasCalendarScope, loading: false }) })
-      .catch(() => setGoogle(prev => ({ ...prev, loading: false })))
-
+    // El estado de Google ya no se pide aquí: lo da useEstadoGoogle, compartido con el gate de
+    // App y el Sidebar.
     apiFetch(`/subscriptions/${userId}`)
       .then(res => res.json())
       .then(data => { if (data.ok) setSubscriptions(data.subscriptions) })
@@ -126,7 +126,7 @@ export default function Profile() {
               Miembro desde {new Date().toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}
             </div>
             <div style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
-              {google.loading ? (
+              {googleCargando || !google ? (
                 <span style={{ color: '#6b7280' }}>Verificando Calendar...</span>
               ) : google.connected ? (
                 <><span style={{ color: '#16a34a', fontWeight: 500 }}>✓ Google Calendar conectado</span><span style={{ color: '#6b7280' }}> — {google.email}</span></>
@@ -254,7 +254,7 @@ export default function Profile() {
 
         {/* BOTONES */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
-          {!google.loading && (
+          {!googleCargando && google && (
             google.connected && google.hasCalendarScope ? (
               <button
                 onClick={() => { if (window.confirm('¿Desconectar Google Calendar? Tus eventos NO se eliminarán del calendario.')) { /* TODO: endpoint de desconexión */ } }}
@@ -264,7 +264,7 @@ export default function Profile() {
               </button>
             ) : (
               <button
-                onClick={() => { window.location.href = `${API_BASE}/auth/google` }}
+                onClick={() => setMostrarAviso(true)}
                 style={{ width: '100%', background: '#F18006', border: 'none', borderRadius: 12, padding: '14px', fontSize: 14, fontWeight: 500, color: '#fff', cursor: 'pointer' }}
               >
                 + Conectar Google Calendar
@@ -280,6 +280,14 @@ export default function Profile() {
         </div>
 
       </div>
+
+      {mostrarAviso && (
+        <CalendarConnectModal
+          onConnect={() => { invalidarEstadoGoogle(); window.location.href = `${API_BASE}/auth/google` }}
+          onExplore={() => setMostrarAviso(false)}
+          etiquetaSecundaria="Ahora no"
+        />
+      )}
     </div>
   )
 }

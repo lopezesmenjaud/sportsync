@@ -59,11 +59,16 @@ de Julio. Arreglar la autorización del backend propio NO cuenta como tocar esto
 - **Antes de push:** `node --check` en cada archivo de backend tocado y
   `npm run build` en frontend/ si tocaste frontend.
 - **Al validar un deploy:** en DevTools palomear "Disable cache" y confirmar que
-  la petición sea 200 y NO 304 antes de concluir que algo está roto. En esta app
-  "Disable cache" NO basta: hay que ir a Application → Service workers → Bypass
-  for network. Se detecta mirando si cambió el nombre del bundle en la columna
-  Initiator; si no cambió, estás viendo la versión vieja aunque el deploy ya haya
-  terminado.
+  la petición sea 200 y NO 304 antes de concluir que algo está roto. Si hay un
+  service worker vivo, "Disable cache" NO basta: hay que ir a Application →
+  Service workers → Bypass for network. Se detecta mirando si cambió el nombre
+  del bundle en la columna Initiator; si no cambió, estás viendo la versión vieja
+  aunque el deploy ya haya terminado.
+  Matiz importante: hoy `public/sw.js` existe pero NADIE lo registra, y
+  `index.html:37` desregistra el que encuentre (con un comentario que dice "for
+  development"). Así que esto solo aplica a quien arrastre un service worker de
+  antes de ese código; para la mayoría no hay ninguno. No lo toques sin pedirlo:
+  la app SÍ es PWA instalable (`public/manifest.json`, `display: standalone`).
 - **Degradación limpia y orden de despliegue:** si un campo nuevo del backend no
   llega, el frontend no debe romperse. Y un cambio que el frontend necesita se
   despliega PRIMERO en el backend, tolerando ambas formas durante la transición.

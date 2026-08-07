@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { API_BASE } from '../config'
 import { consumirSesionExpirada } from '../api'
+import { invalidarEstadoGoogle } from '../googleStatus'
+import AvisoPermisoCalendario from '../components/AvisoPermisoCalendario'
+import CalendarConnectModal from '../components/CalendarConnectModal'
 
 const TICKER_ITEMS = [
   'Real Madrid vs Barcelona · Hoy 21:00',
@@ -46,7 +49,12 @@ export default function LandingPage() {
   // el landing sin explicación y parece que la app la desconectó sola. Se lee una sola vez.
   const [sesionExpirada] = useState(() => consumirSesionExpirada())
 
+  // Aquí la persona NO ha iniciado sesión, así que el modal lleva etiquetas propias: hablarle de
+  // "conecta tu calendario" antes de entrar suena a otra cosa distinta de la que acaba de picar.
+  const [mostrarAviso, setMostrarAviso] = useState(false)
+
   const handleLogin = () => {
+    invalidarEstadoGoogle()
     window.location.href = `${API_BASE}/auth/google`
   }
 
@@ -62,7 +70,10 @@ export default function LandingPage() {
       {/* Nav */}
       <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 28px', background: '#1C2430' }}>
         <img src="/fanschedule-logo.png" alt="FanSchedule" style={{ height: 80, objectFit: 'contain' }} />
-        <button onClick={handleLogin} style={{ background: '#F18006', color: '#fff', border: 'none', borderRadius: 24, padding: '10px 24px', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
+        {/* Abre el modal en vez de navegar. En teléfono este es el ÚNICO botón visible sin
+            scroll: el h1 de 52px empuja el hero y su aviso abajo del doblez, así que quien pica
+            aquí llegaría a la pantalla de Google sin haber leído nada. */}
+        <button onClick={() => setMostrarAviso(true)} style={{ background: '#F18006', color: '#fff', border: 'none', borderRadius: 24, padding: '10px 24px', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
           Empezar gratis
         </button>
       </nav>
@@ -84,6 +95,9 @@ export default function LandingPage() {
           <GoogleIcon />
           Continuar con Google — es gratis
         </button>
+        {/* Prepara para la pantalla de permisos ANTES de mandar a Google. Discreto a propósito:
+            si asusta más que el propio aviso de Google, es contraproducente. */}
+        <AvisoPermisoCalendario discreto />
       </div>
 
       {/* Ticker */}
@@ -151,6 +165,7 @@ export default function LandingPage() {
           <GoogleIcon />
           Continuar con Google
         </button>
+        <AvisoPermisoCalendario discreto />
       </div>
 
       {/* Footer */}
@@ -173,6 +188,16 @@ export default function LandingPage() {
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
       `}</style>
+
+      {mostrarAviso && (
+        <CalendarConnectModal
+          onConnect={handleLogin}
+          onExplore={() => setMostrarAviso(false)}
+          titulo="Antes de continuar con Google"
+          etiquetaPrincipal="Continuar con Google — es gratis"
+          etiquetaSecundaria="Ahora no"
+        />
+      )}
     </div>
   )
 }

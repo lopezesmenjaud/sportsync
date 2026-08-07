@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
+import CalendarConnectModal from '../components/CalendarConnectModal'
 import { API_BASE } from '../config'
 import { apiFetch } from '../api'
+import { useEstadoGoogle, invalidarEstadoGoogle } from '../googleStatus'
 import { getUserId } from '../auth'
 import { SPORT_EMOJI } from '../sportEmoji'
 
@@ -26,7 +28,8 @@ export default function Dashboard() {
   const [subscriptions, setSubscriptions] = useState([])
   const [loading, setLoading] = useState(true)
   const [deletingId, setDeletingId] = useState(null)
-  const [googleStatus, setGoogleStatus] = useState({ connected: false, email: null, needsReauth: false, hasCalendarScope: false, loading: true })
+  const { estado: googleStatus, cargando: googleCargando } = useEstadoGoogle()
+  const [mostrarAviso, setMostrarAviso] = useState(false)
   const userId = getUserId()
 
   useEffect(() => {
@@ -35,11 +38,8 @@ export default function Dashboard() {
       .then(data => { if (data.ok) setSubscriptions(data.subscriptions) })
       .catch(err => console.error('Error loading subscriptions:', err))
       .finally(() => setLoading(false))
-
-    apiFetch(`/auth/google/status/${userId}`)
-      .then(res => res.json())
-      .then(data => { if (data.ok) setGoogleStatus({ connected: data.connected, email: data.email, needsReauth: data.needsReauth, hasCalendarScope: data.hasCalendarScope, loading: false }) })
-      .catch(() => setGoogleStatus(prev => ({ ...prev, loading: false })))
+    // El estado de Google ya no se pide aquí: lo da useEstadoGoogle, compartido con el gate de
+    // App y el Sidebar. Antes esta pantalla disparaba la tercera petición idéntica de la carga.
   }, [])
 
   const handleDelete = async (sub) => {
@@ -66,7 +66,7 @@ export default function Dashboard() {
       <div style={{ flex: 1, background: '#faf9f7', padding: '32px 28px', overflowY: 'auto' }}>
 
         {/* Banner de reconexión (token de Google expirado) */}
-        {!googleStatus.loading && googleStatus.needsReauth && (
+        {!googleCargando && googleStatus && googleStatus.needsReauth && (
           <div style={{
             background: '#FEF3E2',
             border: '1px solid #F18006',
@@ -90,8 +90,10 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
+            {/* También abre el aviso: aquí la persona YA TENÍA el permiso y Google le vuelve a
+                mostrar el consentimiento. Si despaloma la casilla, PIERDE algo que ya tenía. */}
             <button
-              onClick={() => { window.location.href = `${API_BASE}/auth/google` }}
+              onClick={() => setMostrarAviso(true)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 background: '#F18006', color: '#fff', border: 'none', borderRadius: 20,
@@ -116,7 +118,7 @@ export default function Dashboard() {
         </div>
 
         {/* Banner Google Calendar */}
-        {!googleStatus.loading && !googleStatus.needsReauth && (!googleStatus.connected || !googleStatus.hasCalendarScope) && (
+        {!googleCargando && googleStatus && !googleStatus.needsReauth && (!googleStatus.connected || !googleStatus.hasCalendarScope) && (
           <div style={{
             background: '#ffffff',
             border: '1px solid #e5e7eb',
@@ -140,8 +142,10 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
+            {/* Abre el aviso en vez de navegar: antes mandaba directo a la pantalla de permisos
+                de Google sin advertir nada de la casilla del calendario. */}
             <button
-              onClick={() => { window.location.href = `${API_BASE}/auth/google` }}
+              onClick={() => setMostrarAviso(true)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 background: '#263140', color: '#fff', border: 'none', borderRadius: 20,
@@ -232,6 +236,14 @@ export default function Dashboard() {
           ))}
         </div>
       </div>
+
+      {mostrarAviso && (
+        <CalendarConnectModal
+          onConnect={() => { invalidarEstadoGoogle(); window.location.href = `${API_BASE}/auth/google` }}
+          onExplore={() => setMostrarAviso(false)}
+          etiquetaSecundaria="Ahora no"
+        />
+      )}
     </div>
   )
 }
