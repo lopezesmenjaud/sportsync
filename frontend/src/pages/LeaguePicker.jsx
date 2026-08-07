@@ -3,6 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import { apiFetch } from '../api'
 import { getUserId } from '../auth'
+import { obtenerEstadoGoogle, debeAvisarDePermiso, marcarAvisoDePermisoVisto, invalidarEstadoGoogle } from '../googleStatus'
+import CalendarConnectModal from '../components/CalendarConnectModal'
+import AvisoError from '../components/AvisoError'
+import { API_BASE } from '../config'
 
 const SPORT_LABELS = {
   futbol:            { emoji: '⚽', name: 'Fútbol' },
@@ -244,35 +248,77 @@ export default function LeaguePicker() {
   const [nationalMode, setNationalMode]         = useState(null)
   const [subscribingNational, setSubscribingNational] = useState(false)
   const [subscribedNational, setSubscribedNational]   = useState([])
+  const [errorSub, setErrorSub]                       = useState(null)
+  const [mostrarAviso, setMostrarAviso]               = useState(false)
 
+  // ORDEN: primero se guarda y se MIRA la respuesta; solo si se guardó bien se evalúa el permiso.
+  // Si el POST falló se muestra el error de la suscripción y NO el del calendario: mandar a
+  // arreglar un permiso a alguien cuya suscripción no se guardó es mandarlo a arreglar lo que no
+  // falló.
   const handleDirectSubscribe = async (league) => {
     if (subscribingId) return
     setSubscribingId(league.id)
+    setErrorSub(null)
     try {
-      await apiFetch('/subscriptions', {
+      const res = await apiFetch('/subscriptions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: userId, sport, competitionKey: league.id, competitionName: league.name, teamName: null })
       })
+      const data = await res.json()
+      if (!data.ok) {
+        // Antes esta línea marcaba la liga como seguida pasara lo que pasara: la UI afirmaba algo
+        // que no había ocurrido.
+        setErrorSub(`No se pudo seguir ${league.name}. Intenta de nuevo.`)
+        return
+      }
       setSubscribedIds(prev => [...prev, league.id])
-    } catch (e) { console.error(e) }
+      // Se ESPERA el estado en vez de leer la foto del hook: mientras carga, esa foto es
+      // undefined y debeAvisarDePermiso diría "no avisar". Alguien que se suscribe antes de que
+      // responda /auth/google/status —con Render dormido pasa— se iría sin aviso, y el código se
+      // vería igual de correcto que si funcionara. La promesa ya está en vuelo o cacheada: no
+      // cuesta una petición nueva.
+      if (debeAvisarDePermiso(await obtenerEstadoGoogle())) setMostrarAviso(true)
+    } catch (e) {
+      console.error(e)
+      setErrorSub(`No se pudo seguir ${league.name}. Revisa tu conexión.`)
+    }
     finally { setSubscribingId(null) }
   }
 
   const handleNationalSubscribe = async () => {
     if (!selectedCountry || !nationalMode || subscribingNational) return
     setSubscribingNational(true)
+    setErrorSub(null)
     try {
-      await apiFetch('/subscriptions', {
+      const res = await apiFetch('/subscriptions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: userId, sport, competitionKey: `national_${nationalMode}`, competitionName: `Selección ${selectedCountry.name}`, teamName: selectedCountry.name })
       })
+      const data = await res.json()
+      if (!data.ok) {
+        setErrorSub(`No se pudo seguir a ${selectedCountry.name}. Intenta de nuevo.`)
+        return
+      }
       setSubscribedNational(prev => [...prev, selectedCountry.name])
       setSelectedCountry(null); setNationalMode(null); setCountrySearch('')
-    } catch (e) { console.error(e) }
+      // Se ESPERA el estado en vez de leer la foto del hook: mientras carga, esa foto es
+      // undefined y debeAvisarDePermiso diría "no avisar". Alguien que se suscribe antes de que
+      // responda /auth/google/status —con Render dormido pasa— se iría sin aviso, y el código se
+      // vería igual de correcto que si funcionara. La promesa ya está en vuelo o cacheada: no
+      // cuesta una petición nueva.
+      if (debeAvisarDePermiso(await obtenerEstadoGoogle())) setMostrarAviso(true)
+    } catch (e) {
+      console.error(e)
+      setErrorSub(`No se pudo seguir a ${selectedCountry.name}. Revisa tu conexión.`)
+    }
     finally { setSubscribingNational(false) }
   }
+
+  // Cerrar el modal NUNCA deshace la suscripción: ya quedó guardada, y el backfill la atiende en
+  // cuanto llegue el permiso.
+  const cerrarAviso = () => { marcarAvisoDePermisoVisto(); setMostrarAviso(false) }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui, sans-serif' }}>
@@ -427,6 +473,21 @@ export default function LeaguePicker() {
           )
         })}
       </div>
+
+      <AvisoError mensaje={errorSub} onCerrar={() => setErrorSub(null)} />
+
+      {/* onConnect NO marca el aviso como visto, a propósito: quien pica Conectar y despaloma la
+          casilla en Google vuelve SIN permiso, y es justo la persona que más nos importa.
+          Marcarlo nos callaría con ella el resto de la sesión. Si sí lo concedió,
+          hasCalendarScope será true y el modal no vuelve a salir de todos modos. */}
+      {mostrarAviso && (
+        <CalendarConnectModal
+          lineaDeEntrada="Para agendarte los partidos que sigues necesitamos permiso de tu Google Calendar."
+          onConnect={() => { invalidarEstadoGoogle(); window.location.href = `${API_BASE}/auth/google` }}
+          onExplore={cerrarAviso}
+          etiquetaSecundaria="Ahora no"
+        />
+      )}
     </div>
   )
 }

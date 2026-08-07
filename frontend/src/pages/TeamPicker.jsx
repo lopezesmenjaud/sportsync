@@ -4,6 +4,10 @@ import Sidebar from '../components/Sidebar'
 import TeamSubscriptionModal from '../components/TeamSubscriptionModal'
 import { apiFetch } from '../api'
 import { getUserId } from '../auth'
+import { obtenerEstadoGoogle, debeAvisarDePermiso, marcarAvisoDePermisoVisto, invalidarEstadoGoogle } from '../googleStatus'
+import CalendarConnectModal from '../components/CalendarConnectModal'
+import AvisoError from '../components/AvisoError'
+import { API_BASE } from '../config'
 
 export default function TeamPicker() {
   const { sport, leagueId } = useParams()
@@ -15,17 +19,14 @@ export default function TeamPicker() {
   const isTennis  = sport === 'tenis'
   const userId = getUserId()
 
-  // ── DIAGNÓSTICO — quitar después de confirmar que funciona ──
-  console.log('STATE recibido:', state)
-  console.log('LEAGUE:', league)
-  console.log('leagueId:', leagueId)
-
   const [search, setSearch]             = useState('')
   const [selectedTeam, setSelectedTeam] = useState(null)
   const [subscribed, setSubscribed]     = useState([])
   const [saving, setSaving]             = useState(false)
   const [saved, setSaved]               = useState(false)
   const [newlyAdded, setNewlyAdded]     = useState([])
+  const [errorSub, setErrorSub]         = useState(null)
+  const [mostrarAviso, setMostrarAviso] = useState(false)
   const [teams, setTeams]               = useState([])
   const [loadingTeams, setLoadingTeams] = useState(true)
   const [teamsError, setTeamsError]     = useState(null)
@@ -83,6 +84,9 @@ export default function TeamPicker() {
       competitionName: league.name || null,
       teamName: isFullLeague ? null : team.name,
     }
+    setErrorSub(null)
+    // ORDEN: primero se guarda y se mira la respuesta; el permiso se evalúa solo si se guardó.
+    // Si el POST falla se muestra el error de la suscripción y NO el del calendario.
     try {
       const res  = await apiFetch('/subscriptions', {
         method: 'POST',
@@ -90,24 +94,48 @@ export default function TeamPicker() {
         body: JSON.stringify(subscription)
       })
       const data = await res.json()
-      if (data.ok) setNewlyAdded(prev => [...prev, team])
+      if (!data.ok) {
+        // Antes esto no mentía —no marcaba nada— pero se quedaba callado: sin marca y sin aviso.
+        setErrorSub(`No se pudo seguir a ${team.name}. Intenta de nuevo.`)
+        return
+      }
+      setNewlyAdded(prev => [...prev, team])
+      // Se ESPERA el estado en vez de leer la foto del hook: mientras carga, esa foto es undefined
+      // y debeAvisarDePermiso diría "no avisar". Quien se suscriba antes de que responda
+      // /auth/google/status —con Render dormido pasa— se iría sin aviso. La promesa ya está en
+      // vuelo o cacheada: no cuesta una petición nueva.
+      if (debeAvisarDePermiso(await obtenerEstadoGoogle())) setMostrarAviso(true)
     } catch (error) {
       console.error('Error saving subscription:', error)
+      setErrorSub(`No se pudo seguir a ${team.name}. Revisa tu conexión.`)
     }
   }
 
+  // Cerrar el modal NUNCA deshace la suscripción: ya quedó guardada.
+  const cerrarAviso = () => { marcarAvisoDePermisoVisto(); setMostrarAviso(false) }
+
   const handleSaveAndSync = async () => {
     setSaving(true)
+    setErrorSub(null)
     try {
       const res  = await apiFetch('/subscriptions/sync', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }
       })
       const data = await res.json()
-      console.log('Sync result:', data)
+      // Antes setSaved(true) y la navegación corrían pasara lo que pasara: la barra se ponía
+      // verde con "guardado" y la persona se iba al dashboard creyendo que quedó listo aunque el
+      // sync hubiera fallado.
+      // El mensaje aclara que los equipos SÍ están guardados: cada uno se guardó en su propio
+      // POST /subscriptions; lo que falló es la sincronización, que es un paso aparte.
+      if (!data.ok) {
+        setErrorSub('No se pudo sincronizar con tu calendario. Tus equipos quedaron guardados; intenta de nuevo.')
+        return
+      }
       setSaved(true)
       setTimeout(() => navigate('/dashboard'), 1500)
     } catch (error) {
       console.error('Error syncing:', error)
+      setErrorSub('No se pudo sincronizar con tu calendario. Tus equipos quedaron guardados; revisa tu conexión.')
     } finally {
       setSaving(false)
     }
@@ -279,6 +307,19 @@ export default function TeamPicker() {
           sport={sport}
           onConfirm={handleConfirm}
           onCancel={() => setSelectedTeam(null)}
+        />
+      )}
+
+      <AvisoError mensaje={errorSub} onCerrar={() => setErrorSub(null)} />
+
+      {/* onConnect NO marca el aviso como visto, a propósito: quien pica Conectar y despaloma la
+          casilla en Google vuelve SIN permiso, y es justo la persona que más nos importa. */}
+      {mostrarAviso && (
+        <CalendarConnectModal
+          lineaDeEntrada="Para agendarte los partidos que sigues necesitamos permiso de tu Google Calendar."
+          onConnect={() => { invalidarEstadoGoogle(); window.location.href = `${API_BASE}/auth/google` }}
+          onExplore={cerrarAviso}
+          etiquetaSecundaria="Ahora no"
         />
       )}
     </div>

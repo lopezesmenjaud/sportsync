@@ -95,6 +95,33 @@ if (typeof document !== 'undefined') {
   })
 }
 
+// Clave PROPIA, distinta de fanschedule_calendar_gate_dismissed: el gate y este aviso se
+// descartan por separado. Sesión del navegador, no localStorage: que vuelva a aparecer en una
+// visita nueva.
+const CLAVE_AVISO_VISTO = 'fanschedule_aviso_permiso_visto'
+
+/**
+ * ¿Hay que avisar del permiso a alguien que acaba de suscribirse?
+ *
+ * Vive aquí, junto a la definición de "null = no sabemos", porque la regla más importante es
+ * justamente esa: con estado null NO se avisa. Decirle "necesitamos permiso" a quien ya lo dio lo
+ * empuja de vuelta a la pantalla de consentimiento, donde puede despalomar la casilla y PERDER lo
+ * que ya tenía.
+ */
+export function debeAvisarDePermiso(estado) {
+  if (!estado) return false                 // no sabemos → callarse
+  if (estado.hasCalendarScope) return false // ya lo tiene → nada que pedir
+  try {
+    if (sessionStorage.getItem(CLAVE_AVISO_VISTO) === '1') return false
+  } catch { /* sin sessionStorage: se muestra, que es el lado útil */ }
+  return true
+}
+
+// Una vez por sesión. El recordatorio permanente es el banner del dashboard.
+export function marcarAvisoDePermisoVisto() {
+  try { sessionStorage.setItem(CLAVE_AVISO_VISTO, '1') } catch { /* sin storage: se repetirá */ }
+}
+
 /**
  * activo=false → no se pide nada y el estado queda en null (no se pinta). Lo usa el gate de App
  * para no consultar en rutas públicas: ahí la petición sobra y además exige sesión.
