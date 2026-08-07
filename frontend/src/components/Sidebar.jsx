@@ -44,7 +44,14 @@ function BrandLogo({ symbolSize = 32, fontSize = 20 }) {
 
 export default function Sidebar({ activePath }) {
   const navigate = useNavigate()
-  const [google, setGoogle] = useState({ connected: false, email: null, needsReauth: false, hasCalendarScope: false })
+  // loading: true de entrada. Sin esto el estado inicial (connected/hasCalendarScope en false)
+  // pintaba "Google Calendar no conectado" con su botón en CADA carga de página, a TODOS —
+  // incluida la gente que sí tiene el permiso — hasta que respondía /auth/google/status. Con
+  // Render dormido eso son varios segundos, no un parpadeo. Y empuja a reconectar a quien no lo
+  // necesita, que es una vuelta de más por la pantalla de permisos de Google.
+  // Mismo patrón que Dashboard.jsx (estado con loading + guard en el render): que los dos se
+  // comporten igual.
+  const [google, setGoogle] = useState({ connected: false, email: null, needsReauth: false, hasCalendarScope: false, loading: true })
   const [drawerOpen, setDrawerOpen] = useState(false)
   const userId = getUserId()
   const user = getUser()
@@ -52,8 +59,8 @@ export default function Sidebar({ activePath }) {
   useEffect(() => {
     apiFetch(`/auth/google/status/${userId}`)
       .then(res => res.json())
-      .then(data => { if (data.ok) setGoogle({ connected: data.connected, email: data.email, needsReauth: data.needsReauth, hasCalendarScope: data.hasCalendarScope }) })
-      .catch(() => {})
+      .then(data => { if (data.ok) setGoogle({ connected: data.connected, email: data.email, needsReauth: data.needsReauth, hasCalendarScope: data.hasCalendarScope, loading: false }) })
+      .catch(() => setGoogle(prev => ({ ...prev, loading: false })))
   }, [])
 
   const handleNav = (path) => {
@@ -152,7 +159,7 @@ export default function Sidebar({ activePath }) {
           </div>
         )}
 
-        {google.connected && !google.needsReauth && google.hasCalendarScope ? (
+        {!google.loading && (google.connected && !google.needsReauth && google.hasCalendarScope ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 8px 8px', fontSize: 10, color: 'rgba(74,222,128,0.9)' }}>
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#4ade80', flexShrink: 0 }} />
             Google Calendar conectado
@@ -178,7 +185,7 @@ export default function Sidebar({ activePath }) {
             Conectar Calendar
           </button>
           </>
-        )}
+        ))}
 
         <button
           onClick={() => { clearUser(); window.location.href = '/' }}
