@@ -88,6 +88,12 @@ de Julio. Arreglar la autorización del backend propio NO cuenta como tocar esto
   — la lista técnica nunca se va a vaciar y ya no es lo que decide si el proyecto
   avanza.
 
+## Idioma: TODO en español, sin i18n
+La app va entera en español. NO proponer detección por navegador, diccionarios de
+strings ni librerías de i18n: sería maquinaria para un solo idioma. Decidido el
+7 ago 2026, después de considerarlo y descartarlo. El momento de meter el
+mecanismo es cuando exista una versión completa en inglés, no antes.
+
 ## Deuda técnica conocida (no tocar sin pedirlo)
 - **Rama legacy: NO barrerla todavía.** Con `ALLOW_LEGACY_USERID=false` ya no se
   ejecuta (el camino viejo de `requireUser`, `deleteById` en

@@ -83,13 +83,13 @@ export default function LandingPage() {
         <div style={{ position: 'absolute', top: -100, left: '50%', transform: 'translateX(-50%)', width: 600, height: 400, background: 'radial-gradient(ellipse, rgba(16,177,199,0.25) 0%, transparent 70%)', pointerEvents: 'none' }} />
         <div className="landing-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(16,177,199,0.15)', border: '1px solid rgba(16,177,199,0.35)', color: '#10B1C7', fontSize: 12, fontWeight: 500, padding: '6px 16px', borderRadius: 24 }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B1C7' }} />
-          Your sports schedule, built for fans.
+          Tu calendario deportivo, hecho para fans.
         </div>
         <h1 className="landing-h1" style={{ fontWeight: 500, color: '#fff', lineHeight: 1.1, maxWidth: 680, marginLeft: 'auto', marginRight: 'auto' }}>
-          Never lose track of the<br />matches you <span style={{ color: '#F18006' }}>care about</span>
+          Nunca te pierdas<br />los partidos que <span style={{ color: '#F18006' }}>te importan</span>
         </h1>
         <p className="landing-sub" style={{ color: '#8899AA', maxWidth: 460, lineHeight: 1.7 }}>
-          A sports schedule that feels built around your fan life. Connect your Google Calendar and every match appears automatically.
+          Una agenda deportiva armada alrededor de lo que sigues. Conecta tu Google Calendar y cada partido se agenda solo.
         </p>
         <button onClick={handleLogin} style={{ display: 'inline-flex', alignItems: 'center', gap: 12, background: '#F18006', color: '#fff', fontSize: 15, fontWeight: 500, padding: '15px 32px', borderRadius: 50, border: 'none', cursor: 'pointer' }}>
           <GoogleIcon />
