@@ -69,7 +69,7 @@ export default function LandingPage() {
 
       {/* Nav */}
       <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 28px', background: '#1C2430' }}>
-        <img src="/fanschedule-logo.png" alt="FanSchedule" style={{ height: 80, objectFit: 'contain' }} />
+        <img src="/fanschedule-logo.png" alt="FanSchedule" className="landing-logo" style={{ objectFit: 'contain' }} />
         {/* Abre el modal en vez de navegar. En teléfono este es el ÚNICO botón visible sin
             scroll: el h1 de 52px empuja el hero y su aviso abajo del doblez, así que quien pica
             aquí llegaría a la pantalla de Google sin haber leído nada. */}
@@ -79,16 +79,16 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero */}
-      <div style={{ background: '#1C2430', padding: '72px 28px 80px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+      <div className="landing-hero" style={{ background: '#1C2430', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', top: -100, left: '50%', transform: 'translateX(-50%)', width: 600, height: 400, background: 'radial-gradient(ellipse, rgba(16,177,199,0.25) 0%, transparent 70%)', pointerEvents: 'none' }} />
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(16,177,199,0.15)', border: '1px solid rgba(16,177,199,0.35)', color: '#10B1C7', fontSize: 12, fontWeight: 500, padding: '6px 16px', borderRadius: 24, marginBottom: 28 }}>
+        <div className="landing-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(16,177,199,0.15)', border: '1px solid rgba(16,177,199,0.35)', color: '#10B1C7', fontSize: 12, fontWeight: 500, padding: '6px 16px', borderRadius: 24 }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B1C7' }} />
           Your sports schedule, built for fans.
         </div>
-        <h1 style={{ fontSize: 52, fontWeight: 500, color: '#fff', lineHeight: 1.1, marginBottom: 24, maxWidth: 680, marginLeft: 'auto', marginRight: 'auto' }}>
+        <h1 className="landing-h1" style={{ fontWeight: 500, color: '#fff', lineHeight: 1.1, maxWidth: 680, marginLeft: 'auto', marginRight: 'auto' }}>
           Never lose track of the<br />matches you <span style={{ color: '#F18006' }}>care about</span>
         </h1>
-        <p style={{ fontSize: 17, color: '#8899AA', maxWidth: 460, margin: '0 auto 44px', lineHeight: 1.7 }}>
+        <p className="landing-sub" style={{ color: '#8899AA', maxWidth: 460, lineHeight: 1.7 }}>
           A sports schedule that feels built around your fan life. Connect your Google Calendar and every match appears automatically.
         </p>
         <button onClick={handleLogin} style={{ display: 'inline-flex', alignItems: 'center', gap: 12, background: '#F18006', color: '#fff', fontSize: 15, fontWeight: 500, padding: '15px 32px', borderRadius: 50, border: 'none', cursor: 'pointer' }}>
@@ -187,6 +187,24 @@ export default function LandingPage() {
           100% { transform: translateX(-50%); }
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        /* Tamaños del hero. Estaban en línea con valores fijos, y el h1 de 52px empujaba el
+           botón principal —el llamado a la acción— fuera del doblez en teléfono.
+           Media query y no clamp: es el patrón que ya usa el proyecto (index.css, App.css,
+           Sidebar.jsx). El corte en 768px es el mismo que usa index.css. */
+        .landing-logo  { height: 80px; }
+        .landing-hero  { padding: 72px 28px 80px; }
+        .landing-badge { margin-bottom: 28px; }
+        .landing-h1    { font-size: 52px; margin-bottom: 24px; }
+        .landing-sub   { font-size: 17px; margin: 0 auto 44px; }
+
+        @media (max-width: 768px) {
+          .landing-logo  { height: 56px; }
+          .landing-hero  { padding: 40px 20px 48px; }
+          .landing-badge { margin-bottom: 16px; }
+          .landing-h1    { font-size: 30px; margin-bottom: 16px; }
+          .landing-sub   { font-size: 15px; margin: 0 auto 28px; }
+        }
       `}</style>
 
       {mostrarAviso && (
