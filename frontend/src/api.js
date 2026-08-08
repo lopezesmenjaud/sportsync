@@ -100,12 +100,25 @@ export function consumirSesionExpirada() {
   } catch { return false }
 }
 
+// Un destino solo se acepta si es INTERNO: una sola barra al inicio, nunca "//" y sin barras
+// invertidas. Con "//evil.com" o "/\evil.com" react-router reinterpreta la ruta como URL absoluta
+// y navega a otro dominio — es el open redirect de los avisos GHSA-2j2x-hqr9-3h42 y
+// GHSA-wrjc-x8rr-h8h6.
+//
+// Hoy el valor lo escribimos nosotros desde window.location.pathname, así que no es alcanzable.
+// Pero eso es depender de que no pase; esto quita la posibilidad.
+function esDestinoInterno(destino) {
+  return typeof destino === 'string' && /^\/(?!\/)/.test(destino) && !destino.includes('\\')
+}
+
 // Lo consume App tras volver del OAuth, para aterrizar donde la persona iba.
+// La validación va AQUÍ y no en el llamador: así esta función no puede devolver un destino
+// externo, sin importar quién la use ni qué haya quedado guardado de antes.
 export function consumirDestino() {
   try {
     const destino = sessionStorage.getItem(DESTINO_KEY)
     if (destino) sessionStorage.removeItem(DESTINO_KEY)
-    return destino
+    return esDestinoInterno(destino) ? destino : null
   } catch { return null }
 }
 
