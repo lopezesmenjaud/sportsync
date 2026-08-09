@@ -17,7 +17,7 @@ export default function PrivacyPolicy() {
       {/* Content */}
       <main style={{ maxWidth: 760, margin: '0 auto', padding: '48px 28px 80px', lineHeight: 1.7 }}>
         <h1 style={{ fontSize: 36, fontWeight: 500, marginBottom: 8 }}>Política de privacidad</h1>
-        <p style={{ fontSize: 14, color: '#6B7280', marginBottom: 40 }}>Última actualización: 18 de julio de 2026</p>
+        <p style={{ fontSize: 14, color: '#6B7280', marginBottom: 40 }}>Última actualización: 9 de agosto de 2026</p>
 
         <p style={{ fontSize: 16, marginBottom: 32 }}>
           En FanSchedule respetamos tu privacidad. Esta página explica qué información recopilamos,
@@ -38,6 +38,7 @@ export default function PrivacyPolicy() {
             <li>Para <strong>sincronizar los partidos</strong> de tus ligas y equipos en tu Google Calendar.</li>
             <li>Para <strong>enviarte novedades del producto</strong> y comunicaciones de partners, únicamente si diste tu consentimiento.</li>
             <li>Para mostrarte <strong>información relevante de deportes</strong> (próximos partidos, eventos cercanos, planificador de viajes).</li>
+            <li>Para mostrarte <strong>publicidad relacionada con los deportes, ligas y equipos que sigues</strong> dentro de FanSchedule, y con tu país o región. Esa selección la hiciste tú en la app o se deduce de tu conexión, y no proviene de tu Google Calendar.</li>
           </ul>
         </Section>
 
@@ -50,6 +51,7 @@ export default function PrivacyPolicy() {
             <li><strong>OpenStreetMap / Nominatim</strong>: en las funciones "Cerca de mí" y "Planear viaje", tu navegador envía tu ubicación (coordenadas) o el nombre de una ciudad a este servicio para determinar a qué ciudad corresponde.</li>
             <li><strong>Anthropic (Claude)</strong>: enviamos datos de los partidos (equipos, estadios) y la ciudad que consultas, para generar la información de "dónde ver", "eventos cercanos" y resúmenes de partidos. No enviamos tu nombre ni tu correo.</li>
             <li><strong>ip-api.com</strong>: cuando abres la app, enviamos tu dirección IP a este servicio para detectar tu país automáticamente. No almacenamos tu IP.</li>
+            <li><strong>Google AdSense</strong>: mostramos publicidad en el sitio a través de Google AdSense. Google y sus socios pueden usar cookies o identificadores similares en tu navegador para mostrar y medir anuncios.</li>
           </ul>
           <p style={{ marginTop: 24, marginBottom: 16 }}>
             También obtenemos información de las siguientes fuentes, a las que no les enviamos tus datos personales — solo consultas sobre partidos y eventos:
@@ -76,6 +78,13 @@ export default function PrivacyPolicy() {
             <li>no se venden ni se transfieren a terceros, salvo lo estrictamente necesario para operar la app o cuando la ley lo exija;</li>
             <li>no son leídos por ninguna persona, salvo que tú lo autorices expresamente o sea requerido por ley.</li>
           </ul>
+          <p style={{ marginTop: 24 }}>
+            Esto sigue siendo cierto ahora que el sitio muestra publicidad: no compartimos los datos
+            de tu Google Calendar con Google AdSense, con anunciantes ni con ningún tercero con fines
+            publicitarios, y no los usamos para elegir ni segmentar los anuncios que ves. La publicidad
+            se selecciona con el contenido de la página y con los deportes, ligas y equipos que tú
+            elegiste seguir dentro de FanSchedule — nunca con información de tu calendario.
+          </p>
         </Section>
 
         <Section title="5. Medidas de protección de datos">
@@ -88,7 +97,7 @@ export default function PrivacyPolicy() {
             <li><strong>Cifrado de credenciales en reposo</strong>: los tokens de acceso y actualización de Google que autorizan la sincronización con tu calendario se almacenan cifrados con AES-256-GCM, un algoritmo de cifrado autenticado. Las claves de cifrado se gestionan mediante variables de entorno del servidor y nunca se incluyen en el código fuente ni en el repositorio.</li>
             <li><strong>Sin registro de credenciales</strong>: los tokens de acceso no se escriben en registros (logs), ni completos ni parciales, y no se exponen en ninguna respuesta de la aplicación ni en su interfaz.</li>
             <li><strong>Sin acceso humano a tu calendario</strong>: la creación y actualización de eventos es un proceso totalmente automatizado. Ninguna persona de FanSchedule lee, revisa ni accede al contenido de tu Google Calendar.</li>
-            <li><strong>Minimización de datos</strong>: solicitamos únicamente los permisos necesarios para el funcionamiento del servicio y almacenamos solo los datos indispensables para operarlo. No recopilamos ni almacenamos tu ubicación, ni datos de pago, ni información de contacto adicional.</li>
+            <li><strong>Minimización de datos</strong>: solicitamos únicamente los permisos necesarios para el funcionamiento del servicio y almacenamos solo los datos indispensables para operarlo. No almacenamos tu ubicación precisa ni datos de pago. Para mostrarte información y publicidad relevantes podemos registrar tu país o región aproximada, deducidos de tu dirección IP, que no guardamos. Las coordenadas que usa "Cerca de mí" se envían en el momento y no se almacenan.</li>
             <li><strong>Acceso restringido</strong>: las funciones administrativas del servicio están limitadas y las operaciones sensibles solo pueden ejecutarse desde el propio servidor, no de forma remota.</li>
             <li><strong>Revocación en cualquier momento</strong>: puedes retirar el acceso de FanSchedule a tu cuenta de Google cuando quieras desde la configuración de seguridad de tu cuenta de Google, sin necesidad de contactarnos.</li>
           </ul>
@@ -98,16 +107,34 @@ export default function PrivacyPolicy() {
           <p>
             Puedes cerrar sesión en cualquier momento desde la app. Si quieres eliminar por completo
             tu cuenta y todos los datos asociados, escríbenos a{' '}
-            <a href="mailto:lopezesmenjaud@gmail.com" style={linkStyle}>lopezesmenjaud@gmail.com</a>{' '}
+            <a href="mailto:julio.lopez@fanschedule.com" style={linkStyle}>julio.lopez@fanschedule.com</a>{' '}
             y procesaremos tu solicitud.
           </p>
         </Section>
 
-        <Section title="7. Cookies y almacenamiento">
-          <p>
+        <Section title="7. Cookies, almacenamiento y publicidad">
+          <p style={{ marginBottom: 16 }}>
             Usamos <code style={codeStyle}>localStorage</code> del navegador para mantener tu sesión
-            iniciada y recordar tus preferencias (deportes, equipos, consentimiento de email). No usamos
-            cookies de rastreo publicitario.
+            iniciada y recordar tus preferencias (deportes, equipos, consentimiento de email).
+          </p>
+          <p style={{ marginBottom: 16 }}>
+            FanSchedule se sostiene con publicidad, que mostramos a través de Google AdSense. Para eso,
+            Google —como proveedor externo— y sus socios pueden usar cookies o identificadores similares
+            en tu navegador para mostrar y medir anuncios, incluidos anuncios basados en tus visitas
+            anteriores a este o a otros sitios.
+          </p>
+          <p style={{ marginBottom: 16 }}>
+            Puedes desactivar la publicidad personalizada cuando quieras desde la Configuración de
+            anuncios de tu cuenta de Google, en{' '}
+            <a href="https://www.google.com/settings/ads" target="_blank" rel="noopener noreferrer" style={linkStyle}>google.com/settings/ads</a>.
+            También puedes desactivar el uso de cookies publicitarias de terceros en{' '}
+            <a href="https://www.aboutads.info" target="_blank" rel="noopener noreferrer" style={linkStyle}>www.aboutads.info</a>,
+            o bloquear y borrar cookies desde la configuración de tu navegador. Nada de eso te impide
+            usar FanSchedule.
+          </p>
+          <p>
+            Los anuncios que ves <strong>NO</strong> se eligen con información de tu Google Calendar
+            (ver sección 4).
           </p>
         </Section>
 
@@ -127,7 +154,7 @@ export default function PrivacyPolicy() {
         <Section title="10. Contacto">
           <p>
             Si tienes dudas sobre esta política o quieres ejercer tus derechos sobre tus datos,
-            escríbenos a <a href="mailto:lopezesmenjaud@gmail.com" style={linkStyle}>lopezesmenjaud@gmail.com</a>.
+            escríbenos a <a href="mailto:julio.lopez@fanschedule.com" style={linkStyle}>julio.lopez@fanschedule.com</a>.
           </p>
         </Section>
       </main>

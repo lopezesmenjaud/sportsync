@@ -94,6 +94,26 @@ strings ni librerías de i18n: sería maquinaria para un solo idioma. Decidido e
 7 ago 2026, después de considerarlo y descartarlo. El momento de meter el
 mecanismo es cuando exista una versión completa en inglés, no antes.
 
+## Publicidad: de dónde puede salir un segmento
+
+Se PUEDE segmentar publicidad con lo que la persona eligió dentro de la app
+—deportes, ligas, equipos que sigue—, con su país o región, y con el contenido de
+la página que está viendo. Es dato de primera mano y está declarado en la
+Política de Privacidad.
+
+NO se puede usar NADA que venga de las APIs de Google —el contenido del
+calendario, sus eventos, sus otros calendarios— para elegir, segmentar ni medir
+publicidad. Lo prohíbe la política de Uso Limitado de Google y pondría en riesgo
+la verificación de OAuth, que ya está aprobada.
+
+La regla corta: el segmento sale de lo que la persona nos dijo, nunca de lo que
+leímos de su calendario. Si alguna vez se propone deducir intereses a partir de
+eventos del calendario, la respuesta es no.
+
+Y cuando se sirva por Ad Manager: las etiquetas que acompañan la petición de
+anuncio (liga, equipo, país) NUNCA pueden llevar nada que identifique a la
+persona — ni correo, ni userId.
+
 ## Deuda técnica conocida (no tocar sin pedirlo)
 - **Rama legacy: NO barrerla todavía.** Con `ALLOW_LEGACY_USERID=false` ya no se
   ejecuta (el camino viejo de `requireUser`, `deleteById` en
