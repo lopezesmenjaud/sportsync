@@ -17,7 +17,7 @@ export default function TermsOfService() {
       {/* Content */}
       <main style={{ maxWidth: 760, margin: '0 auto', padding: '48px 28px 80px', lineHeight: 1.7 }}>
         <h1 style={{ fontSize: 36, fontWeight: 500, marginBottom: 8 }}>Términos del Servicio</h1>
-        <p style={{ fontSize: 14, color: '#6B7280', marginBottom: 40 }}>Última actualización: 17 de julio de 2026</p>
+        <p style={{ fontSize: 14, color: '#6B7280', marginBottom: 40 }}>Última actualización: 9 de agosto de 2026</p>
 
         <p style={{ fontSize: 16, marginBottom: 32 }}>
           Bienvenido a FanSchedule. Estos Términos del Servicio ("Términos") regulan el uso de la
@@ -80,6 +80,12 @@ export default function TermsOfService() {
             de sus condiciones y precios antes de que la actives. El plan gratuito seguirá disponible
             con independencia de que existan opciones de pago.
           </p>
+          <p style={{ marginTop: 16 }}>
+            FanSchedule es gratuito y se sostiene con publicidad. Al usar el servicio aceptas que se
+            muestren anuncios de terceros dentro del sitio. La forma en que esos anuncios usan cookies
+            y datos se explica en nuestra{' '}
+            <Link to="/privacy" style={linkStyle}>Política de Privacidad</Link>.
+          </p>
         </Section>
 
         <Section title="7. Disponibilidad del Servicio">
@@ -128,7 +134,7 @@ export default function TermsOfService() {
         <Section title="12. Contacto">
           <p>
             Si tienes dudas sobre estos Términos, escríbenos a{' '}
-            <a href="mailto:lopezesmenjaud@gmail.com" style={linkStyle}>lopezesmenjaud@gmail.com</a>.
+            <a href="mailto:julio.lopez@fanschedule.com" style={linkStyle}>julio.lopez@fanschedule.com</a>.
           </p>
         </Section>
       </main>
