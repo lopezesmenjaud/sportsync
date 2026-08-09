@@ -7,3 +7,43 @@ sportsync.db-shm
 sportsync.db-wal
 .claude/
 frontend/dist/
+
+# ── Video y material pesado de producción ──
+# Git guarda CADA versión de CADA archivo para siempre. Un video que entre por accidente
+# infla el repositorio de forma permanente, y borrarlo después no lo deshace: sigue en la
+# historia. Deshacerlo de verdad exige reescribir la historia, que es una operación fea y
+# que rompe cualquier clon existente.
+#
+# Por extensión y no por carpeta a propósito: la próxima tanda va a estar en otro lado.
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.m4v
+*.wmv
+*.flv
+*.mpg
+*.mpeg
+
+# Proyectos y cachés de edición de video
+*.prproj
+*.aep
+*.veg
+*.fcpbundle
+*.drp
+
+# Formatos de trabajo de imagen: pesados y nunca se sirven al navegador.
+# OJO: png, jpg, svg y webp NO se ignoran a propósito. El repo rastrea 13 imágenes
+# legítimas (logo, iconos, og-image), y meterlas aquí haría que un icono nuevo se
+# ignorara EN SILENCIO el día que se agregue.
+*.psd
+*.ai
+*.xcf
+*.tif
+*.tiff
+*.heic
+*.cr2
+*.nef
+*.dng
+*.raw
