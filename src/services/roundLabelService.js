@@ -110,7 +110,7 @@ si es una jornada regular sin fase distintiva. Sin números, sin explicación, s
     }),
   });
   const data = await response.json();
-  const { text, blockTypes } = readAnthropicText(data);
+  const { text, blockTypes } = readAnthropicText(data, "roundLabel");
   if (!text) {
     console.error(`[roundLabel] Anthropic sin bloque text (bloques: ${JSON.stringify(blockTypes)})`);
     return null;
