@@ -229,6 +229,23 @@ async function initializeDatabase() {
     `);
     console.log("✅ League country cache table ready");
 
+    // Equipos por liga. NO se borra al arrancar, a propósito y por la misma razón que
+    // league_country_cache: es justo lo que permite contestar sin depender de TheSportsDB. Si se
+    // limpiara en cada deploy, con Render reiniciando en cada push el caché estaría frío casi
+    // siempre y no serviría de nada.
+    //
+    // Invariante: aquí NUNCA se escribe una lista vacía (ver setTeamsCache en server.js). Por eso
+    // "hay fila" significa "hay equipos utilizables", sin tener que comprobarlo al leer.
+    await runAsync(`
+      CREATE TABLE IF NOT EXISTS league_teams_cache (
+        leagueId TEXT PRIMARY KEY,
+        leagueName TEXT,
+        data TEXT NOT NULL,
+        cachedAt TEXT NOT NULL
+      )
+    `);
+    console.log("✅ League teams cache table ready");
+
     await runAsync(`
       CREATE TABLE IF NOT EXISTS email_consent (
         userId TEXT PRIMARY KEY,
