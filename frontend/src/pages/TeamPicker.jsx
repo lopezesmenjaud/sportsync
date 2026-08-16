@@ -49,7 +49,7 @@ export default function TeamPicker() {
       })
       .catch(err => {
         console.error(`${endpoint} fetch error:`, err)
-        setTeamsError('Error de conexión. ¿Está corriendo el backend?')
+        setTeamsError('No pudimos conectar. Revisa tu conexión e intenta de nuevo.')
       })
       .finally(() => setLoadingTeams(false))
   }, [leagueId, league.name, isTennis])
@@ -218,7 +218,7 @@ export default function TeamPicker() {
           <div style={{ background: '#ffffff', border: '1px solid #fecaca', borderRadius: 12, padding: '20px 24px', textAlign: 'center' }}>
             <div style={{ fontSize: 28, marginBottom: 8 }}>⚠️</div>
             <div style={{ fontSize: 14, fontWeight: 500, color: '#1C2430', marginBottom: 4 }}>{teamsError}</div>
-            <div style={{ fontSize: 12, color: '#666666', marginBottom: 16 }}>Verifica que el backend esté corriendo en el puerto 3001</div>
+            <div style={{ fontSize: 12, color: '#666666', marginBottom: 16 }}>Es un problema temporal de nuestro proveedor de datos, no tuyo.</div>
             <button onClick={reloadTeams} style={{ background: '#F18006', color: '#fff', border: 'none', borderRadius: 20, padding: '8px 20px', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
               Reintentar
             </button>
