@@ -138,15 +138,58 @@ function normalizeCountry(rawCountry) {
   return COUNTRY_ES_TO_EN[lower] || rawCountry;
 }
 
-// Helper para fetch seguro que no crashea con HTML
-async function safeFetchJson(url) {
+// Timeout por llamada externa. Sale de env var para poder ajustarlo en Render sin desplegar,
+// igual que ANTHROPIC_MODEL. 8s y no los 15s de src/providers/theSportsDb.js a propósito: con el
+// presupuesto total de /api/teams encima, 8s deja caber ~3 intentos y 15s deja caber ~1.
+const FETCH_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS) || 8000;
+
+// Quita la llave de la URL ANTES de que toque un log. Las URLs de TheSportsDB la llevan
+// incrustada en la RUTA (/api/v1/json/<LLAVE>/...), así que loguear la URL cruda la publicaría en
+// los logs de Render. La segunda sustitución cubre a Ticketmaster, que la manda por query.
+function urlSinLlave(url) {
+  return String(url)
+    .replace(`/json/${SPORTSDB_KEY}/`, "/json/***/")
+    .replace(/([?&](apikey|api_key|key)=)[^&]*/gi, "$1***");
+}
+
+// Helper para fetch seguro que no crashea con HTML.
+//
+// CONTRATO SIN CAMBIOS: devuelve el JSON parseado, o null si la llamada no sirvió. Los otros seis
+// endpoints que ya la llaman no se enteran de nada.
+//
+// El AbortController cubre LAS DOS esperas, y ese es el punto entero del arreglo: la señal aborta
+// la petición completa, así que si las cabeceras llegan y el cuerpo se queda a medias,
+// response.text() también se corta. Un clearTimeout puesto justo después del fetch dejaría
+// response.text() sin protección — que es precisamente la forma de cuelgue que encontramos.
+async function safeFetchJson(url, { timeoutMs = FETCH_TIMEOUT_MS, signal: presupuesto } = {}) {
+  const controller = new AbortController();
+  let porTimeout = false;
+  const timer = setTimeout(() => { porTimeout = true; controller.abort(); }, timeoutMs);
+
+  // Encadenar con el presupuesto del handler: cuando ese se agota, aborta la llamada EN VUELO,
+  // no solo evita la siguiente.
+  const abortarPorPresupuesto = () => controller.abort();
+  if (presupuesto) {
+    if (presupuesto.aborted) controller.abort();
+    else presupuesto.addEventListener("abort", abortarPorPresupuesto, { once: true });
+  }
+
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: controller.signal });
     const text = await response.text();
     if (text.trim().startsWith("<")) return null; // TheSportsDB devolvió HTML de error
     return JSON.parse(text);
-  } catch {
+  } catch (err) {
+    // Antes este catch era MUDO: un cuelgue, un 429 y un JSON corrupto eran indistinguibles y
+    // ninguno dejaba rastro. Por eso esto pudo llevar cuatro meses invisible.
+    const motivo = porTimeout            ? `TIMEOUT ${timeoutMs}ms`
+                 : presupuesto?.aborted  ? "presupuesto agotado"
+                 : err.message;
+    console.warn(`[fetch] ${motivo} :: ${urlSinLlave(url)}`);
     return null;
+  } finally {
+    clearTimeout(timer);
+    if (presupuesto) presupuesto.removeEventListener("abort", abortarPorPresupuesto);
   }
 }
 
@@ -527,19 +570,48 @@ app.get("/api/leagues/:sport", async (req, res) => {
   }
 });
 
+// Presupuesto TOTAL del handler de equipos. Con timeout por llamada pero sin presupuesto, los 17
+// intentos secuenciales suman más de 2 minutos, que para quien mira la pantalla es igual de
+// inservible que colgarse. Al agotarse se corta y se responde con lo que se haya conseguido.
+const TEAMS_BUDGET_MS = Number(process.env.TEAMS_BUDGET_MS) || 20000;
+
 // ── Equipos desde TheSportsDB ──
 // Estrategia robusta con múltiples intentos
 app.get("/api/teams/:leagueId", async (req, res) => {
-  try {
-    const { leagueId } = req.params;
-    const leagueName   = req.query.leagueName || null;
+  const t0           = Date.now();
+  const { leagueId } = req.params;
+  const leagueName   = req.query.leagueName || null;
 
+  // ANTES de la primera espera, a propósito. Hasta hoy el primer log vivía DESPUÉS de las 17
+  // llamadas, así que un cuelgue no imprimía absolutamente nada y la petición desaparecía en
+  // silencio. Esta línea es la prueba de que entró, aunque nunca salga.
+  console.log(`[teams] → entra id=${leagueId} name="${leagueName || ''}"`);
+
+  const presupuesto = new AbortController();
+  const reloj       = setTimeout(() => presupuesto.abort(), TEAMS_BUDGET_MS);
+  const hayTiempo   = () => !presupuesto.signal.aborted;
+
+  // Distingue "el proveedor contestó y no hay equipos" de "el proveedor no contestó nunca".
+  // Sin esta bandera, un TheSportsDB caído que rechaza las 17 llamadas en dos segundos saldría
+  // como 200 con lista vacía y el frontend diría "esta liga no tiene equipos" — falso, y además
+  // le echa la culpa a los datos. safeFetchJson devuelve null en TODOS sus modos de fallo (red,
+  // HTML de error, JSON corrupto), así que "distinto de null" es exactamente "hubo respuesta
+  // parseable". Ojo: {"teams": null} de TheSportsDB SÍ cuenta como respuesta — es un "no hay"
+  // legítimo, y es justo el caso que queremos dejar pasar como 200 vacío.
+  let huboRespuesta = false;
+  const pedir = async (url) => {
+    const data = await safeFetchJson(url, { signal: presupuesto.signal });
+    if (data !== null) huboRespuesta = true;
+    return data;
+  };
+
+  try {
     let teams = [];
 
     // Intento 1: buscar por nombre exacto
-    if (leagueName) {
+    if (leagueName && hayTiempo()) {
       const url  = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/search_all_teams.php?l=${encodeURIComponent(leagueName)}`;
-      const data = await safeFetchJson(url);
+      const data = await pedir(url);
       if (data?.teams?.length > 0) {
         teams = data.teams.map(t => ({
           id: t.idTeam, name: t.strTeam,
@@ -551,9 +623,9 @@ app.get("/api/teams/:leagueId", async (req, res) => {
     }
 
     // Intento 2: buscar por ID
-    if (teams.length === 0) {
+    if (teams.length === 0 && hayTiempo()) {
       const url  = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/lookup_all_teams.php?id=${leagueId}`;
-      const data = await safeFetchJson(url);
+      const data = await pedir(url);
       if (data?.teams?.length > 0) {
         teams = data.teams.map(t => ({
           id: t.idTeam, name: t.strTeam,
@@ -567,11 +639,15 @@ app.get("/api/teams/:leagueId", async (req, res) => {
     }
 
     // Intento 3: buscar por nombre con prefijo del país (ej: "Spanish La Liga")
-    if (teams.length === 0 && leagueName) {
+    // Los 15 prefijos se quedan TAL CUAL por decisión explícita: algunos nombres de liga sí
+    // dependen del prefijo y quitarlos podría romper ligas que hoy funcionan. El presupuesto los
+    // acota sin arriesgar nada.
+    if (teams.length === 0 && leagueName && hayTiempo()) {
       const prefixes = ["Spanish ", "English ", "Italian ", "German ", "French ", "Mexican ", "American ", "Brazilian ", "Portuguese ", "Dutch ", "Belgian ", "Scottish ", "Turkish ", "Japanese ", "Australian "];
       for (const prefix of prefixes) {
+        if (!hayTiempo()) break;
         const url  = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/search_all_teams.php?l=${encodeURIComponent(prefix + leagueName)}`;
-        const data = await safeFetchJson(url);
+        const data = await pedir(url);
         if (data?.teams?.length > 0) {
           teams = data.teams.map(t => ({
             id: t.idTeam, name: t.strTeam,
@@ -584,11 +660,48 @@ app.get("/api/teams/:leagueId", async (req, res) => {
       }
     }
 
-    console.log(`[teams] League ${leagueName || leagueId}: ${teams.length} teams total`);
+    const ms  = Date.now() - t0;
+    const eti = `id=${leagueId} name="${leagueName || ''}" ${ms}ms`;
+
+    // Tres finales distintos para lista vacía, y la diferencia importa: solo UNO de ellos
+    // significa de verdad "esta liga no tiene equipos".
+    if (teams.length === 0) {
+      // a) Se acabó el reloj: la búsqueda quedó INCOMPLETA. No sabemos si un intento posterior
+      //    habría encontrado equipos, así que no podemos afirmar que no hay.
+      if (!hayTiempo()) {
+        console.warn(`[teams] ✗ PRESUPUESTO AGOTADO (${TEAMS_BUDGET_MS}ms) ${eti}`);
+        return res.status(504).json({
+          ok: false,
+          code: "UPSTREAM_TIMEOUT",
+          error: "El proveedor de datos deportivos no respondió a tiempo.",
+          teams: []
+        });
+      }
+
+      // b) Todas fallaron rápido: nadie contestó nunca. TheSportsDB caído, rechazando conexiones
+      //    o devolviendo HTML de error. Tampoco es "no hay equipos".
+      if (!huboRespuesta) {
+        console.warn(`[teams] ✗ PROVEEDOR SIN RESPUESTA ${eti}`);
+        return res.status(502).json({
+          ok: false,
+          code: "UPSTREAM_UNAVAILABLE",
+          error: "El proveedor de datos deportivos no está disponible.",
+          teams: []
+        });
+      }
+
+      // c) Contestó bien y de verdad no hay equipos. ESTE es el único 200 con lista vacía.
+      console.log(`[teams] ← sale SIN EQUIPOS (proveedor respondió) ${eti}`);
+      return res.json({ ok: true, teams });
+    }
+
+    console.log(`[teams] ← sale ${teams.length} equipos ${eti}`);
     res.json({ ok: true, teams });
   } catch (error) {
     console.error("[teams] Error:", error.message);
     res.status(500).json({ ok: false, error: error.message });
+  } finally {
+    clearTimeout(reloj);
   }
 });
 
