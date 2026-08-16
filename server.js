@@ -575,29 +575,109 @@ app.get("/api/leagues/:sport", async (req, res) => {
 // inservible que colgarse. Al agotarse se corta y se responde con lo que se haya conseguido.
 const TEAMS_BUDGET_MS = Number(process.env.TEAMS_BUDGET_MS) || 20000;
 
-// ── Equipos desde TheSportsDB ──
-// Estrategia robusta con múltiples intentos
-app.get("/api/teams/:leagueId", async (req, res) => {
-  const t0           = Date.now();
-  const { leagueId } = req.params;
-  const leagueName   = req.query.leagueName || null;
+// Días que vale lo guardado antes de refrescarlo POR DETRÁS. La lista de equipos de una liga
+// cambia dos veces al año, así que 7 días es de sobra. Ojo: vencido NO significa inservible —
+// se sigue respondiendo con ello y solo se dispara el refresco.
+const TEAMS_CACHE_TTL_DAYS = Number(process.env.TEAMS_CACHE_TTL_DAYS) || 7;
 
-  // ANTES de la primera espera, a propósito. Hasta hoy el primer log vivía DESPUÉS de las 17
-  // llamadas, así que un cuelgue no imprimía absolutamente nada y la petición desaparecía en
-  // silencio. Esta línea es la prueba de que entró, aunque nunca salga.
-  console.log(`[teams] → entra id=${leagueId} name="${leagueName || ''}"`);
+// Pausa tras un refresco FALLIDO. Sin esto, como un refresco fallido no actualiza cachedAt, el
+// caché sigue vencido y CADA petición siguiente dispara otro refresco: durante una caída del
+// proveedor son cientos de intentos de 20s contra alguien que ya está mal. El guard de
+// refrescosEnVuelo evita los simultáneos, no los consecutivos.
+const TEAMS_REFRESH_COOLDOWN_MIN = Number(process.env.TEAMS_REFRESH_COOLDOWN_MIN) || 30;
+
+// Devuelve { teams, cachedAt } o null. Cualquier problema —fila ausente, JSON corrupto, lista
+// vacía— se resuelve como null, o sea "no hay caché": la liga cae al camino en vivo. Se traga los
+// errores a propósito y hacia el lado seguro; una fila envenenada no puede dejar una liga rota.
+const getTeamsCache = (leagueId) => new Promise((resolve) => {
+  db.get(`SELECT data, cachedAt FROM league_teams_cache WHERE leagueId = ?`, [leagueId], (err, row) => {
+    // "Todavía no hay fila" es normal y no se loguea. Un error de la base NO lo es: si la tabla se
+    // traba, TODAS las ligas caen al camino en vivo y sin esta línea no habría nada en el log
+    // explicando por qué el caché dejó de servir.
+    if (err) {
+      console.warn(`[teams] caché ILEGIBLE id=${leagueId}: ${err.message}`);
+      return resolve(null);
+    }
+    if (!row) return resolve(null);
+    try {
+      const teams = JSON.parse(row.data);
+      if (!Array.isArray(teams) || teams.length === 0) {
+        // Nunca se escribe vacío, así que esto es una fila rota, no un estado normal.
+        console.warn(`[teams] caché CORRUPTO (fila vacía o no-array) id=${leagueId}`);
+        return resolve(null);
+      }
+      resolve({ teams, cachedAt: row.cachedAt });
+    } catch (err2) {
+      console.warn(`[teams] caché CORRUPTO (JSON ilegible) id=${leagueId}: ${err2.message}`);
+      resolve(null);
+    }
+  });
+});
+
+// Solo se escribe con contenido, y la regla vive AQUÍ y no en el llamador a propósito: así ninguna
+// ruta futura puede saltársela. Una liga que ayer tenía 18 equipos no tiene 0 hoy: si el proveedor
+// dice cero, el que está mal es el proveedor. Devuelve si escribió o no.
+const setTeamsCache = (leagueId, leagueName, teams) => new Promise((resolve, reject) => {
+  if (!Array.isArray(teams) || teams.length === 0) return resolve(false);
+  db.run(`INSERT OR REPLACE INTO league_teams_cache (leagueId, leagueName, data, cachedAt) VALUES (?, ?, ?, ?)`,
+    [leagueId, leagueName || null, JSON.stringify(teams), new Date().toISOString()],
+    (err) => { if (err) reject(err); else resolve(true); });
+});
+
+// Guard anti-estampida: si diez personas abren Liga MX con el caché vencido, se refresca UNA vez.
+const refrescosEnVuelo = new Set();
+
+// leagueId → timestamp del último refresco que NO logró escribir. Solo para fallidos: uno exitoso
+// se auto-regula porque actualiza cachedAt y con eso el propio TTL lo frena.
+//
+// No crece sin control aunque el leagueId venga de la URL: refrescarEquiposEnFondo solo se llama
+// desde el camino de acierto de caché, así que un id inventado nunca llega hasta aquí. El tamaño
+// queda acotado al número de ligas realmente cacheadas.
+const refrescosFallidos = new Map();
+
+// Fire-and-forget: nadie lo espera, no puede retrasar ninguna respuesta. Presupuesto PROPIO
+// —controller nuevo— para no depender del reloj de una petición que ya terminó.
+function refrescarEquiposEnFondo(leagueId, leagueName) {
+  if (refrescosEnVuelo.has(leagueId)) return;
+
+  const ultimoFallo = refrescosFallidos.get(leagueId);
+  if (ultimoFallo && Date.now() - ultimoFallo < TEAMS_REFRESH_COOLDOWN_MIN * 60000) return;
+
+  refrescosEnVuelo.add(leagueId);
 
   const presupuesto = new AbortController();
-  const reloj       = setTimeout(() => presupuesto.abort(), TEAMS_BUDGET_MS);
-  const hayTiempo   = () => !presupuesto.signal.aborted;
+  const reloj = setTimeout(() => presupuesto.abort(), TEAMS_BUDGET_MS);
 
-  // Distingue "el proveedor contestó y no hay equipos" de "el proveedor no contestó nunca".
-  // Sin esta bandera, un TheSportsDB caído que rechaza las 17 llamadas en dos segundos saldría
-  // como 200 con lista vacía y el frontend diría "esta liga no tiene equipos" — falso, y además
-  // le echa la culpa a los datos. safeFetchJson devuelve null en TODOS sus modos de fallo (red,
-  // HTML de error, JSON corrupto), así que "distinto de null" es exactamente "hubo respuesta
-  // parseable". Ojo: {"teams": null} de TheSportsDB SÍ cuenta como respuesta — es un "no hay"
-  // legítimo, y es justo el caso que queremos dejar pasar como 200 vacío.
+  (async () => {
+    const { teams } = await buscarEquiposEnProveedor(leagueId, leagueName, presupuesto);
+    // Si vino vacío o falló, NO se toca lo guardado — y se abre la pausa para no insistir.
+    const escrito = await setTeamsCache(leagueId, leagueName, teams);
+    if (escrito) {
+      refrescosFallidos.delete(leagueId);
+      console.log(`[teams] ↻ refresco OK ${teams.length} equipos id=${leagueId}`);
+    } else {
+      refrescosFallidos.set(leagueId, Date.now());
+      console.warn(`[teams] ↻ refresco SIN CONTENIDO, se conserva lo guardado; en pausa ${TEAMS_REFRESH_COOLDOWN_MIN}min id=${leagueId}`);
+    }
+  })()
+    .catch(err => {
+      refrescosFallidos.set(leagueId, Date.now());
+      console.error(`[teams] ↻ refresco FALLÓ, en pausa ${TEAMS_REFRESH_COOLDOWN_MIN}min id=${leagueId}: ${err.message}`);
+    })
+    .finally(() => { clearTimeout(reloj); refrescosEnVuelo.delete(leagueId); });
+}
+
+// Los tres intentos contra TheSportsDB, extraídos TAL CUAL del handler para poder reusarlos desde
+// el refresco de fondo sin duplicarlos. No cambia ni una regla de búsqueda: mismos endpoints,
+// mismo orden, mismos 15 prefijos, mismo mapeo.
+//
+// Devuelve { teams, huboRespuesta, completo }. huboRespuesta distingue "el proveedor contestó y no
+// hay equipos" de "el proveedor no contestó nunca": safeFetchJson devuelve null en TODOS sus modos
+// de fallo (red, HTML de error, JSON corrupto), así que "distinto de null" es exactamente "hubo
+// respuesta parseable". Ojo: {"teams": null} de TheSportsDB SÍ cuenta como respuesta — es un "no
+// hay" legítimo, y es justo el caso que queremos dejar pasar como 200 vacío.
+async function buscarEquiposEnProveedor(leagueId, leagueName, presupuesto) {
+  const hayTiempo = () => !presupuesto.signal.aborted;
   let huboRespuesta = false;
   const pedir = async (url) => {
     const data = await safeFetchJson(url, { signal: presupuesto.signal });
@@ -605,60 +685,105 @@ app.get("/api/teams/:leagueId", async (req, res) => {
     return data;
   };
 
+  let teams = [];
+
+  // ── Intento 1: buscar por nombre exacto
+  if (leagueName && hayTiempo()) {
+    const url  = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/search_all_teams.php?l=${encodeURIComponent(leagueName)}`;
+    const data = await pedir(url);
+    if (data?.teams?.length > 0) {
+      teams = data.teams.map(t => ({
+        id: t.idTeam, name: t.strTeam,
+        initials: t.strTeamShort || t.strTeam.substring(0, 3).toUpperCase(),
+        country: t.strCountry || "", badge: t.strBadge || null
+      }));
+      console.log(`[teams] Found ${teams.length} teams by name: "${leagueName}"`);
+    }
+  }
+
+  // Intento 2: buscar por ID
+  if (teams.length === 0 && hayTiempo()) {
+    const url  = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/lookup_all_teams.php?id=${leagueId}`;
+    const data = await pedir(url);
+    if (data?.teams?.length > 0) {
+      teams = data.teams.map(t => ({
+        id: t.idTeam, name: t.strTeam,
+        initials: t.strTeamShort || t.strTeam.substring(0, 3).toUpperCase(),
+        country: t.strCountry || "", badge: t.strBadge || null
+      }));
+      console.log(`[teams] Found ${teams.length} teams by ID: ${leagueId}`);
+    } else {
+      console.log(`[teams] Intento 2 failed for ID ${leagueId} (data=${data === null ? 'null/HTML' : 'empty'})`);
+    }
+  }
+
+  // Intento 3: buscar por nombre con prefijo del país (ej: "Spanish La Liga")
+  // Los 15 prefijos se quedan TAL CUAL por decisión explícita: algunos nombres de liga sí
+  // dependen del prefijo y quitarlos podría romper ligas que hoy funcionan. El presupuesto los
+  // acota sin arriesgar nada.
+  if (teams.length === 0 && leagueName && hayTiempo()) {
+    const prefixes = ["Spanish ", "English ", "Italian ", "German ", "French ", "Mexican ", "American ", "Brazilian ", "Portuguese ", "Dutch ", "Belgian ", "Scottish ", "Turkish ", "Japanese ", "Australian "];
+    for (const prefix of prefixes) {
+      if (!hayTiempo()) break;
+      const url  = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/search_all_teams.php?l=${encodeURIComponent(prefix + leagueName)}`;
+      const data = await pedir(url);
+      if (data?.teams?.length > 0) {
+        teams = data.teams.map(t => ({
+          id: t.idTeam, name: t.strTeam,
+          initials: t.strTeamShort || t.strTeam.substring(0, 3).toUpperCase(),
+          country: t.strCountry || "", badge: t.strBadge || null
+        }));
+        console.log(`[teams] Found ${teams.length} teams with prefix "${prefix}${leagueName}"`);
+        break;
+      }
+    }
+  }
+
+
+  return { teams, huboRespuesta, completo: hayTiempo() };
+}
+
+// ── Equipos desde TheSportsDB, con caché que persiste ──
+app.get("/api/teams/:leagueId", async (req, res) => {
+  const t0           = Date.now();
+  const { leagueId } = req.params;
+  const leagueName   = req.query.leagueName || null;
+
+  // ANTES de la primera espera, a propósito. El primer log vivía DESPUÉS de las 17 llamadas, así
+  // que un cuelgue no imprimía absolutamente nada y la petición desaparecía en silencio. Esta
+  // línea es la prueba de que entró, aunque nunca salga.
+  console.log(`[teams] → entra id=${leagueId} name="${leagueName || ''}"`);
+
   try {
-    let teams = [];
+    // Si hay algo guardado se contesta con eso y punto. Va ANTES de crear el presupuesto y antes
+    // de tocar la red — en este camino no existe ni el AbortController. Quien abre esta pantalla
+    // no espera a TheSportsDB nunca, ni 20 segundos ni 2.
+    const guardado = await getTeamsCache(leagueId);
+    if (guardado) {
+      const edadDias = (Date.now() - new Date(guardado.cachedAt).getTime()) / 86400000;
+      console.log(`[teams] ← CACHÉ ${guardado.teams.length} equipos (${edadDias.toFixed(1)}d) id=${leagueId} ${Date.now() - t0}ms`);
+      res.json({ ok: true, teams: guardado.teams });
 
-    // Intento 1: buscar por nombre exacto
-    if (leagueName && hayTiempo()) {
-      const url  = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/search_all_teams.php?l=${encodeURIComponent(leagueName)}`;
-      const data = await pedir(url);
-      if (data?.teams?.length > 0) {
-        teams = data.teams.map(t => ({
-          id: t.idTeam, name: t.strTeam,
-          initials: t.strTeamShort || t.strTeam.substring(0, 3).toUpperCase(),
-          country: t.strCountry || "", badge: t.strBadge || null
-        }));
-        console.log(`[teams] Found ${teams.length} teams by name: "${leagueName}"`);
-      }
+      // El refresco arranca DESPUÉS de responder y sin await: la respuesta ya salió por el socket,
+      // esto no puede retrasarla. Y si esta liga falló hace poco, refrescarEquiposEnFondo ni
+      // siquiera lo intenta.
+      if (edadDias > TEAMS_CACHE_TTL_DAYS) refrescarEquiposEnFondo(leagueId, leagueName);
+      return;
     }
 
-    // Intento 2: buscar por ID
-    if (teams.length === 0 && hayTiempo()) {
-      const url  = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/lookup_all_teams.php?id=${leagueId}`;
-      const data = await pedir(url);
-      if (data?.teams?.length > 0) {
-        teams = data.teams.map(t => ({
-          id: t.idTeam, name: t.strTeam,
-          initials: t.strTeamShort || t.strTeam.substring(0, 3).toUpperCase(),
-          country: t.strCountry || "", badge: t.strBadge || null
-        }));
-        console.log(`[teams] Found ${teams.length} teams by ID: ${leagueId}`);
-      } else {
-        console.log(`[teams] Intento 2 failed for ID ${leagueId} (data=${data === null ? 'null/HTML' : 'empty'})`);
-      }
+    // CAMINO FRÍO: esta liga nunca se ha guardado. Aquí sí se consulta en vivo, con el presupuesto
+    // y los 502/504 intactos. Es el ÚNICO camino donde esos dos errores pueden aparecer: con caché
+    // son inalcanzables porque la respuesta sale antes de que exista el presupuesto.
+    const presupuesto = new AbortController();
+    const reloj       = setTimeout(() => presupuesto.abort(), TEAMS_BUDGET_MS);
+    let teams, huboRespuesta, completo;
+    try {
+      ({ teams, huboRespuesta, completo } = await buscarEquiposEnProveedor(leagueId, leagueName, presupuesto));
+    } finally {
+      clearTimeout(reloj);
     }
 
-    // Intento 3: buscar por nombre con prefijo del país (ej: "Spanish La Liga")
-    // Los 15 prefijos se quedan TAL CUAL por decisión explícita: algunos nombres de liga sí
-    // dependen del prefijo y quitarlos podría romper ligas que hoy funcionan. El presupuesto los
-    // acota sin arriesgar nada.
-    if (teams.length === 0 && leagueName && hayTiempo()) {
-      const prefixes = ["Spanish ", "English ", "Italian ", "German ", "French ", "Mexican ", "American ", "Brazilian ", "Portuguese ", "Dutch ", "Belgian ", "Scottish ", "Turkish ", "Japanese ", "Australian "];
-      for (const prefix of prefixes) {
-        if (!hayTiempo()) break;
-        const url  = `https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/search_all_teams.php?l=${encodeURIComponent(prefix + leagueName)}`;
-        const data = await pedir(url);
-        if (data?.teams?.length > 0) {
-          teams = data.teams.map(t => ({
-            id: t.idTeam, name: t.strTeam,
-            initials: t.strTeamShort || t.strTeam.substring(0, 3).toUpperCase(),
-            country: t.strCountry || "", badge: t.strBadge || null
-          }));
-          console.log(`[teams] Found ${teams.length} teams with prefix "${prefix}${leagueName}"`);
-          break;
-        }
-      }
-    }
+    if (teams.length > 0) await setTeamsCache(leagueId, leagueName, teams);
 
     const ms  = Date.now() - t0;
     const eti = `id=${leagueId} name="${leagueName || ''}" ${ms}ms`;
@@ -668,7 +793,7 @@ app.get("/api/teams/:leagueId", async (req, res) => {
     if (teams.length === 0) {
       // a) Se acabó el reloj: la búsqueda quedó INCOMPLETA. No sabemos si un intento posterior
       //    habría encontrado equipos, así que no podemos afirmar que no hay.
-      if (!hayTiempo()) {
+      if (!completo) {
         console.warn(`[teams] ✗ PRESUPUESTO AGOTADO (${TEAMS_BUDGET_MS}ms) ${eti}`);
         return res.status(504).json({
           ok: false,
@@ -690,18 +815,18 @@ app.get("/api/teams/:leagueId", async (req, res) => {
         });
       }
 
-      // c) Contestó bien y de verdad no hay equipos. ESTE es el único 200 con lista vacía.
+      // c) Contestó bien y de verdad no hay equipos. ESTE es el único 200 con lista vacía. No se
+      //    cachea: así una liga sin equipos vuelve a preguntar en la siguiente visita en vez de
+      //    quedarse marcada como vacía para siempre.
       console.log(`[teams] ← sale SIN EQUIPOS (proveedor respondió) ${eti}`);
       return res.json({ ok: true, teams });
     }
 
-    console.log(`[teams] ← sale ${teams.length} equipos ${eti}`);
+    console.log(`[teams] ← sale ${teams.length} equipos EN VIVO (guardado en caché) ${eti}`);
     res.json({ ok: true, teams });
   } catch (error) {
     console.error("[teams] Error:", error.message);
     res.status(500).json({ ok: false, error: error.message });
-  } finally {
-    clearTimeout(reloj);
   }
 });
 
