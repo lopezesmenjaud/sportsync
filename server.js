@@ -292,7 +292,7 @@ Responde solo con el resumen, sin títulos ni formato extra.`;
   }
 
   const data = await response.json();
-  const { text, blockTypes } = readAnthropicText(data);
+  const { text, blockTypes } = readAnthropicText(data, "summary");
   if (!text) {
     console.error(`[summary] Anthropic sin bloque text para ${match.providerMatchId} (bloques: ${JSON.stringify(blockTypes)})`);
     return { summary: "Resumen no disponible.", source: "error" };
@@ -515,7 +515,7 @@ País: ${country}`
     });
 
     const aiData = await response.json();
-    const { text, blockTypes } = readAnthropicText(aiData);
+    const { text, blockTypes } = readAnthropicText(aiData, "broadcasting");
     const EMPTY = { freeTV: [], paidTV: [], streaming: [] };
     if (!text) {
       console.error(`[broadcasting] Anthropic sin bloque text para ${competitionKey}/${country} (bloques: ${JSON.stringify(blockTypes)})`);
@@ -1187,6 +1187,28 @@ app.post("/api/nearby", optionalUser(), async (req, res) => {
     // Para los que quedan, resolver con Claude AI (batches de 50 en paralelo)
     if (stillUncached.length > 0) {
       const BATCH_SIZE = 50;
+
+      // Presupuesto de salida POR TANDA. Antes era una constante de 4000 enfrentada a una lista de
+      // tamaño variable: con 20 venues cabía y con 50 no, y el JSON salía cortado a la mitad — sin
+      // un solo error, porque el regex de abajo simplemente no encontraba el corchete de cierre.
+      //
+      // La base cubre el bloque de razonamiento (medido: >2500 tokens en esta tarea) y lo
+      // por-venue cubre el JSON (~25-35 tokens por entrada; 60 deja el doble de margen).
+      //
+      // Ser generoso aquí es casi gratis: max_tokens es un TECHO, no una reserva — se factura lo
+      // que de verdad se genera.
+      //
+      // OJO con la suposición: la fórmula asume que el razonamiento cuesta lo mismo sin importar
+      // el tamaño de la tanda. Podría crecer también con el número de venues, y entonces los 60
+      // por venue se los comería el razonamiento en vez del JSON. Si eso pasa, el log nuevo lo
+      // dice —stop_reason=max_tokens con el conteo de salida— y se sube el número con dato en
+      // mano. No adivinar antes de eso.
+      //
+      // El tope existe porque la fórmula no tiene freno propio: si algún día BATCH_SIZE crece,
+      // 16000 es donde una petición SIN streaming empieza a arriesgar timeout de HTTP.
+      const NEARBY_TOKENS_BASE      = 4000;
+      const NEARBY_TOKENS_POR_VENUE = 60;
+      const NEARBY_TOKENS_MAX       = 16000;
       const batches = [];
       for (let i = 0; i < stillUncached.length; i += BATCH_SIZE) {
         batches.push(stillUncached.slice(i, i + BATCH_SIZE));
@@ -1203,7 +1225,7 @@ app.post("/api/nearby", optionalUser(), async (req, res) => {
             },
             body: JSON.stringify({
               model: ANTHROPIC_MODEL,
-              max_tokens: 4000,
+              max_tokens: Math.min(NEARBY_TOKENS_MAX, NEARBY_TOKENS_BASE + batch.length * NEARBY_TOKENS_POR_VENUE),
               messages: [{
                 role: "user",
                 content: `Tengo una lista de elementos. Cada elemento puede ser un ESTADIO deportivo o un EQUIPO deportivo. Para cada uno, necesito saber si su ubicación cae dentro de la zona metropolitana de "${location.city}", ${location.country}:\n- Si es un ESTADIO: dime en qué ciudad está físicamente ubicado.\n- Si es un EQUIPO: dime en qué ciudad juega de local (su sede principal).\n\nReglas estrictas:\n- Responde inTargetCity: true SOLO si la ciudad (del estadio, o de la sede del equipo) está geográficamente dentro de la zona metropolitana de "${location.city}".\n- NO marques true solo porque el nombre contiene "${location.city}" — verifica la ubicación real.\n- Incluye ciudades conurbadas y municipios adyacentes que forman parte del área metropolitana.\n- Si no conoces la ubicación del estadio o la sede del equipo, responde inTargetCity: false.\n\nResponde SOLO con un JSON array, sin texto adicional:\n[{"venue": "nombre exacto del estadio o equipo", "city": "ciudad donde está físicamente el estadio o donde juega de local el equipo", "inTargetCity": true/false}]\n\nLista:\n${batch.map((v, i) => `${i + 1}. ${v}`).join("\n")}`
@@ -1213,14 +1235,26 @@ app.post("/api/nearby", optionalUser(), async (req, res) => {
 
           if (aiResponse.ok) {
             const aiData = await aiResponse.json();
-            const { text, blockTypes } = readAnthropicText(aiData);
+            const { text, blockTypes, stopReason, outputTokens } = readAnthropicText(aiData, "nearby");
             if (text) {
               const jsonMatch = text.match(/\[[\s\S]*\]/);
               if (jsonMatch) return { ok: true, items: JSON.parse(jsonMatch[0]) };
             }
-            console.error(`[nearby] Claude sin JSON usable (bloques: ${JSON.stringify(blockTypes)}) para batch de ${batch.length} venues`);
+            // Cuántos venues se pierden va PRIMERO: es la consecuencia. Antes decía que falló pero
+            // no cuánto costaba, y "falló una tanda" y "se perdieron 50 venues, entre ellos toda la
+            // Liga MX" son la misma línea de log con dos urgencias muy distintas.
+            console.error(
+              `[nearby] Claude SIN JSON — ${batch.length} venues PERDIDOS ` +
+              `(stop_reason=${stopReason}, salida=${outputTokens} tokens, bloques=${JSON.stringify(blockTypes)})`
+            );
           } else {
-            console.error(`[nearby] Claude HTTP ${aiResponse.status} para batch de ${batch.length} venues`);
+            // El cuerpo, no solo el status. Los HTTP 400 de agosto 2026 eran saldo de créditos en
+            // cero y la API lo decía en texto plano en este cuerpo, que se tiraba sin leer.
+            // Recortado a 500 caracteres; estos cuerpos no traen llaves ni tokens.
+            const cuerpo = await aiResponse.text().catch(() => "(cuerpo ilegible)");
+            console.error(
+              `[nearby] Claude HTTP ${aiResponse.status} — ${batch.length} venues PERDIDOS :: ${cuerpo.slice(0, 500)}`
+            );
           }
         } catch (aiErr) {
           console.error(`[nearby] Claude AI batch failed:`, aiErr.message);
