@@ -8,7 +8,7 @@ const { hasCalendarScope } = require("../config/googleScopes");
 // ─────────────────────────────────────────────
 // Intervalos de sincronización por deporte
 //
-// Tenis:                     cada 1 hora
+// Tenis:                     cada 3 horas
 // Baseball:                  cada 6 horas
 // Fútbol, Basketball, NFL:   cada 12 horas
 // F1, Combate, Rugby,
@@ -19,8 +19,13 @@ const SPORT_SCHEDULES = [
   {
     name:    "Tenis",
     sports:  ["tennis"],
-    cron:    "0 * * * *",        // cada hora en punto
-    label:   "cada 1 hora"
+    // Cada 3 h y no cada hora por el PRESUPUESTO del proveedor: Live Tennis API da 100
+    // peticiones al día en el plan gratis, y un barrido son ~6 páginas (252 partidos el
+    // 29 ago 2026). 8 barridos × 6 páginas = 48. Cada hora serían 144 y no cabe.
+    //
+    // Con TENNIS_SYNC_ENABLED apagado esto no gasta nada: syncTennis sale antes de pedir.
+    cron:    "0 */3 * * *",      // cada 3 horas en punto
+    label:   "cada 3 horas"
   },
   {
     name:    "Baseball",

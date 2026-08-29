@@ -2,6 +2,7 @@ const { getProvider } = require("../providers");
 const { detectMatchChanges } = require("./matchChangeDetector");
 const { matchRepository } = require("../repositories/matchRepositorySqlite");
 const { subscriptionRepository } = require("../repositories/subscriptionRepositorySqlite");
+const { syncTennis } = require("./tennisSyncService");
 
 // Mapeo de nombres del frontend (español) a nombres internos de TheSportsDB
 const SPORT_NAME_MAP = {
@@ -256,7 +257,21 @@ async function syncMatches() {
   const leagueMap        = new Map(); // leagueId → sport
   const teamSubs         = [];        // suscripciones por equipo
 
+  // El tenis NO pasa por leagueMap ni por teamSubs: su proveedor es otro y un solo barrido
+  // trae el circuito entero, así que se corre UNA vez y no una por suscripción.
+  //
+  // Este bloque es tan necesario como el de syncSport, y por eso está en los dos lados: el
+  // ÚNICO llamador de syncSport es el cron de scheduler.js, mientras que syncMatches lo
+  // llaman el sync de arranque (scheduler.js:87), server.js, runProductionSync y runSync.
+  // Cablear solo syncSport dejaría el tenis muerto por esos cuatro caminos — mandando las
+  // suscripciones de jugador a syncTeam contra TheSportsDB, que no devuelve nada, en silencio.
+  let haySuscripcionesDeTenis = false;
+
   for (const sub of allSubscriptions) {
+    if (normalizeSport(sub.sport) === "tennis") {
+      haySuscripcionesDeTenis = true;
+      continue;
+    }
     if (sub.competitionKey && !sub.competitionKey.startsWith("national_")) {
       leagueMap.set(sub.competitionKey, normalizeSport(sub.sport));
     } else if (sub.teamName && !sub.competitionKey) {
@@ -264,12 +279,20 @@ async function syncMatches() {
     }
   }
 
-  if (leagueMap.size === 0 && teamSubs.length === 0) {
+  // El respaldo a La Liga solo aplica si NO hay nada que sincronizar, tenis incluido: con
+  // suscripciones de tenis vivas hay trabajo real y meter La Liga sería inventarlo.
+  if (leagueMap.size === 0 && teamSubs.length === 0 && !haySuscripcionesDeTenis) {
     console.log("[sync] No subscriptions found, using La Liga as fallback");
     leagueMap.set("4335", "football");
   }
 
   const allResults = [];
+
+  // Tenis (proveedor propio). Si TENNIS_SYNC_ENABLED está apagado devuelve [] sin gastar
+  // ni una petición, así que esta llamada es inofensiva mientras el interruptor esté abajo.
+  if (haySuscripcionesDeTenis) {
+    allResults.push(...await syncTennis());
+  }
 
   // Sync por liga
   if (leagueMap.size > 0) {
@@ -299,6 +322,14 @@ async function syncSport(sport) {
   console.log(`[sync] Syncing sport: ${sport}`);
 
   const normalizedTarget = normalizeSport(sport);
+
+  // El tenis tiene proveedor propio: un solo barrido trae el circuito entero, sin importar a
+  // qué ligas o jugadores esté suscrita la gente. Se atiende aquí y no se cae al camino de
+  // TheSportsDB, que para tenis devuelve cero (comprobado el 29 ago 2026).
+  if (normalizedTarget === "tennis") {
+    return await syncTennis();
+  }
+
   const allSubscriptions = await subscriptionRepository.getAll();
   const leagueIds        = [...new Set(
     allSubscriptions
