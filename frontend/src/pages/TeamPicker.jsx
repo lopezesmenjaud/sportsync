@@ -9,6 +9,17 @@ import CalendarConnectModal from '../components/CalendarConnectModal'
 import AvisoError from '../components/AvisoError'
 import { API_BASE } from '../config'
 
+// El backend distingue tres finales para "lista vacía" y solo UNO significa que la liga no tiene
+// equipos (server.js, /api/teams). Los otros dos llegan con ok:false y un code. Si el code no
+// viene —/api/players, o un fallo sin cuerpo— cae al mensaje genérico de siempre: el frontend no
+// puede romperse porque falte un campo del backend.
+function mensajeDeFallo(data, isTennis) {
+  const que = isTennis ? 'los jugadores' : 'los equipos'
+  if (data?.code === 'UPSTREAM_TIMEOUT')     return `El proveedor de datos tardó demasiado. No pudimos cargar ${que}.`
+  if (data?.code === 'UPSTREAM_UNAVAILABLE') return `El proveedor de datos no está disponible. No pudimos cargar ${que}.`
+  return `No se pudieron cargar ${que}.`
+}
+
 export default function TeamPicker() {
   const { sport, leagueId } = useParams()
   const { state }           = useLocation()
@@ -45,7 +56,7 @@ export default function TeamPicker() {
         console.log(`${endpoint} response:`, data)
         const items = isTennis ? data.players : data.teams
         if (data.ok && items) setTeams(items)
-        else setTeamsError(isTennis ? 'No se pudieron cargar los jugadores.' : 'No se pudieron cargar los equipos.')
+        else setTeamsError(mensajeDeFallo(data, isTennis))
       })
       .catch(err => {
         console.error(`${endpoint} fetch error:`, err)

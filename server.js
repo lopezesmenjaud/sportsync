@@ -178,6 +178,19 @@ async function safeFetchJson(url, { timeoutMs = FETCH_TIMEOUT_MS, signal: presup
   try {
     const response = await fetch(url, { signal: controller.signal });
     const text = await response.text();
+
+    // Un 429/5xx de TheSportsDB llega con cuerpo JSON. Sin esta comprobación PARSEA y se
+    // devuelve como si fuera una respuesta buena, y aguas abajo eso es peor que un fallo:
+    // buscarEquiposEnProveedor lo cuenta como "el proveedor contestó", el handler lo manda por
+    // el 200 con lista vacía, y el usuario lee que su liga no existe en TheSportsDB.
+    // El contrato de arriba ya decía "null si la llamada no sirvió"; un 429 no sirvió.
+    // Se lee el cuerpo ANTES de devolver para no dejar la conexión a medias y para poder dejar
+    // rastro de QUÉ contestó; el recorte pasa por urlSinLlave por si trae la llave incrustada.
+    if (!response.ok) {
+      console.warn(`[fetch] HTTP ${response.status} :: ${urlSinLlave(url)} :: ${urlSinLlave(text.trim().slice(0, 120))}`);
+      return null;
+    }
+
     if (text.trim().startsWith("<")) return null; // TheSportsDB devolvió HTML de error
     return JSON.parse(text);
   } catch (err) {
@@ -820,7 +833,11 @@ app.get("/api/teams/:leagueId", async (req, res) => {
       // c) Contestó bien y de verdad no hay equipos. ESTE es el único 200 con lista vacía. No se
       //    cachea: así una liga sin equipos vuelve a preguntar en la siguiente visita en vez de
       //    quedarse marcada como vacía para siempre.
-      console.log(`[teams] ← sale SIN EQUIPOS (proveedor respondió) ${eti}`);
+      // ÚNICO camino que hace al frontend afirmar "esta liga no tiene equipos registrados en
+      // TheSportsDB". Va como warn y no como log a propósito: si esa frase aparece en pantalla,
+      // este renglón es la prueba de que fue una respuesta buena del proveedor y no un fallo
+      // disfrazado. Sin él hay que reconstruirlo desde capturas de pantalla.
+      console.warn(`[teams] ← sale SIN EQUIPOS: el proveedor respondió y NO trae equipos ${eti}`);
       return res.json({ ok: true, teams });
     }
 
