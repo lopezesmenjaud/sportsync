@@ -105,7 +105,13 @@ si es una jornada regular sin fase distintiva. Sin números, sin explicación, s
     },
     body: JSON.stringify({
       model: ANTHROPIC_MODEL,
-      max_tokens: 20,
+      // 64 y no 20. Con 20 no hay holgura: si el modelo antepone cualquier cosa, la respuesta
+      // se CORTA a media palabra — y sanitizeLabel no detecta un truncamiento. "Semifina" no
+      // tiene dígitos, mide menos de 20 caracteres y es una sola palabra, así que pasa el
+      // filtro y se guarda en round_labels para siempre, sin que nada avise. El costo de
+      // pedir 64 es despreciable (son ~10 llamadas por competición, una sola vez); el de
+      // guardar una etiqueta truncada es permanente.
+      max_tokens: 64,
       messages: [{ role: "user", content: prompt }],
     }),
   });
