@@ -126,6 +126,11 @@ function CalendarConnectGate() {
   // No mostrar: sin sesión, mientras carga (evita parpadeo), si no sabemos (estado null), si ya
   // lo descartó esta sesión, o si ya tiene el scope. Solo bloquea si está conectado SIN scope.
   if (!isLoggedIn() || cargando || !estado || dismissed) return null
+  // A PROPÓSITO no usa faltaPermisoCalendario(): ese helper excluye needsReauth y aquí NO se
+  // quiere excluir. Alguien con el token vencido que reconecta y otra vez no marca la casilla
+  // conserva needsReauth=1 y sigue sin scope (server.js solo limpia needsReauth si lo otorgó).
+  // Su problema real es la casilla, y el aviso de "tu conexión expiró" no la nombra. Este gate
+  // es el único que se lo dice, así que se queda cubriéndolo.
   if (!(estado.connected && !estado.hasCalendarScope)) return null
 
   const handleConnect = () => { invalidarEstadoGoogle(); window.location.href = `${API_BASE}/auth/google` }
@@ -134,7 +139,18 @@ function CalendarConnectGate() {
     setDismissed(true)
   }
 
-  return <CalendarConnectModal onConnect={handleConnect} onExplore={handleExplore} />
+  // Los textos por default del modal ("Conecta tu calendario" / "Conectar Google Calendar") son
+  // los de quien NO ha conectado nada. Aquí la persona YA conectó: decírselo así la manda a picar
+  // otra vez lo que cree que ya hizo. Lo que falta es la casilla, y eso es lo que tiene que leer.
+  return (
+    <CalendarConnectModal
+      titulo="Falta el permiso del calendario"
+      lineaDeEntrada="Tu cuenta de Google ya está conectada. Lo que falta es la casilla del calendario."
+      etiquetaPrincipal="Dar permiso del calendario"
+      onConnect={handleConnect}
+      onExplore={handleExplore}
+    />
+  )
 }
 
 // QUÉ renderiza cada ruta pública. CUÁLES son las rutas públicas se decide en publicRoutes.js,

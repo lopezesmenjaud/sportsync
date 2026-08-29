@@ -95,6 +95,26 @@ if (typeof document !== 'undefined') {
   })
 }
 
+/**
+ * ¿Esta persona CONECTÓ su cuenta de Google pero NO otorgó el permiso del calendario?
+ *
+ * Es un estado distinto de "no ha conectado nada", y durante mucho tiempo las tres pantallas se
+ * lo presentaron como si fuera el mismo: "Google Calendar no conectado". Eso es falso y tiene
+ * consecuencia: la persona vuelve a picar el mismo botón, llega a la misma pantalla de Google,
+ * no entiende que lo que falta es MARCAR LA CASILLA, y acaba en el mismo lugar. De 15 usuarios,
+ * 4 se quedaron así (medido el 29 ago 2026).
+ *
+ * Vive aquí porque la usan tres lugares (el sidebar, el banner del dashboard y —con un matiz, ver
+ * App.jsx— el gate). Tres copias de la misma expresión es justo donde empieza a desincronizarse.
+ *
+ * null (no sabemos) → false: no afirmamos lo que no sabemos, igual que en debeAvisarDePermiso.
+ * needsReauth → false: ahí el mensaje correcto es el de reconectar, no el del permiso.
+ */
+export function faltaPermisoCalendario(estado) {
+  if (!estado) return false
+  return !!estado.connected && !estado.hasCalendarScope && !estado.needsReauth
+}
+
 // Clave PROPIA, distinta de fanschedule_calendar_gate_dismissed: el gate y este aviso se
 // descartan por separado. Sesión del navegador, no localStorage: que vuelva a aparecer en una
 // visita nueva.
