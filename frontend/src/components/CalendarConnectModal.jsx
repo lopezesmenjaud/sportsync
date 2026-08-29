@@ -1,8 +1,13 @@
 import AvisoPermisoCalendario from './AvisoPermisoCalendario'
 
-// El copy vive en AvisoPermisoCalendario, compartido con el banner del dashboard, el sidebar y el
-// landing. Antes este modal tenía su propia redacción: decía lo de la casilla, pero no nombraba el
-// aviso de Google ("ver y eliminar todos tus calendarios"), que es lo que asusta.
+// El copy vive en AvisoPermisoCalendario, compartido con el landing (que lo pinta aparte, en modo
+// discreto). Este modal es el que ve todo lo demás: el gate de App, el banner del dashboard, el
+// sidebar, el perfil, LeaguePicker y TeamPicker abren ESTE componente, no el aviso directo.
+//
+// Lo que el copy tiene que lograr es una sola cosa: que la persona MARQUE la casilla del
+// calendario, que Google muestra desmarcada. No nombra ningún aviso alarmante de Google porque
+// desde que pedimos calendar.app.created ya no lo hay — la pantalla solo habla de crear
+// calendarios secundarios.
 //
 // lineaDeEntrada: opcional, para el caso de interceptar a alguien que acaba de suscribirse.
 // etiquetaSecundaria: "Explorar primero" tiene sentido al entrar a la app; desde un banner, donde
