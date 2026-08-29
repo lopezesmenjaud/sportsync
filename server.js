@@ -3,7 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { oauth2Client } = require("./src/config/googleClient");
-const { hasCalendarScope } = require("./src/config/googleScopes");
+const { CALENDAR_SCOPE_APP_CREATED, hasCalendarScope } = require("./src/config/googleScopes");
 const { ANTHROPIC_MODEL, readAnthropicText } = require("./src/config/aiModel");
 const { initializeDatabase, db } = require("./src/db/database");
 const { subscriptionRepository } = require("./src/repositories/subscriptionRepositorySqlite");
@@ -334,8 +334,11 @@ function saveBroadcastingToDb(competitionKey, competitionName, country, data) {
 app.get("/", (req, res) => res.send("SportSync backend running"));
 
 // ── Google OAuth ──
+// calendar.app.created en vez del /auth/calendar amplio: alcanza para todo lo que hace
+// la app (solo escribe en el calendario "FanSchedule" que ella misma crea) y a la
+// persona ya no le sale el aviso de "ver y eliminar TODOS tus calendarios".
 const GOOGLE_SCOPES = [
-  "https://www.googleapis.com/auth/calendar",
+  CALENDAR_SCOPE_APP_CREATED,
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 
