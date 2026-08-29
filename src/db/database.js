@@ -282,15 +282,40 @@ async function initializeDatabase() {
       ["4480", "1", null], ["4480", "2", null], ["4480", "3", null], ["4480", "4", null],
       ["4480", "5", null], ["4480", "6", null], ["4480", "7", null], ["4480", "8", null],
     ];
+    // Precarga de las rondas de TENIS (ATP 4464, WTA 4517).
+    //
+    // Va precargado y no generado por IA porque aquí no hay nada que adivinar: "F" es Final y
+    // "SF" es Semifinal, siempre. Sin esto, cada código de ronda nuevo dispara una llamada a
+    // Anthropic para producir una etiqueta que ya sabemos — determinista, gratis y correcta
+    // desde el primer partido.
+    //
+    // Ojo: el proveedor de tenis manda LETRAS ("F", "SF", "QF", "R16"), no los códigos
+    // numéricos de TheSportsDB. No se mezclan porque la llave incluye el competitionKey.
+    //
+    // De R32 para abajo y toda la qualy van con label NULL a propósito: son rondas sin fase
+    // distintiva, y NULL es justo lo que las silencia sin gastar IA (mismo mecanismo que la
+    // fase de liga de la Champions, arriba).
+    const TENIS_ROUND_LABELS = [];
+    for (const ck of ["4464", "4517"]) {
+      TENIS_ROUND_LABELS.push(
+        [ck, "F",   "Final"],
+        [ck, "SF",  "Semifinal"],
+        [ck, "QF",  "Cuartos"],
+        [ck, "R16", "Octavos"],
+        [ck, "R32", null], [ck, "R64", null], [ck, "R128", null],
+        [ck, "Q1",  null], [ck, "Q2",  null], [ck, "Q3",   null],
+      );
+    }
+
     const nowSeed = new Date().toISOString();
-    for (const [ck, round, label] of CHAMPIONS_ROUND_LABELS) {
+    for (const [ck, round, label] of [...CHAMPIONS_ROUND_LABELS, ...TENIS_ROUND_LABELS]) {
       await runAsync(
         `INSERT OR IGNORE INTO round_labels (competitionKey, intRound, label, source, createdAtUtc)
          VALUES (?, ?, ?, 'manual', ?)`,
         [ck, round, label, nowSeed]
       );
     }
-    console.log("✅ Round labels table ready (Champions precargado)");
+    console.log("✅ Round labels table ready (Champions y tenis precargados)");
 
     // Sesiones de servidor. tokenHash = SHA-256 del token opaco; el token en claro NUNCA se
     // guarda (ver sessionRepositorySqlite). PRIMARY KEY sobre tokenHash → la búsqueda por token
