@@ -3,6 +3,7 @@ const { syncMatches, syncSport } = require("./syncService");
 const { syncMatchToCalendars } = require("./calendarSyncService");
 const { googleAccountRepository } = require("../repositories/googleAccountRepositorySqlite");
 const { backfillUserEvents } = require("./userBackfillService");
+const { hasCalendarScope } = require("../config/googleScopes");
 
 // ─────────────────────────────────────────────
 // Intervalos de sincronización por deporte
@@ -41,14 +42,11 @@ const SPORT_SCHEDULES = [
   }
 ];
 
-// Scope requerido para crear/gestionar el calendario del usuario.
-const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
-
 // Salta usuarios que no pueden recibir eventos (evita fallos y spam de logs cada ciclo).
 function shouldSkipUser(acc, skipUserIds) {
   if (skipUserIds.has(acc.userId)) return "needsReauth (marcado en esta corrida)";
   if (acc.needsReauth === 1) return "needsReauth";
-  if (!(acc.scope || "").includes(CALENDAR_SCOPE)) return "sin scope de Calendar";
+  if (!hasCalendarScope(acc.scope)) return "sin scope de Calendar";
   return null;
 }
 

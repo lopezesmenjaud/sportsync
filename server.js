@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { oauth2Client } = require("./src/config/googleClient");
+const { hasCalendarScope } = require("./src/config/googleScopes");
 const { ANTHROPIC_MODEL, readAnthropicText } = require("./src/config/aiModel");
 const { initializeDatabase, db } = require("./src/db/database");
 const { subscriptionRepository } = require("./src/repositories/subscriptionRepositorySqlite");
@@ -376,8 +377,7 @@ app.get("/auth/google/callback", async (req, res) => {
     console.log(`[auth] Profile: email=${profile.email} name=${profile.name}`);
 
     const userId = profile.email;
-    const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
-    const hasCalendarScope = (tokens.scope || "").includes(CALENDAR_SCOPE);
+    const calendarScopeGranted = hasCalendarScope(tokens.scope);
 
     await googleAccountRepository.upsert({
       userId,
@@ -390,7 +390,7 @@ app.get("/auth/google/callback", async (req, res) => {
 
     // Solo damos la conexión por "buena" si el usuario otorgó el scope de Calendar.
     // Si NO lo otorgó, no limpiamos needsReauth: la UI lo mostrará como "no conectado".
-    if (hasCalendarScope) {
+    if (calendarScopeGranted) {
       await googleAccountRepository.clearNeedsReauth(userId);
     } else {
       console.warn(`[auth] ${userId} conectó SIN scope de Calendar (scope=${tokens.scope})`);
@@ -429,13 +429,12 @@ app.get("/auth/google/callback", async (req, res) => {
 app.get("/auth/google/status/:userId", requireUser(), async (req, res) => {
   try {
     const account = await googleAccountRepository.getByUserId(req.auth.userId);
-    const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
     res.json({
       ok: true,
       connected: !!account,
       email: account?.googleEmail || null,
       needsReauth: !!account?.needsReauth,
-      hasCalendarScope: !!account && (account.scope || "").includes(CALENDAR_SCOPE),
+      hasCalendarScope: hasCalendarScope(account?.scope),
     });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
