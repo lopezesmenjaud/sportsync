@@ -37,10 +37,36 @@ named 'dist'", el Root Directory se reseteó a la raíz.
 - Un cambio por commit, con mensaje descriptivo.
 
 ## Guardrail de Google OAuth
-La verificación de Google OAuth está APROBADA. Cambiar `GOOGLE_SCOPES` o la
-consent screen dispara re-verificación (semanas), y durante ese tiempo los
-usuarios nuevos ven "aplicación no verificada". No tocar sin decisión explícita
-de Julio. Arreglar la autorización del backend propio NO cuenta como tocar esto.
+La verificación de Google OAuth está APROBADA. Lo que dispara re-verificación NO es
+cambiar `GOOGLE_SCOPES`, es la CATEGORÍA del scope nuevo. Antes de tocar nada, ver en
+la Cloud Console (Data Access) en cuál de los tres cajones cae:
+- **Non-sensitive:** se puede agregar y salir a producción sin re-verificación, sin
+  justificación y sin video. Comprobado el 28 ago 2026 con `calendar.app.created`:
+  Google guardó y no apareció ningún aviso de revisión.
+- **Sensitive o restricted:** ahí sí dispara re-verificación (semanas), y mientras
+  dura, los usuarios nuevos ven "aplicación no verificada". Eso NO se toca sin
+  decisión explícita de Julio.
+
+Los scopes de Calendar configurados hoy:
+- `calendar.app.created` — **non-sensitive**. Es el que se pide (`server.js`,
+  `GOOGLE_SCOPES`). Solo alcanza los calendarios que la app creó.
+- `auth/calendar` — **sensible, aprobado**. Ya NO se pide, pero se deja configurado
+  para poder revertir sin esperar otra verificación. Los usuarios que lo concedieron
+  lo siguen trayendo en su token; `src/config/googleScopes.js` acepta los dos.
+
+Dos cosas que ya se comprobaron el 28 ago 2026 y NO hay que volver a investigar:
+- **Un calendario creado bajo `auth/calendar` se sigue alcanzando con
+  `calendar.app.created`.** Julio revocó el acceso desde su cuenta de Google,
+  reconectó con el scope estrecho, y el calendario "FanSchedule" que ya existía
+  conservó sus eventos viejos y recibió los nuevos (suscripción a NFL) en ese mismo
+  calendario. No se creó uno nuevo. O sea: no hay que migrar ni recrear el calendario
+  de nadie.
+- **Los usuarios ya conectados NO tienen que reconectarse.** Su token viejo con
+  `auth/calendar` sigue siendo válido, `hasCalendarScope` acepta los dos scopes, y
+  van a pasar al permiso nuevo solos cuando les toque reconectar. No hay migración que
+  correr ni aviso que mandar.
+
+Arreglar la autorización del backend propio NO cuenta como tocar esto.
 
 ## Forma de trabajar (esto es lo que más importa)
 - **Investigación de solo lectura ANTES de proponer.** Reportar hallazgos y la
