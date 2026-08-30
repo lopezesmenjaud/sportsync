@@ -1829,6 +1829,48 @@ app.post("/api/consent", requireUser(), async (req, res) => {
   }
 });
 
+// ── Origen: de qué grupo de Facebook llegó la persona ──
+//
+// El valor sale del parámetro ?g= de la URL de entrada y de NADA MÁS. No se deduce, no se
+// infiere de la cuenta de Google, y no se mezcla con ningún dato del calendario ni del perfil.
+//
+// Se sanea AQUÍ además de en el frontend, y no por desconfianza del navegador: es que el
+// frontend no es la única forma de llamar a este endpoint. Lo que llegue por la red se limpia
+// igual, con las mismas reglas y EN EL MISMO ORDEN.
+const ORIGEN_MAX = 40;
+
+function sanearOrigen(valor) {
+  if (typeof valor !== "string") return null;
+  // El ORDEN importa: minúsculas ANTES de validar. Si se filtrara primero, un "?g=NFL13"
+  // escrito en mayúsculas —que es como la gente copia y pega— perdería todas las letras y
+  // quedaría en "13". Bajar primero y filtrar después lo deja en "nfl13", que es lo correcto.
+  const limpio = valor
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\-_]/g, "")
+    .slice(0, ORIGEN_MAX);
+  return limpio.length > 0 ? limpio : null;
+}
+
+app.post("/api/origen", requireUser(), async (req, res) => {
+  try {
+    const origen = sanearOrigen(req.body?.origen);
+    if (!origen) {
+      return res.status(400).json({ ok: false, error: "Origen inválido" });
+    }
+
+    // El "solo si está vacío" lo garantiza el WHERE del repositorio, no un if de aquí.
+    const escrito = await googleAccountRepository.setOrigenIfEmpty(req.auth.userId, origen);
+    if (escrito) console.log(`[origen] ${req.auth.userId} ← "${origen}"`);
+
+    // ok:true en los dos casos: que ya tuviera origen NO es un error, es el comportamiento
+    // esperado del segundo contacto. `escrito` le dice al frontend cuál de los dos pasó.
+    res.json({ ok: true, escrito });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.get("/api/reminders/:userId", requireUser(), async (req, res) => {
   try {
     const account = await googleAccountRepository.getByUserId(req.auth.userId);

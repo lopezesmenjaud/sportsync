@@ -188,6 +188,11 @@ async function initializeDatabase() {
     // Minutos de recordatorio por usuario para eventos de FanSchedule. DEFAULT 30; NULL = sin
     // recordatorio. Las filas existentes toman el default (30) al agregarse la columna.
     await addColumnIfNotExists("google_accounts", "reminder_minutes", "INTEGER DEFAULT 30");
+    // De qué grupo de Facebook llegó la persona. Sale del parámetro ?g= de la URL de entrada
+    // y de NADA MÁS: nunca de datos de Google. Se escribe una sola vez, en el registro, y no
+    // se vuelve a tocar (ver POST /api/origen). NULL = llegó antes de la campaña o sin
+    // parámetro. Es un dato que no se puede reconstruir después, por eso se captura ahora.
+    await addColumnIfNotExists("google_accounts", "origen", "TEXT");
     console.log("✅ Google accounts table ready");
 
     await runAsync(`

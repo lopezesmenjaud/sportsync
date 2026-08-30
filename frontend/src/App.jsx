@@ -6,6 +6,7 @@ import { API_BASE } from './config'
 import { consumirDestino } from './api'
 import { useEstadoGoogle, invalidarEstadoGoogle } from './googleStatus'
 import { PUBLIC_PATHS, isPublicPath } from './publicRoutes'
+import { capturarOrigenDeUrl, enviarOrigenSiHace } from './origen'
 import EmailConsentModal from './components/EmailConsentModal'
 import CalendarConnectModal from './components/CalendarConnectModal'
 import LandingPage from './pages/LandingPage'
@@ -52,6 +53,20 @@ function saveUserFromUrl() {
 
 // Ejecutar sincrónicamente antes de que React renderice
 saveUserFromUrl()
+
+// El ?g= de la campaña se captura AQUÍ, en el mismo bloque síncrono y antes de cualquier
+// render, por la misma razón que saveUserFromUrl: es la única forma de garantizar que corre
+// pase lo que pase después. Se ejecuta en TODA carga, incluidas las rutas públicas — el link
+// del post de Facebook cae en el landing, que es una de ellas.
+capturarOrigenDeUrl()
+
+// Manda el origen al backend cuando ya hay sesión. Va en un componente y no en el bloque de
+// arriba porque el orden importa: al volver de Google, saveUserFromUrl guarda el token en el
+// mismo tick, así que para cuando esto monta ya hay con qué autenticarse.
+function RegistrarOrigen() {
+  useEffect(() => { enviarOrigenSiHace() }, [])
+  return null
+}
 
 // Limpia los query params del OAuth después del render
 function CleanOAuthParams() {
@@ -174,6 +189,7 @@ function App() {
     <BrowserRouter>
       <Analytics />
       <CleanOAuthParams />
+      <RegistrarOrigen />
       <CalendarConnectGate />
       <EmailConsentGate />
       <Routes>

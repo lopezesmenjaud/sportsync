@@ -186,6 +186,37 @@ class GoogleAccountRepositorySqlite {
       );
     });
   }
+
+  /**
+   * Guarda el origen (grupo de Facebook) SOLO si todavía no hay uno.
+   *
+   * El "solo si está vacío" vive en el WHERE de la propia consulta, no en un if del llamador,
+   * a propósito: así ninguna ruta futura puede saltárselo, ni siquiera por accidente, y no hay
+   * carrera entre leer y escribir. Gana el PRIMER contacto: si alguien llegó por el grupo de
+   * NFL y semanas después vuelve por el de MLB, se queda el de NFL — que es de donde de verdad
+   * salió.
+   *
+   * Devuelve true si esta llamada fue la que escribió, false si ya había uno.
+   */
+  setOrigenIfEmpty(userId, origen) {
+    return new Promise((resolve, reject) => {
+      const now = new Date().toISOString();
+      db.run(
+        `
+        UPDATE google_accounts
+        SET origen = ?, updatedAtUtc = ?
+        WHERE userId = ?
+          AND (origen IS NULL OR origen = '')
+        `,
+        [origen, now, userId],
+        function (err) {
+          if (err) return reject(err);
+          // this.changes = 0 significa que ya tenía origen (o que no existe la cuenta).
+          resolve(this.changes > 0);
+        }
+      );
+    });
+  }
 }
 
 const googleAccountRepository = new GoogleAccountRepositorySqlite();
