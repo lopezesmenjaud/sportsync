@@ -7,6 +7,7 @@ const { CALENDAR_SCOPE_APP_CREATED, hasCalendarScope } = require("./src/config/g
 const { ANTHROPIC_MODEL, readAnthropicText } = require("./src/config/aiModel");
 const { initializeDatabase, db } = require("./src/db/database");
 const { subscriptionRepository } = require("./src/repositories/subscriptionRepositorySqlite");
+const { tennisPlayerRepository } = require("./src/repositories/tennisPlayerRepositorySqlite");
 const { googleAccountRepository } = require("./src/repositories/googleAccountRepositorySqlite");
 const { syncMatchToCalendars } = require("./src/services/calendarSyncService");
 const { invalidate: invalidateRoundLabel } = require("./src/services/roundLabelService");
@@ -849,11 +850,59 @@ app.get("/api/teams/:leagueId", async (req, res) => {
   }
 });
 
-// ── Jugadores desde TheSportsDB (tenis, etc.) ──
+// leagueId del catálogo → circuito en tennis_players. Son los dos ÚNICOS ids que una
+// suscripción de tenis puede traer hoy (LEAGUES_BY_SPORT en LeaguePicker.jsx).
+const TENIS_LEAGUE_A_TOUR = { "4464": "atp", "4517": "wta" };
+
+// ── Jugadores ──
+//
+// Para TENIS sale de tennis_players y NUNCA de Live Tennis API en vivo: son 100 peticiones al
+// día en el plan gratis y el barrido ya se lleva ~48. Un pico de visitas al picker dejaría al
+// sync sin presupuesto, que es exactamente al revés de lo que importa.
+//
+// Cualquier otro leagueId cae al camino viejo de TheSportsDB, intacto. Hoy no lo usa nadie
+// —TeamPicker solo pide /api/players cuando el deporte es tenis— pero se deja por si aparece
+// otro deporte de individuales.
 app.get("/api/players/:leagueId", async (req, res) => {
   try {
     const { leagueId } = req.params;
     const leagueName   = req.query.leagueName || null;
+
+    const tour = TENIS_LEAGUE_A_TOUR[leagueId];
+    if (tour) {
+      // rosterLista distingue DOS estados que no se pueden decir con el mismo texto:
+      //   false → todavía no ha corrido ningún barrido (la tabla está vacía del todo)
+      //   true  → hay lista, y este circuito no tiene jugadores con partidos próximos
+      // Sin esta distinción, el picker le diría "no hay jugadores" a alguien que solo llegó
+      // temprano. Es la misma mentira que llevamos el día entero quitando.
+      const total = await tennisPlayerRepository.countAll();
+
+      // Los que no traen circuito deducido van AL FINAL, no fuera: es preferible que alguien
+      // salga en un circuito de más a que no salga en ninguno. Se encuentran con el buscador.
+      const [delTour, sinTour] = await Promise.all([
+        tennisPlayerRepository.getByTour(tour),
+        tennisPlayerRepository.getSinTour(),
+      ]);
+
+      // Forma IDÉNTICA a la que ya devolvía TheSportsDB, para que el frontend no cambie:
+      // { id, name, nationality, photo, ... }. photo va en null porque el proveedor NO manda
+      // ninguna imagen —el objeto de jugador trae name, country, ranking, hand, birthday y
+      // nada más—; el picker ya tiene su respaldo y pinta un 🎾 cuando photo es null.
+      const aFrontend = (p) => ({
+        id: String(p.playerId),
+        name: p.name,
+        // country viene como código de tres letras en minúsculas ("aus", "srb"). Se manda en
+        // MAYÚSCULAS y no traducido a nombre de país: una tabla de ~200 códigos sería otra
+        // config hardcodeada más para mantener, y "AUS" se entiende.
+        nationality: p.country ? String(p.country).toUpperCase() : "",
+        photo: null,
+        ranking: p.ranking,
+      });
+
+      const players = [...delTour.map(aFrontend), ...sinTour.map(aFrontend)];
+      console.log(`[players] tenis ${tour}: ${delTour.length} del circuito + ${sinTour.length} sin circuito (roster ${total === 0 ? "VACÍA" : total})`);
+      return res.json({ ok: true, players, rosterLista: total > 0 });
+    }
 
     let players = [];
 
