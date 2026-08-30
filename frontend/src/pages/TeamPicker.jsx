@@ -41,6 +41,9 @@ export default function TeamPicker() {
   const [teams, setTeams]               = useState([])
   const [loadingTeams, setLoadingTeams] = useState(true)
   const [teamsError, setTeamsError]     = useState(null)
+  // ¿Ya corrió algún barrido de tenis? null = el backend no lo dijo (versión anterior), y
+  // entonces se trata como "sí": degradar hacia el texto de siempre, nunca hacia el nuevo.
+  const [rosterLista, setRosterLista]   = useState(null)
 
   // Cargar equipos o jugadores según el deporte
   useEffect(() => {
@@ -55,6 +58,9 @@ export default function TeamPicker() {
       .then(data => {
         console.log(`${endpoint} response:`, data)
         const items = isTennis ? data.players : data.teams
+        // Si el backend no manda rosterLista (versión anterior), queda en null y el estado
+        // vacío se comporta como hoy. Un campo nuevo que falta no puede romper la pantalla.
+        setRosterLista(typeof data.rosterLista === 'boolean' ? data.rosterLista : null)
         if (data.ok && items) setTeams(items)
         else setTeamsError(mensajeDeFallo(data, isTennis))
       })
@@ -82,6 +88,19 @@ export default function TeamPicker() {
   }, [sport])
 
   const filtered     = teams.filter(t => t.name.toLowerCase().includes(search.toLowerCase()))
+
+  // TOPE DE LO QUE SE PINTA DE ENTRADA. La lista de tenis trae ~500 jugadores y llegan
+  // ORDENADOS POR RANKING desde el backend, así que los primeros 100 son los que alguien
+  // puede reconocer; del 101 en adelante son de ITF y Challenger.
+  //
+  // Quinientas tarjetas no son un problema de rendimiento, son un problema de persona: nadie
+  // encuentra nada ahí. El tope aplica SOLO cuando no se está buscando — en cuanto alguien
+  // escribe, se filtra sobre la lista COMPLETA, así que "Djokovic" aparece aunque esté en el
+  // lugar 300. Recortar en el backend habría roto justamente eso.
+  const TOPE_VISIBLE = 100
+  const hayBusqueda  = search.trim().length > 0
+  const visibles     = hayBusqueda ? filtered : filtered.slice(0, TOPE_VISIBLE)
+  const ocultos      = filtered.length - visibles.length
   const isSubscribed = (team) => subscribed.includes(team.name) || newlyAdded.find(t => t.id === team.id)
 
   const handleConfirm = async ({ team, league, mode }) => {
@@ -159,7 +178,13 @@ export default function TeamPicker() {
     const endpoint = isTennis ? 'players' : 'teams'
     apiFetch(`/api/${endpoint}/${leagueId}?leagueName=${leagueName}`)
       .then(r => r.json())
-      .then(d => { setTeams((isTennis ? d.players : d.teams) || []); setLoadingTeams(false) })
+      // rosterLista también se refresca aquí: si no, quien pica Reintentar despues de que el
+      // barrido llenó la lista seguiría leyendo "todavía estamos cargando" con el dato viejo.
+      .then(d => {
+        setRosterLista(typeof d.rosterLista === 'boolean' ? d.rosterLista : null)
+        setTeams((isTennis ? d.players : d.teams) || [])
+        setLoadingTeams(false)
+      })
       .catch(() => { setTeamsError('Error de conexión.'); setLoadingTeams(false) })
   }
 
@@ -210,6 +235,14 @@ export default function TeamPicker() {
           {loadingTeams ? (isTennis ? 'Cargando jugadores...' : 'Cargando equipos...') : teamsError ? 'Error' : `${filtered.length} ${isTennis ? 'jugadores' : 'equipos'}`}
         </div>
 
+        {/* Aviso del tope. Solo aparece si de verdad se está escondiendo algo, y dice cómo
+            llegar a lo escondido — un tope silencioso haría creer que el resto no existe. */}
+        {!loadingTeams && !teamsError && ocultos > 0 && (
+          <div style={{ fontSize: 12, color: '#666666', marginTop: -8, marginBottom: 14 }}>
+            Mostrando los {visibles.length} mejor clasificados. Hay {ocultos} más — búscalos por nombre.
+          </div>
+        )}
+
         {/* Cargando */}
         {loadingTeams && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
@@ -246,16 +279,28 @@ export default function TeamPicker() {
         {/* Sin equipos */}
         {!loadingTeams && !teamsError && teams.length === 0 && (
           <div style={{ textAlign: 'center', padding: '40px 0', color: '#666666', fontSize: 14 }}>
-            {isTennis ? 'No se encontraron jugadores para este circuito.' : 'Esta liga no tiene equipos registrados en TheSportsDB.'}
+            {/* Tres estados distintos, tres textos. "Todavía no cargamos" NO es lo mismo que
+                "no hay", y decirle a alguien que llegó temprano que su circuito no tiene
+                jugadores es exactamente la mentira que quitamos del picker de equipos.
+                rosterLista === null → el backend no lo dijo: se cae al texto de siempre. */}
+            {isTennis
+              ? (rosterLista === false
+                  ? 'Todavía estamos cargando los jugadores de tenis.'
+                  : 'No hay jugadores de este circuito con partidos próximos.')
+              : 'Esta liga no tiene equipos registrados en TheSportsDB.'}
             <br />
-            <span style={{ fontSize: 12 }}>Puedes seguir {isTennis ? 'el circuito completo' : 'la liga completa'} usando el botón de arriba.</span>
+            <span style={{ fontSize: 12 }}>
+              {isTennis && rosterLista === false
+                ? 'Vuelve en un rato — o sigue el circuito completo con el botón de arriba, que ya funciona.'
+                : `Puedes seguir ${isTennis ? 'el circuito completo' : 'la liga completa'} usando el botón de arriba.`}
+            </span>
           </div>
         )}
 
         {/* Grid de equipos / jugadores */}
         {!loadingTeams && !teamsError && (
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${isTennis ? '200px' : '160px'}, 1fr))`, gap: 10 }}>
-            {filtered.map((team) => {
+            {visibles.map((team) => {
               const already = isSubscribed(team)
               return (
                 <div key={team.id}
