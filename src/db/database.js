@@ -246,6 +246,35 @@ async function initializeDatabase() {
     `);
     console.log("✅ League teams cache table ready");
 
+    // Jugadores de tenis vistos en los barridos. Es la lista que sirve el picker.
+    //
+    // NO se llena con peticiones propias: los datos ya vienen dentro de la respuesta que el
+    // barrido pide de todos modos, así que llenarla cuesta CERO peticiones. Eso es el punto —
+    // con 100 al día en el plan gratis, si /api/players saliera en vivo al proveedor las
+    // visitas al picker se comerían el presupuesto del sync.
+    //
+    // La llave es el playerId del proveedor y NO el nombre, a propósito: el nombre se guarda
+    // tal cual viene porque la suscripción casa por igualdad exacta de string contra el
+    // nombre del partido, y con el id por llave podemos DETECTAR el día que el proveedor
+    // cambie una escritura sin perder al jugador (ver el aviso en tennisSyncService).
+    //
+    // Solo se hacen upserts, nunca DELETE: un barrido fallido o vacío no puede vaciar la
+    // lista. Es el mismo invariante que league_teams_cache, aquí gratis por construcción.
+    await runAsync(`
+      CREATE TABLE IF NOT EXISTS tennis_players (
+        playerId     TEXT PRIMARY KEY,
+        name         TEXT NOT NULL,
+        tour         TEXT,
+        country      TEXT,
+        ranking      INTEGER,
+        firstSeenUtc TEXT NOT NULL,
+        lastSeenUtc  TEXT NOT NULL
+      )
+    `);
+    // El picker ordena por ranking dentro de un circuito; este índice cubre esa consulta.
+    await runAsync(`CREATE INDEX IF NOT EXISTS idx_tennis_players_tour_ranking ON tennis_players (tour, ranking)`);
+    console.log("✅ Tennis players table ready");
+
     await runAsync(`
       CREATE TABLE IF NOT EXISTS email_consent (
         userId TEXT PRIMARY KEY,
