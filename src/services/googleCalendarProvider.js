@@ -81,10 +81,26 @@ function applyUserSidePrefix(title, userSide) {
   return base;
 }
 
+// En tenis, scheduled_time es la hora en que ABRE LA SESIÓN, no la del partido: el proveedor
+// le pone la misma hora a todos los partidos de una cancha y se juegan uno tras otro. El 30 ago
+// 2026 había cinco eventos apilados a las 9:00 en un calendario real.
+//
+// El evento no puede decir "9:00" a secas, porque es mentira para cuatro de esos cinco. Y el
+// texto NO puede llevar un HH:MM literal: el evento se escribe en UTC y Google lo pinta en la
+// zona de quien lo ve, así que una hora escrita a mano contradiría la que aparece arriba.
+// "no antes de ESTA HORA" y no "no antes de" a secas: colgando en preposición parece que el
+// título se cortó — justo el efecto que se está tratando de evitar en una vista donde los
+// títulos SÍ se truncan. "esta hora" se completa solo apuntando a la hora que Google ya pinta
+// arriba, sin escribir ningún HH:MM.
+const SUFIJO_TENIS_TITULO = " · no antes de esta hora";
+const AVISO_TENIS_DESCRIPCION =
+  "Hora de apertura de la sesión. El partido puede empezar más tarde, nunca antes.";
+
 async function buildEventFromMatch(match, userSide = null) {
   const startDate = new Date(match.currentStartUtc || match.scheduledStartUtc);
   const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
 
+  const esTenis = match.sport === "tennis";
   const isTeamVsTeam = match.homeParticipantName && match.awayParticipantName;
   const baseSummary = isTeamVsTeam
     ? `${match.homeParticipantName} vs ${match.awayParticipantName}`
@@ -97,11 +113,22 @@ async function buildEventFromMatch(match, userSide = null) {
   // El prefijo Local/Visitante va HASTA EL PRINCIPIO; el roundLabel se queda donde está.
   // Ej.: "🏠 Local · Atlas vs Monterrey (Cuartos)".
   const baseWithRound = roundLabel ? `${baseSummary} (${roundLabel})` : baseSummary;
-  const summary = applyUserSidePrefix(baseWithRound, userSide);
+
+  // EN TENIS NO HAY LOCAL NI VISITANTE. getUserSide sí devuelve "home"/"away" para un partido
+  // de tenis —el jugador que la persona sigue está en homeParticipantName o awayParticipantName,
+  // y ese helper no distingue deporte—, así que sin este null el título saldría
+  // "🏠 Local · Alcaraz vs Sinner", que además de falso se come los primeros caracteres, que es
+  // lo único que se alcanza a leer en la vista de día. Pasar null también LIMPIA el prefijo de
+  // un evento que ya lo tuviera, porque applyUserSidePrefix quita antes de aplicar.
+  const summary = applyUserSidePrefix(baseWithRound, esTenis ? null : userSide)
+    + (esTenis ? SUFIJO_TENIS_TITULO : "");
 
   const matchUrl = `https://fanschedule.com/match/${match.providerMatchId}`;
 
   const description = [
+    // Primera línea en tenis: es donde el aviso se lee completo. El sufijo del título se corta
+    // en la vista de día, pero aquí no hay límite y la persona ya abrió el evento.
+    esTenis ? AVISO_TENIS_DESCRIPCION : null,
     isTeamVsTeam ? `${match.homeParticipantName} vs ${match.awayParticipantName}` : (match.eventName || match.competitionName),
     ``,
     `Competición: ${match.competitionName}`,
