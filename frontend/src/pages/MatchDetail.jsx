@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import WatchPanel from '../components/WatchPanel'
 import { apiFetch } from '../api'
 import { getUserId } from '../auth'
+import { useAnuncios } from '../ads'
 
 export default function MatchDetail() {
   const { matchId } = useParams()
@@ -57,6 +58,11 @@ export default function MatchDetail() {
       .catch(() => {})
       .finally(() => setLoadingTickets(false))
   }, [match?.providerMatchId])
+
+  // Página pública de partido. Califica solo con el partido ya cargado: mientras carga y
+  // cuando el partido no existe, lo que se ve es una línea de texto, no contenido.
+  // Va ANTES de los early returns de abajo — un hook no puede quedar tras un return.
+  useAnuncios(!loading && !error && !!match)
 
   if (loading) return (
     <div style={{ background: '#faf9f7', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

@@ -13,12 +13,16 @@
     <meta name="description" content="Sigue a tus equipos y ligas favoritas y sus partidos se agendan solos en tu Google Calendar. F1, fútbol, Champions, NFL, NBA, tenis y más." />
     <link rel="canonical" href="https://fanschedule.com/" />
 
-    <!-- Verificación de propiedad del sitio ante Google AdSense.
-         ID de editor: ca-pub-8736805003532889
-         Es el script que AdSense pide tener en el <head> para confirmar que el dominio es
-         nuestro. No muestra anuncios por sí solo. -->
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8736805003532889"
-     crossorigin="anonymous"></script>
+    <!-- Verificación de propiedad del sitio ante Google AdSense. ID de editor:
+         ca-pub-8736805003532889.
+         Es una etiqueta ESTÁTICA: le confirma a Google que el dominio es nuestro sin cargar
+         nada y sin mostrar un solo anuncio, y se lee sin ejecutar JavaScript. Es uno de los
+         tres métodos que AdSense acepta; el otro que ya tenemos es /ads.txt, con el mismo ID.
+         AQUÍ NO VA EL SCRIPT DE ANUNCIOS. Estaba, y por eso AdSense rechazó el sitio: este
+         archivo es la cáscara de TODAS las pantallas, así que los anuncios arrancaban también
+         en el admin y en pantallas vacías o a medio cargar. Ahora ese script lo inyecta
+         src/ads.js, solo desde las pantallas que en ese momento tienen contenido real. -->
+    <meta name="google-adsense-account" content="ca-pub-8736805003532889" />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="FanSchedule" />

@@ -4,6 +4,7 @@ import MatchCard from '../components/MatchCard'
 import { apiFetch } from '../api'
 import { getUserId } from '../auth'
 import { geocodeCity, reverseGeocode } from '../utils/geocoding'
+import { useAnuncios } from '../ads'
 
 export default function NearbyMatches() {
   const [loading, setLoading]       = useState(true)
@@ -13,6 +14,10 @@ export default function NearbyMatches() {
   const [matches, setMatches]       = useState([])
   const [location, setLocation]     = useState(null)
   const [error, setError]           = useState(null)
+
+  // Cerca de mí. Esta pantalla tiene dos cargas (la geolocalización y luego la búsqueda), así
+  // que se exigen las dos quietas. Con error a la vista lo único que hay es el mensaje rojo.
+  useAnuncios(!loading && !searching && !error && matches.length > 0)
 
   // Pedir geolocalización al cargar
   useEffect(() => {

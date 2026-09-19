@@ -5,6 +5,7 @@ import MatchCard from '../components/MatchCard'
 import { apiFetch } from '../api'
 import { getUserId } from '../auth'
 import { SPORT_EMOJI } from '../sportEmoji'
+import { useAnuncios } from '../ads'
 
 // Selección del filtro persistida por SESIÓN de navegador (se limpia al cerrar), mismo patrón
 // que el gate de calendario (App.jsx usa sessionStorage con clave fanschedule_*).
@@ -104,6 +105,11 @@ export default function UpcomingMatches() {
   }
 
   const grouped = groupByDate(filteredMatches)
+
+  // Próximos partidos. Se mide sobre filteredMatches y no sobre matches: con un filtro que
+  // no deja nada, la pantalla dice "Sin partidos con este filtro" y está tan vacía como si
+  // no hubiera ninguno.
+  useAnuncios(!loading && filteredMatches.length > 0)
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui, sans-serif' }}>

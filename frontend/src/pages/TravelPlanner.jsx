@@ -4,6 +4,7 @@ import MatchCard from '../components/MatchCard'
 import { apiFetch } from '../api'
 import { getUserId } from '../auth'
 import { geocodeCity } from '../utils/geocoding'
+import { useAnuncios } from '../ads'
 
 export default function TravelPlanner() {
   const [cityInput, setCityInput] = useState('')
@@ -14,6 +15,10 @@ export default function TravelPlanner() {
   const [matches, setMatches]     = useState([])
   const [location, setLocation]   = useState(null)
   const [searched, setSearched]   = useState(false)
+
+  // Planear viaje. Arranca en un formulario vacío, antes de cualquier búsqueda: por eso se
+  // pide searched además de que la búsqueda haya traído resultados.
+  useAnuncios(searched && !loading && !error && matches.length > 0)
 
   const handleSearch = async () => {
     if (!cityInput.trim()) { setError('Escribe una ciudad destino.'); return }

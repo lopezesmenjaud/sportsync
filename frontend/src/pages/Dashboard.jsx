@@ -7,6 +7,7 @@ import { apiFetch } from '../api'
 import { useEstadoGoogle, invalidarEstadoGoogle, faltaPermisoCalendario } from '../googleStatus'
 import { getUserId } from '../auth'
 import { SPORT_EMOJI } from '../sportEmoji'
+import { useAnuncios } from '../ads'
 
 const SPORTS = [
   { emoji: '⚽', name: 'Fútbol',            sub: 'La Liga, Premier, Champions...', key: 'futbol'           },
@@ -31,6 +32,10 @@ export default function Dashboard() {
   const { estado: googleStatus, cargando: googleCargando } = useEstadoGoogle()
   const [mostrarAviso, setMostrarAviso] = useState(false)
   const userId = getUserId()
+
+  // Mis favoritos. Un usuario nuevo que todavía no sigue a nadie ve esta pantalla en blanco:
+  // ahí NO va anuncio. Califica cuando ya terminó de cargar y hay al menos un equipo.
+  useAnuncios(!loading && subscriptions.length > 0)
 
   useEffect(() => {
     apiFetch(`/subscriptions/${userId}`)

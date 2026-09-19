@@ -5,6 +5,7 @@ import { consumirSesionExpirada } from '../api'
 import { invalidarEstadoGoogle } from '../googleStatus'
 import AvisoPermisoCalendario from '../components/AvisoPermisoCalendario'
 import CalendarConnectModal from '../components/CalendarConnectModal'
+import { useAnuncios } from '../ads'
 
 const TICKER_ITEMS = [
   'Real Madrid vs Barcelona · Hoy 21:00',
@@ -43,6 +44,10 @@ const GoogleIcon = () => (
 )
 
 export default function LandingPage() {
+  // El landing es contenido de publicador puro: explica el producto, no depende de ninguna
+  // petición y nunca está vacío. Califica desde el primer render.
+  useAnuncios(true)
+
   const tickerRef = useRef(null)
 
   // Si llegamos aquí porque la sesión se venció, hay que decirlo. Sin esto la persona aterriza en
