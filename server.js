@@ -20,6 +20,7 @@ const googleCalendarProvider = require("./src/services/googleCalendarProvider");
 const { sessionRepository } = require("./src/repositories/sessionRepositorySqlite");
 const { requireUser, optionalUser, isLegacyAllowed } = require("./src/middleware/auth");
 const { withRateLimitRetry, sleep } = require("./src/services/userBackfillService");
+const { partidoPublicoHandler } = require("./src/routes/partidoPublico");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -970,6 +971,15 @@ app.get("/api/players/:leagueId", async (req, res) => {
     res.status(500).json({ ok: false, error: error.message });
   }
 });
+
+// ── Página PÚBLICA de partido, HTML renderizado en el servidor ──
+// Para robots y para quien llega de una búsqueda: el SPA devuelve un index.html vacío y Google
+// no ve nada. Esta ruta sí entrega contenido. Va SIN auth: no lee sesión ni la necesita.
+//
+// El slug decorativo es opcional. En Express 5 eso se escribe "{/:slug}" y NO ":slug?" — la
+// sintaxis vieja truena al arrancar con "Unexpected ? at index 19" (path-to-regexp v8).
+// Comprobado contra express 5.2.1, el que trae este proyecto.
+app.get("/partido/:id{/:slug}", partidoPublicoHandler);
 
 // ── Detalle de un partido ──
 // Sesión OPCIONAL: la página de un partido es pública (ruta /match/:matchId sin Protected en el

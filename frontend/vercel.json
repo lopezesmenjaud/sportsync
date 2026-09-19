@@ -10,6 +10,8 @@
     }
   ],
   "rewrites": [
+    { "source": "/partido/:path*",
+      "destination": "https://sportsync-awqq.onrender.com/partido/:path*" },
     { "source": "/(.*)", "destination": "/" }
   ]
 }
