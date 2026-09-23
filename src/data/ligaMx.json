@@ -1,6 +1,5 @@
 {
-  "competenciaEnLaBase": "Mexican Primera League",
-  "nombrePublico": "Liga MX",
+  "_nota": "Solo los equipos. El nombre público de la competencia y si se indexa viven en competencias.json, bajo la clave 4350; qué partido es de Liga MX se decide por esa clave, no por el nombre que mande el proveedor.",
   "temporada": "Apertura 2026",
   "equipos": [
     {"base":"América","apodo":"América","slug":"america","dondeVer":"Canal 5, TUDN o ViX Premium"},

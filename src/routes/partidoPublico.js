@@ -13,6 +13,19 @@
 const { matchRepository } = require("../repositories/matchRepositorySqlite");
 const { db } = require("../db/database");
 
+// Catálogo ÚNICO de competencias. Decide DOS cosas y las dos salen solo de aquí: qué se indexa
+// (estar en el archivo = se indexa) y cómo se llama la competencia de cara al público. Lo que no
+// esté no se indexa y se muestra con el nombre que traiga la base.
+const COMPETENCIAS = require("../data/competencias.json");
+
+// Índice por clave. Se va por CLAVE y no por nombre porque la clave es lo único estable: el
+// proveedor renombra ligas —4350 aparece hoy como "Mexican Liga MX" y en la base está guardada
+// como "Mexican Primera League"— y un índice por texto se rompería en silencio con cada cambio.
+const COMPETENCIAS_POR_CLAVE = new Map(COMPETENCIAS.competencias.map((c) => [c.clave, c]));
+
+// Liga MX es la única competencia con tabla de equipos propia, así que su clave se nombra aquí.
+const CLAVE_LIGA_MX = "4350";
+
 // Tabla de Liga MX armada a mano: los apodos con los que la gente busca y, sobre todo, el canal
 // por equipo LOCAL. Eso último no lo vende ninguna API — la caché de transmisión está guardada
 // por competencia, así que sin esta tabla un partido de Chivas mostraba las doce opciones de
@@ -34,25 +47,16 @@ const AZUL = "#1C2430";
 const GRIS = "#6B7280";
 const FONDO = "#FFFFFF";
 
-// Competencias que SÍ se indexan, por competitionKey de TheSportsDB.
-//
-// Va por clave y no por nombre a propósito: el proveedor guarda los nombres con prefijo de país
-// ("Spanish La Liga", "Mexican Primera League"), así que buscar "Liga MX" por texto no encuentra
-// nada, y buscar "la liga" por subcadena se comería también "Spanish La Liga 2". La clave es
-// exacta y estable. Las claves salen de la lista de ligas del frontend (LeaguePicker.jsx) y del
-// mapeo de src/db/database.js.
-const COMPETENCIAS_INDEXABLES = new Map([
-  ["4350", "Liga MX"],
-  ["4346", "NFL"],
-  ["4480", "Champions League"],
-  ["4335", "La Liga"],
-  ["4328", "Premier League"],
-  ["4443", "Fórmula 1"],
-  ["4424", "MLB"],
-]);
-
+// Estar en el catálogo es lo que hace que una competencia se indexe. No hay segunda lista.
 function esIndexable(competitionKey) {
-  return COMPETENCIAS_INDEXABLES.has(String(competitionKey || ""));
+  return COMPETENCIAS_POR_CLAVE.has(String(competitionKey || ""));
+}
+
+// Cómo se llama la competencia en público. Del catálogo si está; si no, lo que traiga la base,
+// que es el comportamiento de siempre para todo lo que no se indexa.
+function nombreDeCompetencia(match) {
+  const entrada = COMPETENCIAS_POR_CLAVE.get(String(match.competitionKey || ""));
+  return entrada ? entrada.nombrePublico : (match.competitionName || "").trim();
 }
 
 // Escapa lo que va DENTRO de texto o de un atributo con comillas dobles. Todo valor que venga de
@@ -93,7 +97,10 @@ function aSlug(texto) {
 //
 // Para cualquier competencia que no sea Liga MX devuelve exactamente lo de siempre.
 function vistaDelPartido(match) {
-  const ligaMx = (match.competitionName || "") === LIGA_MX.competenciaEnLaBase;
+  // Por CLAVE y no por el nombre del proveedor: ese nombre cambia (la misma liga aparece como
+  // "Mexican Primera League" en la base y como "Mexican Liga MX" en la API del proveedor hoy),
+  // y si cambiara dejaríamos de reconocer Liga MX sin que nadie se entere.
+  const ligaMx = String(match.competitionKey || "") === CLAVE_LIGA_MX;
 
   const entradaLocal = ligaMx ? LIGA_MX_POR_BASE.get(match.homeParticipantName) || null : null;
   const entradaVisita = ligaMx ? LIGA_MX_POR_BASE.get(match.awayParticipantName) || null : null;
@@ -138,7 +145,7 @@ function vistaDelPartido(match) {
       ? `${slugLocal}-vs-${slugVisita}`
       : slugLocal || slugVisita || aSlug(match.eventName) || aSlug(match.competitionName);
 
-  const competencia = ligaMx ? LIGA_MX.nombrePublico : (match.competitionName || "").trim();
+  const competencia = nombreDeCompetencia(match);
 
   return {
     ligaMx,
