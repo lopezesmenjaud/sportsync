@@ -28,6 +28,12 @@ const LIGA_MX_POR_BASE = new Map(LIGA_MX.equipos.map((e) => [e.base, e]));
 const SITIO = process.env.SITE_URL || "https://fanschedule.com";
 const ZONA = "America/Mexico_City";
 
+// Paleta de la marca. Va aquí y no repartida por el CSS para poder cambiarla en un solo sitio.
+const NARANJA = "#F5820A";
+const AZUL = "#1C2430";
+const GRIS = "#6B7280";
+const FONDO = "#FFFFFF";
+
 // Competencias que SÍ se indexan, por competitionKey de TheSportsDB.
 //
 // Va por clave y no por nombre a propósito: el proveedor guarda los nombres con prefijo de país
@@ -111,16 +117,19 @@ function vistaDelPartido(match) {
     ? entradaVisita.apodo
     : (match.awayParticipantName || "").trim();
 
-  // Para lo que no es equipo contra equipo (una carrera de F1) no hay "vs": se cae al nombre del
-  // evento y, en último caso, al de la competencia.
-  const nombre =
-    nombreLocal && nombreVisita
-      ? `${nombreLocal} vs ${nombreVisita}`
-      : nombreLocal ||
-        nombreVisita ||
-        (match.eventName || "").trim() ||
-        (match.competitionName || "").trim() ||
-        "Partido";
+  // ¿Hay dos participantes enfrentados? Una carrera de F1 no los tiene, y de eso depende que la
+  // página diga "a qué hora JUEGAN" o "a qué hora ES".
+  const esVersus = Boolean(nombreLocal && nombreVisita);
+
+  // Para lo que no es equipo contra equipo se cae al nombre del evento y, en último caso, al de
+  // la competencia.
+  const nombre = esVersus
+    ? `${nombreLocal} vs ${nombreVisita}`
+    : nombreLocal ||
+      nombreVisita ||
+      (match.eventName || "").trim() ||
+      (match.competitionName || "").trim() ||
+      "Partido";
 
   const slugLocal = entradaLocal ? entradaLocal.slug : aSlug(match.homeParticipantName);
   const slugVisita = entradaVisita ? entradaVisita.slug : aSlug(match.awayParticipantName);
@@ -129,13 +138,19 @@ function vistaDelPartido(match) {
       ? `${slugLocal}-vs-${slugVisita}`
       : slugLocal || slugVisita || aSlug(match.eventName) || aSlug(match.competitionName);
 
+  const competencia = ligaMx ? LIGA_MX.nombrePublico : (match.competitionName || "").trim();
+
   return {
     ligaMx,
+    esVersus,
     nombre,
     nombreLocal,
     nombreVisita,
     slug,
-    competencia: ligaMx ? LIGA_MX.nombrePublico : (match.competitionName || "").trim(),
+    competencia,
+    // Clave de atribución del botón de registro. Sale de la competencia ya en su forma pública,
+    // así que un partido de Liga MX manda "seo-liga-mx" y no "seo-mexican-primera-league".
+    origen: `seo-${aSlug(competencia)}`.replace(/-$/, ""),
     // Solo se llena cuando el equipo LOCAL está en la tabla. Es lo que decide si "Dónde verlo"
     // muestra el canal de este partido o cae a la caché por competencia.
     dondeVerLocal: entradaLocal ? entradaLocal.dondeVer : null,
@@ -197,6 +212,165 @@ function transmisionGuardada(competitionKey) {
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Presentación
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Todo el CSS va EN LÍNEA. Esta ruta la sirve Express, que no tiene pipeline de estáticos: una
+// hoja externa sería otra petición —y otro viaje a Render— justo para el robot que queremos que
+// vea la página rápido. Por lo mismo, la tipografía es la del sistema y no se carga ninguna
+// fuente remota.
+//
+// Móvil primero: los tamaños base son los de un teléfono y la única consulta de medios sube el
+// h1 en pantallas grandes. Nada tiene ancho fijo, así que a 360px no hay barrido lateral.
+const ESTILOS = `
+    :root {
+      --naranja: ${NARANJA};
+      --azul: ${AZUL};
+      --gris: ${GRIS};
+      --fondo: ${FONDO};
+      --borde: #E5E7EB;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--fondo);
+      color: var(--azul);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      -webkit-text-size-adjust: 100%;
+    }
+    /* Que un nombre largo parta de línea en vez de ensanchar la página. */
+    h1, h2, p, li { overflow-wrap: break-word; }
+
+    .barra {
+      border-bottom: 1px solid var(--borde);
+      padding: 14px 16px;
+    }
+    .logo {
+      display: inline-block;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      text-decoration: none;
+    }
+    .logo-fan { color: var(--naranja); }
+    .logo-schedule { color: var(--azul); }
+
+    .contenido {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 24px 16px 8px;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: 26px;
+      line-height: 1.25;
+      letter-spacing: -0.02em;
+    }
+    .datos { margin: 0 0 24px; }
+    .dato {
+      margin: 0 0 4px;
+      color: var(--gris);
+      font-size: 15px;
+    }
+    .dato time { color: var(--gris); }
+
+    .tarjeta {
+      border: 1px solid var(--borde);
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin: 0 0 20px;
+    }
+    .tarjeta h2 {
+      margin: 0 0 10px;
+      font-size: 17px;
+      font-weight: 600;
+    }
+    .tarjeta h3 {
+      margin: 14px 0 6px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--gris);
+    }
+    .tarjeta p { margin: 0 0 8px; }
+    .tarjeta p:last-child { margin-bottom: 0; }
+    .tarjeta ul { margin: 0; padding-left: 20px; }
+
+    /* El cuadro de registro NO debe leerse como un anuncio: lleva el naranja de la marca en el
+       borde y en el botón, el mismo tipo de letra que el resto y ningún gris de banner. */
+    .registro {
+      border: 2px solid var(--naranja);
+      border-radius: 12px;
+      background: #FFF8F0;
+      padding: 20px;
+      margin: 0 0 28px;
+    }
+    .registro h2 {
+      margin: 0 0 8px;
+      font-size: 19px;
+      line-height: 1.3;
+      color: var(--azul);
+    }
+    .registro p {
+      margin: 0 0 16px;
+      color: var(--azul);
+      font-size: 15px;
+    }
+    .boton {
+      display: inline-block;
+      background: var(--naranja);
+      color: #FFFFFF;
+      text-decoration: none;
+      font-size: 16px;
+      font-weight: 600;
+      padding: 12px 22px;
+      border-radius: 10px;
+    }
+
+    .pie {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 20px 16px 32px;
+      border-top: 1px solid var(--borde);
+      color: var(--gris);
+      font-size: 14px;
+    }
+    .pie-enlaces {
+      margin: 0 0 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .pie a { color: var(--gris); text-decoration: none; }
+    .pie a:hover, .pie a:focus { text-decoration: underline; }
+    .pie p { margin: 0; }
+
+    @media (min-width: 600px) {
+      h1 { font-size: 32px; }
+      .contenido { padding-top: 32px; }
+    }
+`;
+
+function barra() {
+  return `    <header class="barra">
+      <a class="logo" href="/"><span class="logo-fan">Fan</span><span class="logo-schedule">Schedule</span></a>
+    </header>`;
+}
+
+function pie() {
+  return `    <footer class="pie">
+      <nav class="pie-enlaces">
+        <a href="/">Inicio</a>
+        <a href="/privacy">Privacidad</a>
+        <a href="/terms">Términos</a>
+      </nav>
+      <p>FanSchedule — los partidos de tus equipos, en tu Google Calendar.</p>
+    </footer>`;
+}
+
 // Lista de canales -> <li>. Devuelve "" si no hay nada, para poder omitir el bloque entero.
 function listaCanales(encabezado, valores) {
   const limpios = (Array.isArray(valores) ? valores : []).filter(Boolean);
@@ -217,8 +391,7 @@ function seccionDondeVerlo(vista, transmision) {
   // cada partido. Tampoco entra la nota de esa caché: la escribió un modelo, nadie la verificó, y
   // en una página pública eso es afirmar cosas sin respaldo.
   if (vista.dondeVerLocal) {
-    return `
-      <section>
+    return `      <section class="tarjeta">
         <h2>Dónde verlo</h2>
         <p>${esc(vista.dondeVerLocal)}</p>
       </section>`;
@@ -226,8 +399,7 @@ function seccionDondeVerlo(vista, transmision) {
 
   // Cualquier otra competencia, y Liga MX cuando el local no está en la tabla: como siempre.
   // Hoy broadcasting_cache suele estar vacía —initializeDatabase la borra en cada arranque del
-  // servidor— así que lo normal es caer al texto genérico. La sección existe igual, con su <h2>,
-  // para que lo que venga después entre aquí adentro sin rehacer la página.
+  // servidor— así que lo normal es caer al texto genérico.
   let cuerpo = "";
   if (transmision) {
     cuerpo += listaCanales("TV abierta", transmision.freeTV);
@@ -243,9 +415,22 @@ function seccionDondeVerlo(vista, transmision) {
         )}. La transmisión cambia según el país y a veces según la jornada.</p>`;
   }
 
-  return `
-      <section>
+  return `      <section class="tarjeta">
         <h2>Dónde verlo</h2>${cuerpo}
+      </section>`;
+}
+
+// Va SIEMPRE después de "Dónde verlo": el horario y el canal son las dos cosas que la persona
+// vino a buscar, y ponerse en medio de la segunda es quitarle la página a quien la está leyendo.
+//
+// Un solo estado por ahora, el de visitante sin sesión. Esta ruta no lee sesión (ni la tiene:
+// se sirve cacheada por el CDN), así que no puede saber si quien mira ya es usuario.
+function cuadroDeRegistro(vista) {
+  return `      <section class="registro">
+        <h2>No te vuelvas a quedar con la duda</h2>
+        <p>FanSchedule pone los partidos de tus equipos en tu Google Calendar.
+        Te avisa solo, aunque cambien de horario.</p>
+        <a class="boton" href="/?g=${esc(vista.origen)}">Conectar mi calendario</a>
       </section>`;
 }
 
@@ -258,11 +443,16 @@ function paginaNoEncontrada() {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
     <title>Partido no encontrado | FanSchedule</title>
+    <style>${ESTILOS}    </style>
   </head>
   <body>
-    <h1>Partido no encontrado</h1>
-    <p>Puede que la dirección esté mal escrita o que el partido ya no esté disponible.</p>
-    <p><a href="${SITIO}/">Ir a FanSchedule</a></p>
+${barra()}
+    <main class="contenido">
+      <h1>Partido no encontrado</h1>
+      <p class="dato">Puede que la dirección esté mal escrita o que el partido ya no esté disponible.</p>
+      <p><a class="boton" href="/">Ir a FanSchedule</a></p>
+    </main>
+${pie()}
   </body>
 </html>
 `;
@@ -274,11 +464,14 @@ function paginaPartido(match, vista, urlCanonica, transmision) {
   const fecha = instante(match);
   const competencia = vista.competencia;
 
+  // "juegan" solo cuando hay dos participantes enfrentados. Un Gran Premio no lo juega nadie.
+  const verbo = vista.esVersus ? "a qué hora juegan" : "a qué hora es";
+
   // La frase que encabeza title y description. Se escribe una sola vez para que las dos digan
   // exactamente lo mismo: el buscador las enseña juntas y una discrepancia se nota.
   const frase = competencia
-    ? `${vista.nombre}: a qué hora juegan y dónde verlo — ${competencia}`
-    : `${vista.nombre}: a qué hora juegan y dónde verlo`;
+    ? `${vista.nombre}: ${verbo} y dónde verlo — ${competencia}`
+    : `${vista.nombre}: ${verbo} y dónde verlo`;
 
   const descripcion = [
     `${frase}.`,
@@ -302,7 +495,7 @@ function paginaPartido(match, vista, urlCanonica, transmision) {
         : {}),
     // Los competidores también llevan el apodo, no el nombre del proveedor: el JSON-LD debe
     // decir lo mismo que la página o Google lo marca como inconsistente.
-    ...(vista.nombreLocal && vista.nombreVisita
+    ...(vista.esVersus
       ? {
           competitor: [
             { "@type": "SportsTeam", name: vista.nombreLocal },
@@ -317,14 +510,15 @@ function paginaPartido(match, vista, urlCanonica, transmision) {
     ? ""
     : `\n    <meta name="robots" content="noindex" />`;
 
-  const lineaCompetencia = competencia ? `      <p>${esc(competencia)}</p>\n` : "";
+  const lineaCompetencia = competencia ? `        <p class="dato">${esc(competencia)}</p>\n` : "";
   const lineaFecha = fecha
-    ? `      <p>
-        <time datetime="${esc(fecha.toISOString())}">${esc(fechaEnTexto(fecha))}</time>
-        (hora del centro de México)
-      </p>\n`
-    : `      <p>Fecha y hora por confirmar.</p>\n`;
-  const lineaSede = sede ? `      <p>${esc(sede)}${pais ? `, ${esc(pais)}` : ""}</p>\n` : "";
+    ? `        <p class="dato"><time datetime="${esc(fecha.toISOString())}">${esc(
+        fechaEnTexto(fecha)
+      )}</time> (hora del centro de México)</p>\n`
+    : `        <p class="dato">Fecha y hora por confirmar.</p>\n`;
+  const lineaSede = sede
+    ? `        <p class="dato">${esc(sede)}${pais ? `, ${esc(pais)}` : ""}</p>\n`
+    : "";
 
   return `<!doctype html>
 <html lang="es">
@@ -349,12 +543,18 @@ function paginaPartido(match, vista, urlCanonica, transmision) {
     <meta name="twitter:image" content="${SITIO}/og-image.png" />
 
     <script type="application/ld+json">${escJsonLd(jsonLd)}</script>
+    <style>${ESTILOS}    </style>
   </head>
   <body>
-    <main>
+${barra()}
+    <main class="contenido">
       <h1>${esc(vista.nombre)}</h1>
-${lineaCompetencia}${lineaFecha}${lineaSede}${seccionDondeVerlo(vista, transmision)}
+      <div class="datos">
+${lineaCompetencia}${lineaFecha}${lineaSede}      </div>
+${seccionDondeVerlo(vista, transmision)}
+${cuadroDeRegistro(vista)}
     </main>
+${pie()}
   </body>
 </html>
 `;
