@@ -1,0 +1,25 @@
+{
+  "competenciaEnLaBase": "Mexican Primera League",
+  "nombrePublico": "Liga MX",
+  "temporada": "Apertura 2026",
+  "equipos": [
+    {"base":"América","apodo":"América","slug":"america","dondeVer":"Canal 5, TUDN o ViX Premium"},
+    {"base":"Atlante","apodo":"Atlante","slug":"atlante","dondeVer":"TV Azteca o FOX One"},
+    {"base":"Atlas","apodo":"Atlas","slug":"atlas","dondeVer":"TUDN o ViX Premium"},
+    {"base":"Atletico de San Luis","apodo":"Atlético de San Luis","slug":"atletico-san-luis","dondeVer":"ESPN, Disney+ o ViX"},
+    {"base":"CD Guadalajara","apodo":"Chivas","slug":"chivas","dondeVer":"Amazon Prime Video o Chivas TV"},
+    {"base":"Cruz Azul","apodo":"Cruz Azul","slug":"cruz-azul","dondeVer":"TUDN o ViX Premium"},
+    {"base":"Juárez","apodo":"FC Juárez","slug":"fc-juarez","dondeVer":"TV Azteca o FOX One"},
+    {"base":"León","apodo":"León","slug":"leon","dondeVer":"FOX Sports o FOX One"},
+    {"base":"Monterrey","apodo":"Rayados","slug":"rayados","dondeVer":"Canal 5, TUDN o ViX Premium"},
+    {"base":"Necaxa","apodo":"Necaxa","slug":"necaxa","dondeVer":"FOX One o TV Azteca"},
+    {"base":"Pachuca","apodo":"Pachuca","slug":"pachuca","dondeVer":"FOX Sports o FOX One"},
+    {"base":"Puebla","apodo":"Puebla","slug":"puebla","dondeVer":"TV Azteca o FOX One"},
+    {"base":"Pumas UNAM","apodo":"Pumas","slug":"pumas","dondeVer":"Canal 5, TUDN o ViX Premium"},
+    {"base":"Querétaro","apodo":"Querétaro","slug":"queretaro","dondeVer":"FOX Sports o FOX One"},
+    {"base":"Santos Laguna","apodo":"Santos","slug":"santos","dondeVer":"TUDN, ViX Premium o ESPN"},
+    {"base":"Tigres UANL","apodo":"Tigres","slug":"tigres","dondeVer":"TV Azteca, FOX Sports o FOX One"},
+    {"base":"Tijuana","apodo":"Xolos","slug":"xolos","dondeVer":"FOX Sports o FOX One"},
+    {"base":"Toluca","apodo":"Toluca","slug":"toluca","dondeVer":"TUDN, TV Azteca o FOX One, según la jornada"}
+  ]
+}

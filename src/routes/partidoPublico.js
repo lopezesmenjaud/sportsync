@@ -13,6 +13,18 @@
 const { matchRepository } = require("../repositories/matchRepositorySqlite");
 const { db } = require("../db/database");
 
+// Tabla de Liga MX armada a mano: los apodos con los que la gente busca y, sobre todo, el canal
+// por equipo LOCAL. Eso último no lo vende ninguna API — la caché de transmisión está guardada
+// por competencia, así que sin esta tabla un partido de Chivas mostraba las doce opciones de
+// toda la liga. Se carga UNA vez, al cargar el módulo: es un archivo estático y no tiene por qué
+// leerse en cada petición.
+const LIGA_MX = require("../data/ligaMx.json");
+
+// Índice por el nombre EXACTO de la columna homeParticipantName. Sin normalizar, sin quitar
+// acentos y sin minúsculas: la gracia es que si el proveedor renombra un equipo el índice falle
+// y lo avise (ver el console.warn de vistaDelPartido), en vez de acertar por casualidad.
+const LIGA_MX_POR_BASE = new Map(LIGA_MX.equipos.map((e) => [e.base, e]));
+
 const SITIO = process.env.SITE_URL || "https://fanschedule.com";
 const ZONA = "America/Mexico_City";
 
@@ -66,28 +78,73 @@ function aSlug(texto) {
     .replace(/^-+|-+$/g, "");
 }
 
-// El slug canónico sale de los nombres de los equipos. Para lo que no es equipo contra equipo
-// (una carrera de F1, por ejemplo) no hay "vs": se usa el nombre del evento, y si tampoco está,
-// el de la competencia.
-function slugCanonico(match) {
-  const local = aSlug(match.homeParticipantName);
-  const visita = aSlug(match.awayParticipantName);
-  if (local && visita) return `${local}-vs-${visita}`;
-  return local || visita || aSlug(match.eventName) || aSlug(match.competitionName);
+// Cómo se PRESENTA el partido, ya resuelto: nombres, slug, competencia y dónde verlo.
+//
+// Es el único lugar donde se decide si el partido es de Liga MX y, por tanto, si se usan los
+// apodos de la tabla en vez de los nombres del proveedor. Todo lo visible —h1, title,
+// description, Open Graph, Twitter, JSON-LD y el slug canónico— sale de aquí, para que no haya
+// forma de que un sitio diga "CD Guadalajara" y otro "Chivas".
+//
+// Para cualquier competencia que no sea Liga MX devuelve exactamente lo de siempre.
+function vistaDelPartido(match) {
+  const ligaMx = (match.competitionName || "") === LIGA_MX.competenciaEnLaBase;
+
+  const entradaLocal = ligaMx ? LIGA_MX_POR_BASE.get(match.homeParticipantName) || null : null;
+  const entradaVisita = ligaMx ? LIGA_MX_POR_BASE.get(match.awayParticipantName) || null : null;
+
+  // Si el proveedor renombra un equipo, la tabla deja de casar y la página se degrada en
+  // silencio. Este aviso es la alarma, y sale con el nombre EXACTO que llegó para poder
+  // copiarlo tal cual al JSON.
+  if (ligaMx && match.homeParticipantName && !entradaLocal) {
+    console.warn(
+      `[partido-publico] Liga MX: no hay entrada en ligaMx.json para el equipo LOCAL "${match.homeParticipantName}"`
+    );
+  }
+  if (ligaMx && match.awayParticipantName && !entradaVisita) {
+    console.warn(
+      `[partido-publico] Liga MX: no hay entrada en ligaMx.json para el equipo VISITANTE "${match.awayParticipantName}"`
+    );
+  }
+
+  const nombreLocal = entradaLocal ? entradaLocal.apodo : (match.homeParticipantName || "").trim();
+  const nombreVisita = entradaVisita
+    ? entradaVisita.apodo
+    : (match.awayParticipantName || "").trim();
+
+  // Para lo que no es equipo contra equipo (una carrera de F1) no hay "vs": se cae al nombre del
+  // evento y, en último caso, al de la competencia.
+  const nombre =
+    nombreLocal && nombreVisita
+      ? `${nombreLocal} vs ${nombreVisita}`
+      : nombreLocal ||
+        nombreVisita ||
+        (match.eventName || "").trim() ||
+        (match.competitionName || "").trim() ||
+        "Partido";
+
+  const slugLocal = entradaLocal ? entradaLocal.slug : aSlug(match.homeParticipantName);
+  const slugVisita = entradaVisita ? entradaVisita.slug : aSlug(match.awayParticipantName);
+  const slug =
+    slugLocal && slugVisita
+      ? `${slugLocal}-vs-${slugVisita}`
+      : slugLocal || slugVisita || aSlug(match.eventName) || aSlug(match.competitionName);
+
+  return {
+    ligaMx,
+    nombre,
+    nombreLocal,
+    nombreVisita,
+    slug,
+    competencia: ligaMx ? LIGA_MX.nombrePublico : (match.competitionName || "").trim(),
+    // Solo se llena cuando el equipo LOCAL está en la tabla. Es lo que decide si "Dónde verlo"
+    // muestra el canal de este partido o cae a la caché por competencia.
+    dondeVerLocal: entradaLocal ? entradaLocal.dondeVer : null,
+  };
 }
 
-// Título legible, con la misma regla que el slug.
-function titulo(match) {
-  const local = (match.homeParticipantName || "").trim();
-  const visita = (match.awayParticipantName || "").trim();
-  if (local && visita) return `${local} vs ${visita}`;
-  return (
-    local ||
-    visita ||
-    (match.eventName || "").trim() ||
-    (match.competitionName || "").trim() ||
-    "Partido"
-  );
+// El slug canónico de un partido. Envoltorio de vistaDelPartido para quien solo quiere el slug.
+function slugCanonico(match) {
+  return vistaDelPartido(match).slug;
 }
 
 // Instante real del partido. currentStartUtc manda (es el que refleja reprogramaciones) y
@@ -154,13 +211,23 @@ ${items}
         </ul>`;
 }
 
-function seccionDondeVerlo(match, transmision) {
-  const competencia = match.competitionName || "esta competencia";
+function seccionDondeVerlo(vista, transmision) {
+  // Camino bueno: partido de Liga MX con el equipo local en la tabla. Se muestra SOLO su canal y
+  // no se toca la caché por competencia — era la que listaba las doce opciones de toda la liga en
+  // cada partido. Tampoco entra la nota de esa caché: la escribió un modelo, nadie la verificó, y
+  // en una página pública eso es afirmar cosas sin respaldo.
+  if (vista.dondeVerLocal) {
+    return `
+      <section>
+        <h2>Dónde verlo</h2>
+        <p>${esc(vista.dondeVerLocal)}</p>
+      </section>`;
+  }
 
-  // La sección existe SIEMPRE, con dato o sin él. Hoy broadcasting_cache suele estar vacía
-  // (initializeDatabase la borra en cada arranque del servidor), así que lo normal es caer al
-  // texto genérico. Se deja como sección propia con su <h2> para que cuando llegue la tabla de
-  // canales entre aquí adentro y no haya que rehacer la página.
+  // Cualquier otra competencia, y Liga MX cuando el local no está en la tabla: como siempre.
+  // Hoy broadcasting_cache suele estar vacía —initializeDatabase la borra en cada arranque del
+  // servidor— así que lo normal es caer al texto genérico. La sección existe igual, con su <h2>,
+  // para que lo que venga después entre aquí adentro sin rehacer la página.
   let cuerpo = "";
   if (transmision) {
     cuerpo += listaCanales("TV abierta", transmision.freeTV);
@@ -171,8 +238,9 @@ function seccionDondeVerlo(match, transmision) {
 
   if (!cuerpo) {
     cuerpo = `
-        <p>Todavía no tenemos confirmados los canales para ${esc(competencia)}. La transmisión
-        cambia según el país y a veces según la jornada.</p>`;
+        <p>Todavía no tenemos confirmados los canales para ${esc(
+          vista.competencia || "esta competencia"
+        )}. La transmisión cambia según el país y a veces según la jornada.</p>`;
   }
 
   return `
@@ -200,18 +268,22 @@ function paginaNoEncontrada() {
 `;
 }
 
-function paginaPartido(match, urlCanonica, transmision) {
-  const nombre = titulo(match);
-  const competencia = (match.competitionName || "").trim();
+function paginaPartido(match, vista, urlCanonica, transmision) {
   const sede = (match.venueName || "").trim();
   const pais = (match.country || "").trim();
   const fecha = instante(match);
+  const competencia = vista.competencia;
+
+  // La frase que encabeza title y description. Se escribe una sola vez para que las dos digan
+  // exactamente lo mismo: el buscador las enseña juntas y una discrepancia se nota.
+  const frase = competencia
+    ? `${vista.nombre}: a qué hora juegan y dónde verlo — ${competencia}`
+    : `${vista.nombre}: a qué hora juegan y dónde verlo`;
 
   const descripcion = [
-    nombre,
-    competencia ? `en ${competencia}` : "",
-    fecha ? `· ${fechaEnTexto(fecha)} (hora del centro de México)` : "",
-    sede ? `· ${sede}` : "",
+    `${frase}.`,
+    fecha ? `${fechaEnTexto(fecha)} (hora del centro de México).` : "",
+    sede ? `${sede}${pais ? `, ${pais}` : ""}.` : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -219,7 +291,7 @@ function paginaPartido(match, urlCanonica, transmision) {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "SportsEvent",
-    name: nombre,
+    name: vista.nombre,
     url: urlCanonica,
     ...(fecha ? { startDate: fecha.toISOString() } : {}),
     ...(competencia ? { superEvent: { "@type": "SportsEvent", name: competencia } } : {}),
@@ -228,17 +300,19 @@ function paginaPartido(match, urlCanonica, transmision) {
       : pais
         ? { location: { "@type": "Place", name: pais } }
         : {}),
-    ...(match.homeParticipantName && match.awayParticipantName
+    // Los competidores también llevan el apodo, no el nombre del proveedor: el JSON-LD debe
+    // decir lo mismo que la página o Google lo marca como inconsistente.
+    ...(vista.nombreLocal && vista.nombreVisita
       ? {
           competitor: [
-            { "@type": "SportsTeam", name: match.homeParticipantName },
-            { "@type": "SportsTeam", name: match.awayParticipantName },
+            { "@type": "SportsTeam", name: vista.nombreLocal },
+            { "@type": "SportsTeam", name: vista.nombreVisita },
           ],
         }
       : {}),
   };
 
-  const tituloPagina = competencia ? `${nombre} — ${competencia}` : nombre;
+  const tituloPagina = `${frase} | FanSchedule`;
   const noindex = esIndexable(match.competitionKey)
     ? ""
     : `\n    <meta name="robots" content="noindex" />`;
@@ -257,20 +331,20 @@ function paginaPartido(match, urlCanonica, transmision) {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${esc(tituloPagina)} | FanSchedule</title>
+    <title>${esc(tituloPagina)}</title>
     <meta name="description" content="${esc(descripcion)}" />
     <link rel="canonical" href="${esc(urlCanonica)}" />${noindex}
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="FanSchedule" />
-    <meta property="og:title" content="${esc(tituloPagina)}" />
+    <meta property="og:title" content="${esc(frase)}" />
     <meta property="og:description" content="${esc(descripcion)}" />
     <meta property="og:url" content="${esc(urlCanonica)}" />
     <meta property="og:image" content="${SITIO}/og-image.png" />
     <meta property="og:locale" content="es_MX" />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${esc(tituloPagina)}" />
+    <meta name="twitter:title" content="${esc(frase)}" />
     <meta name="twitter:description" content="${esc(descripcion)}" />
     <meta name="twitter:image" content="${SITIO}/og-image.png" />
 
@@ -278,8 +352,8 @@ function paginaPartido(match, urlCanonica, transmision) {
   </head>
   <body>
     <main>
-      <h1>${esc(nombre)}</h1>
-${lineaCompetencia}${lineaFecha}${lineaSede}${seccionDondeVerlo(match, transmision)}
+      <h1>${esc(vista.nombre)}</h1>
+${lineaCompetencia}${lineaFecha}${lineaSede}${seccionDondeVerlo(vista, transmision)}
     </main>
   </body>
 </html>
@@ -297,13 +371,23 @@ async function partidoPublicoHandler(req, res) {
       return res.send(paginaNoEncontrada());
     }
 
+    // Se calcula UNA vez por petición: si se llamara dos veces, el aviso de equipo sin entrada en
+    // la tabla saldría duplicado en el log.
+    const vista = vistaDelPartido(match);
+
     // El slug es decorativo, pero solo debe existir UNA dirección por partido: si no, Google ve
     // la misma página en infinitas URLs. Cualquier slug que no sea el canónico se manda al bueno.
-    const canonico = slugCanonico(match);
+    // Esto es también lo que reencamina las direcciones viejas al cambiar un apodo de la tabla:
+    // /america-vs-cd-guadalajara -> /america-vs-chivas.
+    const canonico = vista.slug;
     const recibido = req.params.slug || "";
 
     // Si el canónico sale vacío (un partido sin nombres) no hay a dónde redirigir: se sirve tal
     // cual. Sin este guard, /partido/:id redirigiría a /partido/:id/ en un bucle.
+    //
+    // La ruta del Location es RELATIVA a propósito. La página se sirve a través de una
+    // reescritura de Vercel desde fanschedule.com, y un Location absoluto hacia el dominio de
+    // Render sacaría al visitante del sitio. Express 5 deja el encabezado tal cual se le pasa.
     if (canonico && recibido !== canonico) {
       return res.redirect(301, `/partido/${encodeURIComponent(id)}/${canonico}`);
     }
@@ -316,7 +400,7 @@ async function partidoPublicoHandler(req, res) {
 
     res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=3600");
     res.set("Content-Type", "text/html; charset=utf-8");
-    return res.send(paginaPartido(match, urlCanonica, transmision));
+    return res.send(paginaPartido(match, vista, urlCanonica, transmision));
   } catch (error) {
     // El detalle va al log del servidor, nunca a la respuesta.
     console.error("[partido-publico] Error:", error.message);
@@ -326,4 +410,11 @@ async function partidoPublicoHandler(req, res) {
   }
 }
 
-module.exports = { partidoPublicoHandler, aSlug, slugCanonico, esIndexable, esc };
+module.exports = {
+  partidoPublicoHandler,
+  aSlug,
+  slugCanonico,
+  vistaDelPartido,
+  esIndexable,
+  esc,
+};
