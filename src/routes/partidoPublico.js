@@ -162,6 +162,32 @@ function slugCanonico(match) {
   return vistaDelPartido(match).slug;
 }
 
+// Cuánto dura un partido para efectos de esta página. No es la duración real —varía por
+// deporte y con alargues no hay número fijo— sino la ventana durante la cual se dice "está en
+// curso" en vez de "ya se jugó". Tres horas cubre de sobra un partido de fútbol con descuento.
+const VENTANA_EN_CURSO_MS = 3 * 60 * 60 * 1000;
+
+const MOMENTO = {
+  FUTURO: "futuro",
+  EN_CURSO: "en-curso",
+  YA_PASO: "ya-paso",
+};
+
+// En qué momento está el partido respecto de AHORA.
+//
+// Se calcula con la hora y no con la columna `status` a propósito. `status` solo se refresca
+// cuando corre el sync —cada 12 h para fútbol, basket y NFL— así que un partido que terminó
+// puede seguir diciendo "scheduled" media jornada. La hora de inicio, en cambio, es exacta.
+//
+// Sin fecha se trata como futuro: si no sabemos cuándo es, no podemos afirmar que ya pasó.
+function momentoDelPartido(fecha, ahora = Date.now()) {
+  if (!fecha) return MOMENTO.FUTURO;
+  const inicio = fecha.getTime();
+  if (ahora < inicio) return MOMENTO.FUTURO;
+  if (ahora < inicio + VENTANA_EN_CURSO_MS) return MOMENTO.EN_CURSO;
+  return MOMENTO.YA_PASO;
+}
+
 // Instante real del partido. currentStartUtc manda (es el que refleja reprogramaciones) y
 // scheduledStartUtc es el respaldo. Si faltan los dos devuelve null en vez de un Date en 1970:
 // esta página prefiere no decir la hora a decir una falsa.
@@ -247,7 +273,14 @@ const ESTILOS = `
 
     .barra {
       border-bottom: 1px solid var(--borde);
-      padding: 14px 16px;
+      padding: 14px 0;
+    }
+    /* Mismo ancho y mismo margen lateral que .contenido: así el logotipo queda a plomo con la
+       columna en pantallas grandes, en vez de pegado a la orilla izquierda. */
+    .barra-interior {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 0 16px;
     }
     .logo {
       display: inline-block;
@@ -270,6 +303,16 @@ const ESTILOS = `
       line-height: 1.25;
       letter-spacing: -0.02em;
     }
+    /* El aviso de partido en curso o ya jugado. Va en el naranja de la marca y en negrita: es lo
+       primero que tiene que registrar quien llegó de una búsqueda a un partido de la semana
+       pasada. En gris se perdería entre los datos. */
+    .aviso {
+      margin: 0 0 14px;
+      color: var(--naranja);
+      font-weight: 600;
+      font-size: 15px;
+    }
+
     .datos { margin: 0 0 24px; }
     .dato {
       margin: 0 0 4px;
@@ -356,7 +399,9 @@ const ESTILOS = `
 
 function barra() {
   return `    <header class="barra">
-      <a class="logo" href="/"><span class="logo-fan">Fan</span><span class="logo-schedule">Schedule</span></a>
+      <div class="barra-interior">
+        <a class="logo" href="/"><span class="logo-fan">Fan</span><span class="logo-schedule">Schedule</span></a>
+      </div>
     </header>`;
 }
 
@@ -385,14 +430,18 @@ ${items}
         </ul>`;
 }
 
-function seccionDondeVerlo(vista, transmision) {
+function seccionDondeVerlo(vista, transmision, momento) {
+  // Un partido que ya se jugó no se "ve", se transmitió. El que está en curso sí se puede ver
+  // todavía, así que ahí el encabezado no cambia.
+  const encabezado = momento === MOMENTO.YA_PASO ? "Dónde se transmitió" : "Dónde verlo";
+
   // Camino bueno: partido de Liga MX con el equipo local en la tabla. Se muestra SOLO su canal y
   // no se toca la caché por competencia — era la que listaba las doce opciones de toda la liga en
   // cada partido. Tampoco entra la nota de esa caché: la escribió un modelo, nadie la verificó, y
   // en una página pública eso es afirmar cosas sin respaldo.
   if (vista.dondeVerLocal) {
     return `      <section class="tarjeta">
-        <h2>Dónde verlo</h2>
+        <h2>${encabezado}</h2>
         <p>${esc(vista.dondeVerLocal)}</p>
       </section>`;
   }
@@ -409,14 +458,22 @@ function seccionDondeVerlo(vista, transmision) {
   }
 
   if (!cuerpo) {
-    cuerpo = `
+    // El texto de relleno se redacta en pasado cuando el partido ya se jugó: bajo el encabezado
+    // "Dónde se transmitió", decir "todavía no tenemos confirmados los canales" no significa nada.
+    cuerpo =
+      momento === MOMENTO.YA_PASO
+        ? `
+        <p>No tenemos registro de los canales que transmitieron este partido de ${esc(
+          vista.competencia || "esta competencia"
+        )}.</p>`
+        : `
         <p>Todavía no tenemos confirmados los canales para ${esc(
           vista.competencia || "esta competencia"
         )}. La transmisión cambia según el país y a veces según la jornada.</p>`;
   }
 
   return `      <section class="tarjeta">
-        <h2>Dónde verlo</h2>${cuerpo}
+        <h2>${encabezado}</h2>${cuerpo}
       </section>`;
 }
 
@@ -464,14 +521,26 @@ function paginaPartido(match, vista, urlCanonica, transmision) {
   const fecha = instante(match);
   const competencia = vista.competencia;
 
+  const momento = momentoDelPartido(fecha);
+
   // "juegan" solo cuando hay dos participantes enfrentados. Un Gran Premio no lo juega nadie.
   const verbo = vista.esVersus ? "a qué hora juegan" : "a qué hora es";
+
+  // Qué se promete en el buscador. Preguntar "a qué hora juegan" de algo que terminó hace cuatro
+  // días es lo que hace que la página parezca abandonada, así que en cuanto empieza el partido la
+  // frase deja de hablar en futuro.
+  const nucleo =
+    momento === MOMENTO.YA_PASO
+      ? "ya se jugó"
+      : momento === MOMENTO.EN_CURSO
+        ? "está en curso"
+        : `${verbo} y dónde verlo`;
 
   // La frase que encabeza title y description. Se escribe una sola vez para que las dos digan
   // exactamente lo mismo: el buscador las enseña juntas y una discrepancia se nota.
   const frase = competencia
-    ? `${vista.nombre}: ${verbo} y dónde verlo — ${competencia}`
-    : `${vista.nombre}: ${verbo} y dónde verlo`;
+    ? `${vista.nombre}: ${nucleo} — ${competencia}`
+    : `${vista.nombre}: ${nucleo}`;
 
   const descripcion = [
     `${frase}.`,
@@ -506,9 +575,21 @@ function paginaPartido(match, vista, urlCanonica, transmision) {
   };
 
   const tituloPagina = `${frase} | FanSchedule`;
-  const noindex = esIndexable(match.competitionKey)
-    ? ""
-    : `\n    <meta name="robots" content="noindex" />`;
+
+  // Un partido que ya empezó NUNCA se indexa, esté o no su competencia en la lista blanca. No
+  // tenemos marcador, así que como página de resultado no sirve, y cientos de ellas indexadas
+  // pesan más que el tráfico que traen.
+  const noindex =
+    momento !== MOMENTO.FUTURO || !esIndexable(match.competitionKey)
+      ? `\n    <meta name="robots" content="noindex" />`
+      : "";
+
+  const lineaAviso =
+    momento === MOMENTO.YA_PASO
+      ? `      <p class="aviso">Este partido ya se jugó.</p>\n`
+      : momento === MOMENTO.EN_CURSO
+        ? `      <p class="aviso">Este partido está en curso.</p>\n`
+        : "";
 
   const lineaCompetencia = competencia ? `        <p class="dato">${esc(competencia)}</p>\n` : "";
   const lineaFecha = fecha
@@ -549,9 +630,9 @@ function paginaPartido(match, vista, urlCanonica, transmision) {
 ${barra()}
     <main class="contenido">
       <h1>${esc(vista.nombre)}</h1>
-      <div class="datos">
+${lineaAviso}      <div class="datos">
 ${lineaCompetencia}${lineaFecha}${lineaSede}      </div>
-${seccionDondeVerlo(vista, transmision)}
+${seccionDondeVerlo(vista, transmision, momento)}
 ${cuadroDeRegistro(vista)}
     </main>
 ${pie()}
@@ -615,6 +696,8 @@ module.exports = {
   aSlug,
   slugCanonico,
   vistaDelPartido,
+  momentoDelPartido,
+  MOMENTO,
   esIndexable,
   esc,
 };
