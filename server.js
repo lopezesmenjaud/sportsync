@@ -20,7 +20,7 @@ const googleCalendarProvider = require("./src/services/googleCalendarProvider");
 const { sessionRepository } = require("./src/repositories/sessionRepositorySqlite");
 const { requireUser, optionalUser, isLegacyAllowed } = require("./src/middleware/auth");
 const { withRateLimitRetry, sleep } = require("./src/services/userBackfillService");
-const { partidoPublicoHandler } = require("./src/routes/partidoPublico");
+const { partidoPublicoHandler, equipoPublicoHandler } = require("./src/routes/partidoPublico");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -980,6 +980,12 @@ app.get("/api/players/:leagueId", async (req, res) => {
 // sintaxis vieja truena al arrancar con "Unexpected ? at index 19" (path-to-regexp v8).
 // Comprobado contra express 5.2.1, el que trae este proyecto.
 app.get("/partido/:id{/:slug}", partidoPublicoHandler);
+
+// ── Página PÚBLICA de equipo ──
+// "horario chivas hoy" es lo que la gente busca de verdad, y de paso estas páginas son la capa
+// de enlaces internos que conecta las de partido entre sí: sin ellas cada partido es una
+// página huérfana a la que no apunta nada.
+app.get("/equipo/:slug", equipoPublicoHandler);
 
 // ── Detalle de un partido ──
 // Sesión OPCIONAL: la página de un partido es pública (ruta /match/:matchId sin Protected en el

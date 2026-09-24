@@ -435,6 +435,39 @@ const ESTILOS = `
     .tarjeta p:last-child { margin-bottom: 0; }
     .tarjeta ul { margin: 0; padding-left: 20px; }
 
+    /* Lista de próximos partidos de un equipo. Sin viñetas: cada renglón ya es un bloque con su
+       propio borde, y el punto solo estorbaría. */
+    .lista {
+      list-style: none;
+      margin: 0 0 24px;
+      padding: 0;
+    }
+    .renglon {
+      border: 1px solid var(--borde);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin: 0 0 10px;
+    }
+    .renglon-titulo {
+      display: inline-block;
+      color: var(--azul);
+      font-size: 17px;
+      font-weight: 600;
+      text-decoration: none;
+      margin-bottom: 4px;
+    }
+    .renglon-titulo:hover, .renglon-titulo:focus { color: var(--naranja); }
+    .renglon .dato { margin: 0; }
+
+    /* Los equipos del h1 de un partido enlazan a su página, pero sin parecer un enlace suelto:
+       heredan el tamaño y el color del encabezado y solo se subrayan al pasar encima. */
+    h1 a {
+      color: inherit;
+      text-decoration: none;
+      border-bottom: 2px solid rgba(245, 130, 10, 0.35);
+    }
+    h1 a:hover, h1 a:focus { border-bottom-color: var(--naranja); }
+
     /* El cuadro de registro NO debe leerse como un anuncio: lleva el naranja de la marca en el
        borde y en el botón, el mismo tipo de letra que el resto y ningún gris de banner. */
     .registro {
@@ -530,6 +563,125 @@ function pie() {
     </footer>`;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Índice de equipos
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Cuánto vive el índice en memoria. El catálogo de equipos crece con cada sincronización, pero
+// no cada segundo: releerlo en cada petición sería un barrido de la tabla de partidos por visita.
+const TTL_EQUIPOS_MS = 10 * 60 * 1000;
+
+let cacheEquipos = null; // { porSlug: Map, generado: número }
+
+const clavesDelCatalogo = () => [...COMPETENCIAS_POR_CLAVE.keys()];
+
+// Cómo se llama y cómo se direcciona un equipo. En Liga MX manda la tabla hecha a mano —"CD
+// Guadalajara" se publica como "Chivas" en /equipo/chivas—; en el resto, el nombre del proveedor.
+function identidadDeEquipo(nombreBase, clave) {
+  if (clave === CLAVE_LIGA_MX) {
+    const entrada = LIGA_MX_POR_BASE.get(nombreBase);
+    if (entrada) return { slug: entrada.slug, nombre: entrada.apodo };
+  }
+  return { slug: aSlug(nombreBase), nombre: nombreBase };
+}
+
+// UNA consulta: los nombres distintos que aparecen como local O como visitante en las
+// competencias del catálogo. El UNION de adentro es lo que evita tener que ir dos veces.
+function leerEquipos() {
+  const claves = clavesDelCatalogo();
+  if (!claves.length) return Promise.resolve([]);
+  const marcas = claves.map(() => "?").join(",");
+  return new Promise((resolve) => {
+    db.all(
+      `SELECT DISTINCT competitionKey, nombre FROM (
+         SELECT competitionKey, homeParticipantName AS nombre FROM matches
+          WHERE competitionKey IN (${marcas})
+            AND homeParticipantName IS NOT NULL AND TRIM(homeParticipantName) <> ''
+         UNION
+         SELECT competitionKey, awayParticipantName AS nombre FROM matches
+          WHERE competitionKey IN (${marcas})
+            AND awayParticipantName IS NOT NULL AND TRIM(awayParticipantName) <> ''
+       )`,
+      [...claves, ...claves],
+      (err, filas) => {
+        if (err) {
+          console.error("[partido-publico] no se pudo leer el índice de equipos:", err.message);
+          return resolve([]);
+        }
+        resolve(filas || []);
+      }
+    );
+  });
+}
+
+// Índice slug -> { slug, base, nombre, claves }. Se rearma como mucho cada TTL_EQUIPOS_MS.
+async function indiceEquipos() {
+  const ahora = Date.now();
+  if (cacheEquipos && ahora - cacheEquipos.generado < TTL_EQUIPOS_MS) return cacheEquipos.porSlug;
+
+  const filas = await leerEquipos();
+  const porSlug = new Map();
+
+  for (const fila of filas) {
+    const base = String(fila.nombre || "").trim();
+    const clave = String(fila.competitionKey || "");
+    if (!base) continue;
+
+    const { slug, nombre } = identidadDeEquipo(base, clave);
+    if (!slug) continue;
+
+    const ya = porSlug.get(slug);
+    if (!ya) {
+      porSlug.set(slug, { slug, base, nombre, claves: [clave] });
+      continue;
+    }
+    // El mismo equipo jugando otra competencia: se acumula la clave y sigue siendo uno solo.
+    if (ya.base === base) {
+      if (!ya.claves.includes(clave)) ya.claves.push(clave);
+      continue;
+    }
+    // Dos equipos DISTINTOS que producen el mismo slug. Gana el primero y se avisa, porque si no
+    // uno de los dos deja de tener página y nadie se entera.
+    console.warn(
+      `[partido-publico] slug de equipo repetido "${slug}": se queda "${ya.base}" y se ignora "${base}"`
+    );
+  }
+
+  cacheEquipos = { porSlug, generado: ahora };
+  return porSlug;
+}
+
+// Los próximos partidos de un equipo, ya ordenados. `desde` es inyectable para poder probar
+// contra datos que no son de hoy; en la ruta siempre es el instante actual.
+function proximosDeEquipo(nombreBase, desde, limite = 10) {
+  const claves = clavesDelCatalogo();
+  if (!claves.length) return Promise.resolve([]);
+  const marcas = claves.map(() => "?").join(",");
+  return new Promise((resolve) => {
+    db.all(
+      `SELECT data FROM matches
+        WHERE competitionKey IN (${marcas})
+          AND (homeParticipantName = ? OR awayParticipantName = ?)
+          AND COALESCE(currentStartUtc, scheduledStartUtc) > ?
+        ORDER BY COALESCE(currentStartUtc, scheduledStartUtc) ASC
+        LIMIT ?`,
+      [...claves, nombreBase, nombreBase, desde, limite],
+      (err, filas) => {
+        if (err || !filas) return resolve([]);
+        const partidos = [];
+        for (const f of filas) {
+          try {
+            partidos.push(JSON.parse(f.data));
+          } catch {
+            /* una fila con JSON corrupto no puede tumbar la página entera */
+          }
+        }
+        resolve(partidos);
+      }
+    );
+  });
+}
+
 // Lista de canales -> <li>. Devuelve "" si no hay nada, para poder omitir el bloque entero.
 function listaCanales(encabezado, valores) {
   const limpios = (Array.isArray(valores) ? valores : []).filter(Boolean);
@@ -591,8 +743,13 @@ function seccionDondeVerlo(vista, transmision, momento) {
       </section>`;
 }
 
-// Va SIEMPRE después de "Dónde verlo": el horario y el canal son las dos cosas que la persona
-// vino a buscar, y ponerse en medio de la segunda es quitarle la página a quien la está leyendo.
+// El MISMO cuadro para la página de partido y la de equipo. Lo único que cambia entre las dos es
+// a quién se puede seguir desde ahí y con qué clave de atribución; los tres estados, el texto y
+// el script son idénticos.
+//
+// En la página de partido va SIEMPRE después de "Dónde verlo": el horario y el canal son las dos
+// cosas que la persona vino a buscar, y ponerse en medio de la segunda es quitarle la página a
+// quien la está leyendo.
 //
 // El HTML que sale de aquí es SIEMPRE el de visitante sin sesión, idéntico para todo el mundo.
 // No puede ser de otra manera: la respuesta se guarda 15 minutos en el CDN y se le entrega tal
@@ -600,26 +757,45 @@ function seccionDondeVerlo(vista, transmision, momento) {
 // un desconocido el cuadro de otra persona. Quién es quien mira se resuelve en SU navegador, con
 // el script del final del body.
 //
-// Los datos del partido viajan en atributos data-, no interpolados dentro del <script>: así un
-// nombre de equipo con comillas o con "</script>" no puede romper ni secuestrar el script. Son
-// datos públicos del partido, nada del usuario.
-function cuadroDeRegistro(vista, match) {
-  const urlSeguir = urlParaSeguir(match);
+//   bases      nombres tal como los guarda la base, para comparar con las suscripciones
+//   sujetos    los mismos nombres pero como se muestran (apodos)
+//   claves     competencias que cuentan como "ya lo sigue" si está suscrito a la liga entera
+//   sustantivo "partidos" o "carreras", según qué se agenda
+//   seguir     a dónde manda el botón dentro de la app
+//   origen     la clave ?g= del botón de conectar, para distinguir qué página convierte más
+//
+// Los valores van como JSON dentro de atributos data-, no interpolados en el <script>: un nombre
+// con comillas o con "</script>" no puede romperlo. Todo es información pública, nada del usuario.
+function cuadroDeRegistro({ bases, sujetos, claves, sustantivo, seguir, origen }) {
   return `      <section class="registro" id="fs-cuadro"
         data-api="${esc(API_PUBLICA)}"
-        data-clave="${esc(match.competitionKey || "")}"
-        data-competencia="${esc(vista.competencia)}"
-        data-local-base="${esc(match.homeParticipantName || "")}"
-        data-visita-base="${esc(match.awayParticipantName || "")}"
-        data-local="${esc(vista.nombreLocal)}"
-        data-visita="${esc(vista.nombreVisita)}"
-        data-versus="${vista.esVersus ? "1" : "0"}"
-        data-seguir="${esc(urlSeguir)}">
+        data-bases="${esc(JSON.stringify(bases))}"
+        data-sujetos="${esc(JSON.stringify(sujetos))}"
+        data-claves="${esc(JSON.stringify(claves))}"
+        data-sustantivo="${esc(sustantivo)}"
+        data-seguir="${esc(seguir)}">
         <h2>No te vuelvas a quedar con la duda</h2>
         <p>FanSchedule pone los partidos de tus equipos en tu Google Calendar.
         Te avisa solo, aunque cambien de horario.</p>
-        <a class="boton" href="/?g=${esc(vista.origen)}">Conectar mi calendario</a>
+        <a class="boton" href="/?g=${esc(origen)}">Conectar mi calendario</a>
       </section>`;
+}
+
+// El cuadro de una página de PARTIDO: se puede seguir a cualquiera de los dos equipos, o a la
+// competencia cuando no hay dos participantes (una carrera).
+function cuadroDePartido(vista, match) {
+  const bases = vista.esVersus
+    ? [match.homeParticipantName, match.awayParticipantName]
+    : [];
+  const sujetos = vista.esVersus ? [vista.nombreLocal, vista.nombreVisita] : [vista.competencia];
+  return cuadroDeRegistro({
+    bases,
+    sujetos,
+    claves: [String(match.competitionKey || "")],
+    sustantivo: vista.esVersus ? "partidos" : "carreras",
+    seguir: urlParaSeguir(match),
+    origen: vista.origen,
+  });
 }
 
 // Script que personaliza el cuadro en el navegador de cada quien.
@@ -649,6 +825,15 @@ const SCRIPT_CUADRO = `
 
       var d = caja.dataset;
 
+      // Los datos del cuadro. Si vinieran rotos, mejor no tocar nada.
+      var bases, sujetos, claves;
+      try {
+        bases = JSON.parse(d.bases || "[]");
+        sujetos = JSON.parse(d.sujetos || "[]");
+        claves = JSON.parse(d.claves || "[]");
+      } catch (e) { return; }
+      if (!sujetos.length) return;
+
       var corta = new AbortController();
       var reloj = setTimeout(function () { corta.abort(); }, 2000);
 
@@ -662,11 +847,11 @@ const SCRIPT_CUADRO = `
           if (!data || !data.ok || !Array.isArray(data.subscriptions)) return;
 
           var sigue = data.subscriptions.some(function (s) {
-            // A un equipo de este partido — se compara con el nombre que guarda la base, que es
-            // el que eligió del picker, no con el apodo que muestra la página.
-            if (s.teamName && (s.teamName === d.localBase || s.teamName === d.visitaBase)) return true;
-            // O a la competencia completa: misma clave y sin equipo.
-            return !s.teamName && String(s.competitionKey || "") === d.clave;
+            // A uno de los equipos — se compara con el nombre que guarda la base, que es el que
+            // eligió del picker, no con el apodo que muestra la página.
+            if (s.teamName && bases.indexOf(s.teamName) !== -1) return true;
+            // O a la competencia completa: sin equipo y con una de las claves que aplican aquí.
+            return !s.teamName && claves.indexOf(String(s.competitionKey || "")) !== -1;
           });
 
           pintar(sigue);
@@ -695,17 +880,12 @@ const SCRIPT_CUADRO = `
         var fila = document.createElement("div");
         fila.className = "botones";
 
-        if (d.versus === "1") {
-          p.textContent = "Sigue a " + d.local + " o a " + d.visita +
-            " y sus partidos entran a tu calendario sin que hagas nada.";
-          fila.appendChild(boton("Seguir a " + d.local));
-          fila.appendChild(boton("Seguir a " + d.visita));
-        } else {
-          // Una carrera no tiene dos equipos enfrentados: se sigue la competencia.
-          p.textContent = "Sigue a " + d.competencia +
-            " y sus carreras entran a tu calendario sin que hagas nada.";
-          fila.appendChild(boton("Seguir a " + d.competencia));
-        }
+        // Uno o dos sujetos: los dos equipos de un partido, la competencia de una carrera, o el
+        // equipo del que es la página.
+        var quienes = sujetos.length > 1 ? sujetos[0] + " o a " + sujetos[1] : sujetos[0];
+        p.textContent = "Sigue a " + quienes + " y sus " + d.sustantivo +
+          " entran a tu calendario sin que hagas nada.";
+        sujetos.forEach(function (nombre) { fila.appendChild(boton("Seguir a " + nombre)); });
 
         caja.replaceChildren(h, p, fila);
       }
@@ -820,6 +1000,14 @@ function paginaPartido(match, vista, urlCanonica, transmision) {
         ? `      <p class="aviso">Este partido está en curso.</p>\n`
         : "";
 
+  // Los dos equipos enlazan a su página. Es la otra mitad de la conexión del sitio: de un
+  // partido se llega al equipo y de un equipo a sus partidos. En una carrera no hay a quién
+  // enlazar, y el h1 se queda como estaba.
+  const h1 = vista.esVersus
+    ? `${enlaceEquipo(match.homeParticipantName, vista.nombreLocal, match.competitionKey)} vs ` +
+      `${enlaceEquipo(match.awayParticipantName, vista.nombreVisita, match.competitionKey)}`
+    : esc(vista.nombre);
+
   const lineaCompetencia = competencia ? `        <p class="dato">${esc(competencia)}</p>\n` : "";
   const lineaFecha = fecha
     ? `        <p class="dato"><time datetime="${esc(fecha.toISOString())}">${esc(
@@ -858,11 +1046,11 @@ function paginaPartido(match, vista, urlCanonica, transmision) {
   <body>
 ${barra()}
     <main class="contenido">
-      <h1>${esc(vista.nombre)}</h1>
+      <h1>${h1}</h1>
 ${lineaAviso}      <div class="datos">
 ${lineaCompetencia}${lineaFecha}${lineaSede}      </div>
 ${seccionDondeVerlo(vista, transmision, momento)}
-${cuadroDeRegistro(vista, match)}
+${cuadroDePartido(vista, match)}
     </main>
 ${pie()}
     <script>${SCRIPT_CUADRO}
@@ -870,6 +1058,144 @@ ${pie()}
   </body>
 </html>
 `;
+}
+
+// Enlace al equipo dentro de un h1. Devuelve texto escapado a secas si el equipo no tiene slug.
+function enlaceEquipo(nombreBase, nombreVisible, clave) {
+  const { slug } = identidadDeEquipo(String(nombreBase || "").trim(), String(clave || ""));
+  if (!slug) return esc(nombreVisible);
+  return `<a href="/equipo/${esc(slug)}">${esc(nombreVisible)}</a>`;
+}
+
+// Un renglón de la lista de próximos partidos de un equipo.
+function renglonDePartido(match, nombreBaseDelEquipo) {
+  const vista = vistaDelPartido(match);
+  const fecha = instante(match);
+  const esLocal = match.homeParticipantName === nombreBaseDelEquipo;
+
+  // Contra quién juega: el otro, con su nombre público.
+  const rival = esLocal ? vista.nombreVisita : vista.nombreLocal;
+  const donde = esLocal ? "Local" : "Visitante";
+
+  // El canal es el del equipo LOCAL del partido, no el del equipo de esta página.
+  const canal = vista.dondeVerLocal ? ` · ${esc(vista.dondeVerLocal)}` : "";
+
+  const url = `/partido/${encodeURIComponent(match.providerMatchId)}${
+    vista.slug ? `/${vista.slug}` : ""
+  }`;
+
+  const cuando = fecha
+    ? `<time datetime="${esc(fecha.toISOString())}">${esc(fechaEnTexto(fecha))}</time>`
+    : "Fecha por confirmar";
+
+  return `        <li class="renglon">
+          <a class="renglon-titulo" href="${esc(url)}">${esc(
+            rival ? (esLocal ? `vs ${rival}` : `en casa de ${rival}`) : vista.nombre
+          )}</a>
+          <p class="dato">${cuando} (hora del centro de México)</p>
+          <p class="dato">${esc(donde)} · ${esc(vista.competencia)}${canal}</p>
+        </li>`;
+}
+
+function paginaEquipo(equipo, partidos) {
+  const hay = partidos.length > 0;
+
+  const frase = `${equipo.nombre}: próximos partidos, a qué hora juegan y dónde verlos`;
+  const descripcion = hay
+    ? `${frase}. Los siguientes ${partidos.length} ${
+        partidos.length === 1 ? "partido" : "partidos"
+      } de ${equipo.nombre}, con horario del centro de México.`
+    : `${frase}. Ahora mismo no hay partidos programados.`;
+
+  const urlCanonica = `${SITIO}/equipo/${equipo.slug}`;
+
+  // Un equipo sin partidos próximos no aporta nada a quien busca: fuera del índice. Es lo que
+  // evita treinta páginas vacías el día que una liga termina su temporada.
+  const noindex = hay ? "" : `\n    <meta name="robots" content="noindex" />`;
+
+  const lista = hay
+    ? `      <ul class="lista">
+${partidos.map((m) => renglonDePartido(m, equipo.base)).join("\n")}
+      </ul>`
+    : `      <section class="tarjeta">
+        <p>No hay partidos programados de ${esc(equipo.nombre)} por ahora. En cuanto se
+        publique el calendario aparecen aquí.</p>
+      </section>`;
+
+  const cuadro = cuadroDeRegistro({
+    bases: [equipo.base],
+    sujetos: [equipo.nombre],
+    claves: equipo.claves,
+    sustantivo: "partidos",
+    seguir: "/dashboard",
+    // Clave propia para poder comparar después qué convierte más, si las páginas de equipo o
+    // las de partido.
+    origen: "seo-equipo",
+  });
+
+  return `<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${esc(frase)} | FanSchedule</title>
+    <meta name="description" content="${esc(descripcion)}" />
+    <link rel="canonical" href="${esc(urlCanonica)}" />${noindex}
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="FanSchedule" />
+    <meta property="og:title" content="${esc(frase)}" />
+    <meta property="og:description" content="${esc(descripcion)}" />
+    <meta property="og:url" content="${esc(urlCanonica)}" />
+    <meta property="og:image" content="${SITIO}/og-image.png" />
+    <meta property="og:locale" content="es_MX" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${esc(frase)}" />
+    <meta name="twitter:description" content="${esc(descripcion)}" />
+    <meta name="twitter:image" content="${SITIO}/og-image.png" />
+    <style>${ESTILOS}    </style>
+  </head>
+  <body>
+${barra()}
+    <main class="contenido">
+      <h1>${esc(equipo.nombre)}</h1>
+      <p class="dato">${
+        hay ? `Próximos ${partidos.length === 1 ? "partido" : "partidos"}` : "Sin partidos programados"
+      }</p>
+${lista}
+${cuadro}
+    </main>
+${pie()}
+    <script>${SCRIPT_CUADRO}
+    </script>
+  </body>
+</html>
+`;
+}
+
+async function equipoPublicoHandler(req, res) {
+  try {
+    const indice = await indiceEquipos();
+    const equipo = indice.get(String(req.params.slug || "").toLowerCase());
+
+    if (!equipo) {
+      res.status(404);
+      res.set("Content-Type", "text/html; charset=utf-8");
+      return res.send(paginaNoEncontrada());
+    }
+
+    const partidos = await proximosDeEquipo(equipo.base, new Date().toISOString());
+
+    res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=3600");
+    res.set("Content-Type", "text/html; charset=utf-8");
+    return res.send(paginaEquipo(equipo, partidos));
+  } catch (error) {
+    console.error("[equipo-publico] Error:", error.message);
+    res.status(500);
+    res.set("Content-Type", "text/html; charset=utf-8");
+    return res.send(paginaNoEncontrada());
+  }
 }
 
 async function partidoPublicoHandler(req, res) {
@@ -924,6 +1250,7 @@ async function partidoPublicoHandler(req, res) {
 
 module.exports = {
   partidoPublicoHandler,
+  equipoPublicoHandler,
   aSlug,
   slugCanonico,
   vistaDelPartido,
@@ -931,4 +1258,8 @@ module.exports = {
   MOMENTO,
   esIndexable,
   esc,
+  // Para inspeccionar y probar el índice sin pasar por HTTP.
+  indiceEquipos,
+  proximosDeEquipo,
+  identidadDeEquipo,
 };

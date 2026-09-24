@@ -3,6 +3,7 @@
   "competencias": [
     {"clave":"4350","base":"Mexican Primera League","nombrePublico":"Liga MX"},
     {"clave":"4391","base":"NFL","nombrePublico":"NFL"},
+    {"clave":"4387","base":"NBA","nombrePublico":"NBA"},
     {"clave":"4480","base":"UEFA Champions League","nombrePublico":"Champions League"},
     {"clave":"4335","base":"Spanish La Liga","nombrePublico":"La Liga"},
     {"clave":"4328","base":"English Premier League","nombrePublico":"Premier League"},
