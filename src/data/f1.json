@@ -1,0 +1,42 @@
+{
+  "competenciaEnLaBase": "Formula 1",
+  "clave": "4370",
+  "sesiones": [
+    {"sufijo":"Practice 1","nombre":"Práctica 1","slug":"practica-1","indexar":false},
+    {"sufijo":"Practice 2","nombre":"Práctica 2","slug":"practica-2","indexar":false},
+    {"sufijo":"Practice 3","nombre":"Práctica 3","slug":"practica-3","indexar":false},
+    {"sufijo":"Sprint Qualifying","nombre":"Clasificación del Sprint","slug":"clasificacion-sprint","indexar":true},
+    {"sufijo":"Sprint","nombre":"Sprint","slug":"sprint","indexar":true},
+    {"sufijo":"Qualifying","nombre":"Clasificación","slug":"clasificacion","indexar":true}
+  ],
+  "granPremios": [
+    {"base":"Australian Grand Prix","nombre":"Gran Premio de Australia","slug":"gp-australia"},
+    {"base":"Chinese Grand Prix","nombre":"Gran Premio de China","slug":"gp-china"},
+    {"base":"Japanese Grand Prix","nombre":"Gran Premio de Japón","slug":"gp-japon"},
+    {"base":"Bahrain Grand Prix","nombre":"Gran Premio de Baréin","slug":"gp-barein"},
+    {"base":"Bahrain in Malaysia Grand Prix","nombre":"Gran Premio de Baréin","slug":"gp-barein-malasia"},
+    {"base":"Saudi Arabian Grand Prix","nombre":"Gran Premio de Arabia Saudita","slug":"gp-arabia-saudita"},
+    {"base":"Miami Grand Prix","nombre":"Gran Premio de Miami","slug":"gp-miami"},
+    {"base":"Emilia Romagna Grand Prix","nombre":"Gran Premio de Emilia-Romaña","slug":"gp-emilia-romana"},
+    {"base":"Monaco Grand Prix","nombre":"Gran Premio de Mónaco","slug":"gp-monaco"},
+    {"base":"Canadian Grand Prix","nombre":"Gran Premio de Canadá","slug":"gp-canada"},
+    {"base":"Barcelona-Catalunya Grand Prix","nombre":"Gran Premio de Cataluña","slug":"gp-cataluna"},
+    {"base":"Spanish Grand Prix","nombre":"Gran Premio de España","slug":"gp-espana"},
+    {"base":"Austrian Grand Prix","nombre":"Gran Premio de Austria","slug":"gp-austria"},
+    {"base":"British Grand Prix","nombre":"Gran Premio de Gran Bretaña","slug":"gp-gran-bretana"},
+    {"base":"Belgian Grand Prix","nombre":"Gran Premio de Bélgica","slug":"gp-belgica"},
+    {"base":"Hungarian Grand Prix","nombre":"Gran Premio de Hungría","slug":"gp-hungria"},
+    {"base":"Dutch Grand Prix","nombre":"Gran Premio de Países Bajos","slug":"gp-paises-bajos"},
+    {"base":"Italian Grand Prix","nombre":"Gran Premio de Italia","slug":"gp-italia"},
+    {"base":"Azerbaijan Grand Prix","nombre":"Gran Premio de Azerbaiyán","slug":"gp-azerbaiyan"},
+    {"base":"Singapore Grand Prix","nombre":"Gran Premio de Singapur","slug":"gp-singapur"},
+    {"base":"United States Grand Prix","nombre":"Gran Premio de Estados Unidos","slug":"gp-estados-unidos"},
+    {"base":"Mexican Grand Prix","nombre":"Gran Premio de México","slug":"gp-mexico"},
+    {"base":"Mexico City Grand Prix","nombre":"Gran Premio de México","slug":"gp-mexico"},
+    {"base":"Brazilian Grand Prix","nombre":"Gran Premio de Brasil","slug":"gp-brasil"},
+    {"base":"Sao Paulo Grand Prix","nombre":"Gran Premio de Brasil","slug":"gp-brasil"},
+    {"base":"Las Vegas Grand Prix","nombre":"Gran Premio de Las Vegas","slug":"gp-las-vegas"},
+    {"base":"Qatar Grand Prix","nombre":"Gran Premio de Catar","slug":"gp-catar"},
+    {"base":"Abu Dhabi Grand Prix","nombre":"Gran Premio de Abu Dabi","slug":"gp-abu-dabi"}
+  ]
+}

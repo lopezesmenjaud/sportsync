@@ -38,6 +38,15 @@ const LIGA_MX = require("../data/ligaMx.json");
 // y lo avise (ver el console.warn de vistaDelPartido), en vez de acertar por casualidad.
 const LIGA_MX_POR_BASE = new Map(LIGA_MX.equipos.map((e) => [e.base, e]));
 
+// Fórmula 1: el proveedor manda los eventos en inglés ("Azerbaijan Grand Prix Qualifying") y
+// nadie en México busca así. Esta tabla los traduce.
+const F1 = require("../data/f1.json");
+
+// Los grandes premios, ORDENADOS DE MÁS LARGO A MÁS CORTO. El nombre del evento se reconoce por
+// prefijo, así que el orden es lo que hace que gane el más específico: sin él,
+// "Bahrain Grand Prix" podría comerse a "Bahrain in Malaysia Grand Prix".
+const F1_GP_POR_LARGO = [...F1.granPremios].sort((a, b) => b.base.length - a.base.length);
+
 const SITIO = process.env.SITE_URL || "https://fanschedule.com";
 const ZONA = "America/Mexico_City";
 
@@ -121,6 +130,40 @@ function aSlug(texto) {
     .replace(/^-+|-+$/g, "");
 }
 
+// Traduce el nombre de un evento de Fórmula 1. Devuelve null si no lo reconoce, y entonces la
+// página se queda EXACTAMENTE como hoy, en inglés: el día que llegue un gran premio nuevo que no
+// esté en la tabla, la página sigue funcionando en vez de inventarse un nombre.
+//
+// Da { nombre, slug, indexar }:
+//   "Azerbaijan Grand Prix"                   -> Gran Premio de Azerbaiyán              (carrera)
+//   "Azerbaijan Grand Prix Qualifying"        -> Clasificación del Gran Premio de ...
+//   "Azerbaijan Grand Prix Sprint Qualifying" -> Clasificación del Sprint del Gran Premio de ...
+function resolverF1(eventName) {
+  const texto = String(eventName || "").trim();
+  if (!texto) return null;
+
+  const gp = F1_GP_POR_LARGO.find((g) => texto.startsWith(g.base));
+  if (!gp) return null;
+
+  const resto = texto.slice(gp.base.length).trim();
+
+  // Sin resto es la carrera misma.
+  if (!resto) return { nombre: gp.nombre, slug: gp.slug, indexar: true };
+
+  // EN EL ORDEN DEL ARCHIVO, que no es casual: "Sprint Qualifying" va antes que "Sprint" y que
+  // "Qualifying". Al revés, una clasificación del sprint se anunciaría como un sprint a secas.
+  const sesion = F1.sesiones.find((s) => resto.startsWith(s.sufijo));
+
+  // Resto que no reconocemos: no se traduce a medias ni se adivina. Queda como hoy.
+  if (!sesion) return null;
+
+  return {
+    nombre: `${sesion.nombre} del ${gp.nombre}`,
+    slug: `${gp.slug}-${sesion.slug}`,
+    indexar: sesion.indexar,
+  };
+}
+
 // Cómo se PRESENTA el partido, ya resuelto: nombres, slug, competencia y dónde verlo.
 //
 // Es el único lugar donde se decide si el partido es de Liga MX y, por tanto, si se usan los
@@ -161,20 +204,27 @@ function vistaDelPartido(match) {
   // página diga "a qué hora JUEGAN" o "a qué hora ES".
   const esVersus = Boolean(nombreLocal && nombreVisita);
 
+  // Fórmula 1: si el evento se reconoce, el nombre y el slug salen traducidos de la tabla. Si no
+  // —un gran premio nuevo, una sesión con otro nombre—, f1 es null y todo sigue el camino normal.
+  const f1 = String(match.competitionKey || "") === F1.clave ? resolverF1(match.eventName) : null;
+
   // Para lo que no es equipo contra equipo se cae al nombre del evento y, en último caso, al de
   // la competencia.
-  const nombre = esVersus
-    ? `${nombreLocal} vs ${nombreVisita}`
-    : nombreLocal ||
-      nombreVisita ||
-      (match.eventName || "").trim() ||
-      (match.competitionName || "").trim() ||
-      "Partido";
+  const nombre = f1
+    ? f1.nombre
+    : esVersus
+      ? `${nombreLocal} vs ${nombreVisita}`
+      : nombreLocal ||
+        nombreVisita ||
+        (match.eventName || "").trim() ||
+        (match.competitionName || "").trim() ||
+        "Partido";
 
   const slugLocal = entradaLocal ? entradaLocal.slug : aSlug(match.homeParticipantName);
   const slugVisita = entradaVisita ? entradaVisita.slug : aSlug(match.awayParticipantName);
-  const slug =
-    slugLocal && slugVisita
+  const slug = f1
+    ? f1.slug
+    : slugLocal && slugVisita
       ? `${slugLocal}-vs-${slugVisita}`
       : slugLocal || slugVisita || aSlug(match.eventName) || aSlug(match.competitionName);
 
@@ -188,6 +238,9 @@ function vistaDelPartido(match) {
     nombreVisita,
     slug,
     competencia,
+    // Las prácticas libres no las busca nadie y son casi cien páginas de relleno al año. Se
+    // sirven igual —quien tenga el enlace la ve— pero no entran al índice.
+    indexable: f1 ? f1.indexar : true,
     // Clave de atribución del botón de registro. Sale de la competencia ya en su forma pública,
     // así que un partido de Liga MX manda "seo-liga-mx" y no "seo-mexican-primera-league".
     origen: `seo-${aSlug(competencia)}`.replace(/-$/, ""),
@@ -578,8 +631,8 @@ function cuadroDeRegistro(vista, match) {
 //    servidor. Nunca hay un estado a medias ni un hueco en blanco.
 //  - No manda la identidad a ningún lado nuevo: la única petición va al backend de FanSchedule,
 //    que ya conoce a esa persona. El token sale del mismo localStorage que usa la app.
-//  - No brinca la página: antes de tocar nada fija la altura actual del cuadro como mínimo, así
-//    lo que está leyendo la persona no se le recorre bajo el dedo.
+//  - No recorre lo que se está leyendo: el cuadro es lo último antes del pie, así que un cambio
+//    de alto solo mueve el pie.
 const SCRIPT_CUADRO = `
     (function () {
       var caja = document.getElementById("fs-cuadro");
@@ -621,9 +674,9 @@ const SCRIPT_CUADRO = `
         .catch(function () { clearTimeout(reloj); });
 
       function pintar(sigue) {
-        // Que no se recorra el contenido: el cuadro nuevo nunca es más bajo que el que había.
-        caja.style.minHeight = caja.offsetHeight + "px";
-
+        // A PROPÓSITO no se fija una altura mínima. El cuadro es el último elemento antes del
+        // pie, así que si encoge lo único que sube es el pie y nada de lo que la persona está
+        // leyendo se mueve; en cambio una altura clavada deja un hueco blanco a la vista.
         var h = document.createElement("h2");
         var p = document.createElement("p");
 
@@ -751,11 +804,12 @@ function paginaPartido(match, vista, urlCanonica, transmision) {
 
   const tituloPagina = `${frase} | FanSchedule`;
 
-  // Un partido que ya empezó NUNCA se indexa, esté o no su competencia en la lista blanca. No
-  // tenemos marcador, así que como página de resultado no sirve, y cientos de ellas indexadas
-  // pesan más que el tráfico que traen.
+  // Tres motivos independientes para no indexar, y basta con uno:
+  //  - el partido ya empezó: sin marcador, como página de resultado no sirve;
+  //  - su competencia no está en el catálogo;
+  //  - es una sesión que no vale la pena indexar, como una práctica libre de F1.
   const noindex =
-    momento !== MOMENTO.FUTURO || !esIndexable(match.competitionKey)
+    momento !== MOMENTO.FUTURO || !esIndexable(match.competitionKey) || !vista.indexable
       ? `\n    <meta name="robots" content="noindex" />`
       : "";
 
