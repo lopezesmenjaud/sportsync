@@ -12,6 +12,10 @@
   "rewrites": [
     { "source": "/partido/:path*",
       "destination": "https://sportsync-awqq.onrender.com/partido/:path*" },
+    { "source": "/equipo/:path*",
+      "destination": "https://sportsync-awqq.onrender.com/equipo/:path*" },
+    { "source": "/sitemap.xml",
+      "destination": "https://sportsync-awqq.onrender.com/sitemap.xml" },
     { "source": "/(.*)", "destination": "/" }
   ]
 }

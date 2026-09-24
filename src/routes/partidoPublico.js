@@ -281,6 +281,22 @@ function momentoDelPartido(fecha, ahora = Date.now()) {
   return MOMENTO.YA_PASO;
 }
 
+// ¿Esta página de partido entra al índice de Google? ÚNICA fuente de esa regla: la usan tanto la
+// etiqueta robots de la página como el sitemap. Si hubiera dos versiones y algún día divergieran,
+// el sitemap estaría declarando direcciones que la propia página pide no indexar.
+//
+// Tres motivos independientes para quedarse fuera, y basta con uno:
+//  - el partido ya empezó: sin marcador, como página de resultado no sirve;
+//  - su competencia no está en el catálogo;
+//  - es una sesión que no vale la pena indexar, como una práctica libre de F1.
+function seIndexaPartido(match, vista, fecha, ahora = Date.now()) {
+  return (
+    momentoDelPartido(fecha, ahora) === MOMENTO.FUTURO &&
+    esIndexable(match.competitionKey) &&
+    vista.indexable
+  );
+}
+
 // Instante real del partido. currentStartUtc manda (es el que refleja reprogramaciones) y
 // scheduledStartUtc es el respaldo. Si faltan los dos devuelve null en vez de un Date en 1970:
 // esta página prefiere no decir la hora a decir una falsa.
@@ -575,13 +591,16 @@ let cacheEquipos = null; // { porSlug: Map, generado: número }
 
 const clavesDelCatalogo = () => [...COMPETENCIAS_POR_CLAVE.keys()];
 
-// Cómo se llama y cómo se direcciona un equipo. En Liga MX manda la tabla hecha a mano —"CD
-// Guadalajara" se publica como "Chivas" en /equipo/chivas—; en el resto, el nombre del proveedor.
-function identidadDeEquipo(nombreBase, clave) {
-  if (clave === CLAVE_LIGA_MX) {
-    const entrada = LIGA_MX_POR_BASE.get(nombreBase);
-    if (entrada) return { slug: entrada.slug, nombre: entrada.apodo };
-  }
+// Cómo se llama y cómo se direcciona un equipo. Si está en la tabla hecha a mano manda ella —"CD
+// Guadalajara" se publica como "Chivas" en /equipo/chivas—; si no, el nombre del proveedor.
+//
+// Se busca por NOMBRE y NO por competencia a propósito. Si dependiera de la clave, el día que un
+// equipo mexicano jugara otro torneo del catálogo tendría dos direcciones —/equipo/chivas y
+// /equipo/cd-guadalajara— con el mismo contenido, que para Google es contenido duplicado. Un
+// equipo, una página, juegue donde juegue.
+function identidadDeEquipo(nombreBase) {
+  const entrada = LIGA_MX_POR_BASE.get(nombreBase);
+  if (entrada) return { slug: entrada.slug, nombre: entrada.apodo };
   return { slug: aSlug(nombreBase), nombre: nombreBase };
 }
 
@@ -627,7 +646,7 @@ async function indiceEquipos() {
     const clave = String(fila.competitionKey || "");
     if (!base) continue;
 
-    const { slug, nombre } = identidadDeEquipo(base, clave);
+    const { slug, nombre } = identidadDeEquipo(base);
     if (!slug) continue;
 
     const ya = porSlug.get(slug);
@@ -899,22 +918,24 @@ const SCRIPT_CUADRO = `
       }
     })();`;
 
+// La misma página para las dos rutas, así que el texto no puede decir "partido": también sale
+// cuando no existe el equipo. Sin rastro del error ni de la consulta: es una página pública.
 function paginaNoEncontrada() {
-  // Sin rastro del error ni de la consulta: es una página pública.
   return `<!doctype html>
 <html lang="es">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
-    <title>Partido no encontrado | FanSchedule</title>
+    <title>Página no encontrada | FanSchedule</title>
     <style>${ESTILOS}    </style>
   </head>
   <body>
 ${barra()}
     <main class="contenido">
-      <h1>Partido no encontrado</h1>
-      <p class="dato">Puede que la dirección esté mal escrita o que el partido ya no esté disponible.</p>
+      <h1>Página no encontrada</h1>
+      <p class="dato">Puede que la dirección esté mal escrita, o que el partido o el equipo ya
+      no estén disponibles.</p>
       <p><a class="boton" href="/">Ir a FanSchedule</a></p>
     </main>
 ${pie()}
@@ -984,14 +1005,10 @@ function paginaPartido(match, vista, urlCanonica, transmision) {
 
   const tituloPagina = `${frase} | FanSchedule`;
 
-  // Tres motivos independientes para no indexar, y basta con uno:
-  //  - el partido ya empezó: sin marcador, como página de resultado no sirve;
-  //  - su competencia no está en el catálogo;
-  //  - es una sesión que no vale la pena indexar, como una práctica libre de F1.
-  const noindex =
-    momento !== MOMENTO.FUTURO || !esIndexable(match.competitionKey) || !vista.indexable
-      ? `\n    <meta name="robots" content="noindex" />`
-      : "";
+  // La MISMA regla que usa el sitemap para decidir si declara esta dirección.
+  const noindex = seIndexaPartido(match, vista, fecha)
+    ? ""
+    : `\n    <meta name="robots" content="noindex" />`;
 
   const lineaAviso =
     momento === MOMENTO.YA_PASO
@@ -1004,8 +1021,8 @@ function paginaPartido(match, vista, urlCanonica, transmision) {
   // partido se llega al equipo y de un equipo a sus partidos. En una carrera no hay a quién
   // enlazar, y el h1 se queda como estaba.
   const h1 = vista.esVersus
-    ? `${enlaceEquipo(match.homeParticipantName, vista.nombreLocal, match.competitionKey)} vs ` +
-      `${enlaceEquipo(match.awayParticipantName, vista.nombreVisita, match.competitionKey)}`
+    ? `${enlaceEquipo(match.homeParticipantName, vista.nombreLocal)} vs ` +
+      `${enlaceEquipo(match.awayParticipantName, vista.nombreVisita)}`
     : esc(vista.nombre);
 
   const lineaCompetencia = competencia ? `        <p class="dato">${esc(competencia)}</p>\n` : "";
@@ -1061,8 +1078,8 @@ ${pie()}
 }
 
 // Enlace al equipo dentro de un h1. Devuelve texto escapado a secas si el equipo no tiene slug.
-function enlaceEquipo(nombreBase, nombreVisible, clave) {
-  const { slug } = identidadDeEquipo(String(nombreBase || "").trim(), String(clave || ""));
+function enlaceEquipo(nombreBase, nombreVisible) {
+  const { slug } = identidadDeEquipo(String(nombreBase || "").trim());
   if (!slug) return esc(nombreVisible);
   return `<a href="/equipo/${esc(slug)}">${esc(nombreVisible)}</a>`;
 }
@@ -1198,6 +1215,129 @@ async function equipoPublicoHandler(req, res) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Sitemap
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Tope defensivo. Un sitemap admite 50 000 direcciones; si algún día nos acercamos, hay que
+// partirlo en varios con un índice. Mientras tanto, mejor cortar y avisar que servir uno inválido.
+const TOPE_SITEMAP = 40000;
+
+// Escapado para XML. Son los mismos cinco de siempre, pero con `esc` no bastaba: aquí &quot; y
+// &#39; no son opcionales dentro de un atributo, y sobre todo el resultado va a un parser de XML,
+// que es menos indulgente que el de HTML.
+function escXml(valor) {
+  return String(valor === null || valor === undefined ? "" : valor)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+// TODOS los partidos futuros de las competencias del catálogo. Sin límite por equipo: esto
+// alimenta el sitemap, no una pantalla.
+function partidosFuturos(desde, limite = TOPE_SITEMAP) {
+  const claves = clavesDelCatalogo();
+  if (!claves.length) return Promise.resolve([]);
+  const marcas = claves.map(() => "?").join(",");
+  return new Promise((resolve) => {
+    db.all(
+      `SELECT data FROM matches
+        WHERE competitionKey IN (${marcas})
+          AND COALESCE(currentStartUtc, scheduledStartUtc) > ?
+        ORDER BY COALESCE(currentStartUtc, scheduledStartUtc) ASC
+        LIMIT ?`,
+      [...claves, desde, limite],
+      (err, filas) => {
+        if (err || !filas) {
+          if (err) console.error("[sitemap] no se pudieron leer los partidos:", err.message);
+          return resolve([]);
+        }
+        const partidos = [];
+        for (const f of filas) {
+          try {
+            partidos.push(JSON.parse(f.data));
+          } catch {
+            /* una fila corrupta no puede tumbar el sitemap entero */
+          }
+        }
+        resolve(partidos);
+      }
+    );
+  });
+}
+
+// Arma la lista de direcciones. Se genera EN EL MOMENTO, nunca se escribe a disco: el día que
+// entre el Gran Premio de México o una jornada nueva, su dirección aparece sola en la siguiente
+// petición, sin que nadie se acuerde de actualizar una lista.
+async function direccionesDelSitemap(ahora = Date.now()) {
+  const desde = new Date(ahora).toISOString();
+  const partidos = await partidosFuturos(desde);
+
+  const urls = [`${SITIO}/`, `${SITIO}/privacy`, `${SITIO}/terms`];
+  const fijas = urls.length;
+
+  // Equipos: los que tienen al menos un partido futuro. Salen de estos mismos partidos, que es
+  // justo la condición que hace que su página NO lleve noindex. Declarar un equipo sin partidos
+  // sería mandar a Google a una puerta cerrada.
+  const equipos = new Map();
+
+  let partidosDeclarados = 0;
+  for (const match of partidos) {
+    const vista = vistaDelPartido(match);
+
+    // Los equipos cuentan aunque el partido concreto no se indexe: la página del equipo sí
+    // existe y sí tiene contenido. Una práctica de F1 no aporta equipos porque no los tiene.
+    for (const base of [match.homeParticipantName, match.awayParticipantName]) {
+      const limpio = String(base || "").trim();
+      if (!limpio) continue;
+      const { slug } = identidadDeEquipo(limpio);
+      if (slug && !equipos.has(slug)) equipos.set(slug, limpio);
+    }
+
+    // La MISMA regla que decide el noindex de la página. No hay una segunda versión.
+    if (!seIndexaPartido(match, vista, instante(match), ahora)) continue;
+
+    const id = encodeURIComponent(match.providerMatchId);
+    urls.push(vista.slug ? `${SITIO}/partido/${id}/${vista.slug}` : `${SITIO}/partido/${id}`);
+    partidosDeclarados++;
+  }
+
+  for (const slug of [...equipos.keys()].sort()) urls.push(`${SITIO}/equipo/${slug}`);
+
+  if (urls.length >= TOPE_SITEMAP) {
+    console.warn(
+      `[sitemap] se alcanzó el tope de ${TOPE_SITEMAP} direcciones: toca partirlo en varios archivos`
+    );
+  }
+
+  return { urls, fijas, partidos: partidosDeclarados, equipos: equipos.size };
+}
+
+async function sitemapHandler(req, res) {
+  try {
+    const { urls } = await direccionesDelSitemap();
+    const cuerpo = urls.map((u) => `  <url><loc>${escXml(u)}</loc></url>`).join("\n");
+
+    res.set("Cache-Control", "public, max-age=600, s-maxage=3600");
+    res.set("Content-Type", "application/xml; charset=utf-8");
+    return res.send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n` +
+        `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${cuerpo}\n</urlset>\n`
+    );
+  } catch (error) {
+    console.error("[sitemap] Error:", error.message);
+    res.status(500);
+    res.set("Content-Type", "application/xml; charset=utf-8");
+    // Un sitemap vacío es XML válido: Google lo lee, no encuentra nada nuevo y vuelve luego. Es
+    // mejor que un 500 con HTML, que sí le ensucia el informe de cobertura.
+    return res.send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n</urlset>\n`
+    );
+  }
+}
+
 async function partidoPublicoHandler(req, res) {
   try {
     const { id } = req.params;
@@ -1251,6 +1391,8 @@ async function partidoPublicoHandler(req, res) {
 module.exports = {
   partidoPublicoHandler,
   equipoPublicoHandler,
+  sitemapHandler,
+  direccionesDelSitemap,
   aSlug,
   slugCanonico,
   vistaDelPartido,

@@ -20,7 +20,7 @@ const googleCalendarProvider = require("./src/services/googleCalendarProvider");
 const { sessionRepository } = require("./src/repositories/sessionRepositorySqlite");
 const { requireUser, optionalUser, isLegacyAllowed } = require("./src/middleware/auth");
 const { withRateLimitRetry, sleep } = require("./src/services/userBackfillService");
-const { partidoPublicoHandler, equipoPublicoHandler } = require("./src/routes/partidoPublico");
+const { partidoPublicoHandler, equipoPublicoHandler, sitemapHandler } = require("./src/routes/partidoPublico");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -986,6 +986,12 @@ app.get("/partido/:id{/:slug}", partidoPublicoHandler);
 // de enlaces internos que conecta las de partido entre sí: sin ellas cada partido es una
 // página huérfana a la que no apunta nada.
 app.get("/equipo/:slug", equipoPublicoHandler);
+
+// ── Sitemap ──
+// Se genera EN EL MOMENTO de cada petición y NUNCA se escribe a disco: el día que entre una
+// jornada nueva o el Gran Premio de México, su dirección aparece sola. Un archivo estático
+// habría que acordarse de regenerarlo, y el día que se olvide Google deja de ver lo nuevo.
+app.get("/sitemap.xml", sitemapHandler);
 
 // ── Detalle de un partido ──
 // Sesión OPCIONAL: la página de un partido es pública (ruta /match/:matchId sin Protected en el
