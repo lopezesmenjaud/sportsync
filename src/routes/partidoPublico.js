@@ -41,6 +41,39 @@ const LIGA_MX_POR_BASE = new Map(LIGA_MX.equipos.map((e) => [e.base, e]));
 const SITIO = process.env.SITE_URL || "https://fanschedule.com";
 const ZONA = "America/Mexico_City";
 
+// A dónde le pregunta el navegador por las suscripciones de quien mira. Tiene que ser la URL
+// ABSOLUTA del backend: la página se ve en fanschedule.com gracias a una reescritura, así que una
+// ruta relativa caería en el atrapatodo del SPA y devolvería el index.html en vez de JSON.
+const API_PUBLICA = process.env.PUBLIC_API_URL || "https://sportsync-awqq.onrender.com";
+
+// De lo que guarda matches.sport a la clave que usa la URL del dashboard. Las dos listas ya
+// existen —normalizeSport en el proveedor y SPORT_MAP en server.js— pero nadie las cruzaba; esto
+// es el puente. Un deporte que no esté aquí manda al dashboard a secas, que siempre funciona.
+const DEPORTE_A_RUTA = {
+  football: "futbol",
+  basketball: "basketball",
+  "american football": "futbol_americano",
+  motorsport: "automovilismo",
+  baseball: "baseball",
+  tennis: "tenis",
+  fighting: "combate",
+  rugby: "rugby",
+  "ice hockey": "hockey",
+  volleyball: "voleibol",
+  golf: "golf",
+  cycling: "ciclismo",
+};
+
+// Lo más específico a lo que se puede enlazar dentro de la app: el picker de equipos de ESTA
+// liga. No existe una ruta de "agregar este equipo" en un clic — hay que picarlo en la lista.
+// TeamPicker aguanta que se llegue por enlace directo: saca la liga de los params y solo pierde
+// el nombre bonito del encabezado, que cae a "Liga".
+function urlParaSeguir(match) {
+  const ruta = DEPORTE_A_RUTA[String(match.sport || "").trim().toLowerCase()];
+  const clave = String(match.competitionKey || "").trim();
+  return ruta && clave ? `/dashboard/${ruta}/${clave}` : "/dashboard";
+}
+
 // Paleta de la marca. Va aquí y no repartida por el CSS para poder cambiarla en un solo sitio.
 const NARANJA = "#F5820A";
 const AZUL = "#1C2430";
@@ -379,6 +412,27 @@ const ESTILOS = `
       padding: 12px 22px;
       border-radius: 10px;
     }
+    /* Dos botones caben peor que uno, sobre todo a 360px. Se achican un punto y envuelven, para
+       que el cuadro personalizado no crezca mucho más que el que reemplaza. */
+    .botones {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .boton-chico {
+      font-size: 15px;
+      padding: 10px 18px;
+    }
+    /* Estado "ya lo sigue": aquí no se le pide nada, se le confirma que el producto funciona.
+       Por eso un enlace y no un botón naranja grande. */
+    .enlace-registro {
+      display: inline-block;
+      color: var(--naranja);
+      font-weight: 600;
+      font-size: 15px;
+      text-decoration: none;
+    }
+    .enlace-registro:hover, .enlace-registro:focus { text-decoration: underline; }
 
     .pie {
       max-width: 680px;
@@ -487,16 +541,130 @@ function seccionDondeVerlo(vista, transmision, momento) {
 // Va SIEMPRE después de "Dónde verlo": el horario y el canal son las dos cosas que la persona
 // vino a buscar, y ponerse en medio de la segunda es quitarle la página a quien la está leyendo.
 //
-// Un solo estado por ahora, el de visitante sin sesión. Esta ruta no lee sesión (ni la tiene:
-// se sirve cacheada por el CDN), así que no puede saber si quien mira ya es usuario.
-function cuadroDeRegistro(vista) {
-  return `      <section class="registro">
+// El HTML que sale de aquí es SIEMPRE el de visitante sin sesión, idéntico para todo el mundo.
+// No puede ser de otra manera: la respuesta se guarda 15 minutos en el CDN y se le entrega tal
+// cual al siguiente que pida la página, así que decidir el estado en el servidor le enseñaría a
+// un desconocido el cuadro de otra persona. Quién es quien mira se resuelve en SU navegador, con
+// el script del final del body.
+//
+// Los datos del partido viajan en atributos data-, no interpolados dentro del <script>: así un
+// nombre de equipo con comillas o con "</script>" no puede romper ni secuestrar el script. Son
+// datos públicos del partido, nada del usuario.
+function cuadroDeRegistro(vista, match) {
+  const urlSeguir = urlParaSeguir(match);
+  return `      <section class="registro" id="fs-cuadro"
+        data-api="${esc(API_PUBLICA)}"
+        data-clave="${esc(match.competitionKey || "")}"
+        data-competencia="${esc(vista.competencia)}"
+        data-local-base="${esc(match.homeParticipantName || "")}"
+        data-visita-base="${esc(match.awayParticipantName || "")}"
+        data-local="${esc(vista.nombreLocal)}"
+        data-visita="${esc(vista.nombreVisita)}"
+        data-versus="${vista.esVersus ? "1" : "0"}"
+        data-seguir="${esc(urlSeguir)}">
         <h2>No te vuelvas a quedar con la duda</h2>
         <p>FanSchedule pone los partidos de tus equipos en tu Google Calendar.
         Te avisa solo, aunque cambien de horario.</p>
         <a class="boton" href="/?g=${esc(vista.origen)}">Conectar mi calendario</a>
       </section>`;
 }
+
+// Script que personaliza el cuadro en el navegador de cada quien.
+//
+// Reglas que cumple, todas deliberadas:
+//  - No bloquea el pintado: es lo último del <body> y no toca nada hasta que ya hay página.
+//  - Ante CUALQUIER duda se queda callado. Sin sesión, sin token, petición que falla, que tarda
+//    más de 2 s o que devuelve algo raro: el cuadro se queda exactamente como llegó del
+//    servidor. Nunca hay un estado a medias ni un hueco en blanco.
+//  - No manda la identidad a ningún lado nuevo: la única petición va al backend de FanSchedule,
+//    que ya conoce a esa persona. El token sale del mismo localStorage que usa la app.
+//  - No brinca la página: antes de tocar nada fija la altura actual del cuadro como mínimo, así
+//    lo que está leyendo la persona no se le recorre bajo el dedo.
+const SCRIPT_CUADRO = `
+    (function () {
+      var caja = document.getElementById("fs-cuadro");
+      if (!caja) return;
+
+      // La app guarda la sesión en estas dos llaves de localStorage (frontend/src/auth.js).
+      // Modo privado o storage bloqueado: se sale sin tocar nada.
+      var usuario, token;
+      try {
+        usuario = JSON.parse(localStorage.getItem("fanschedule_user") || "null");
+        token = localStorage.getItem("fanschedule_token");
+      } catch (e) { return; }
+      if (!usuario || !usuario.userId || !token) return;
+
+      var d = caja.dataset;
+
+      var corta = new AbortController();
+      var reloj = setTimeout(function () { corta.abort(); }, 2000);
+
+      fetch(d.api + "/subscriptions/" + encodeURIComponent(usuario.userId), {
+        headers: { Authorization: "Bearer " + token },
+        signal: corta.signal
+      })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          clearTimeout(reloj);
+          if (!data || !data.ok || !Array.isArray(data.subscriptions)) return;
+
+          var sigue = data.subscriptions.some(function (s) {
+            // A un equipo de este partido — se compara con el nombre que guarda la base, que es
+            // el que eligió del picker, no con el apodo que muestra la página.
+            if (s.teamName && (s.teamName === d.localBase || s.teamName === d.visitaBase)) return true;
+            // O a la competencia completa: misma clave y sin equipo.
+            return !s.teamName && String(s.competitionKey || "") === d.clave;
+          });
+
+          pintar(sigue);
+        })
+        .catch(function () { clearTimeout(reloj); });
+
+      function pintar(sigue) {
+        // Que no se recorra el contenido: el cuadro nuevo nunca es más bajo que el que había.
+        caja.style.minHeight = caja.offsetHeight + "px";
+
+        var h = document.createElement("h2");
+        var p = document.createElement("p");
+
+        if (sigue) {
+          h.textContent = "Ya está en tu calendario";
+          p.textContent = "Te va a avisar solo, y si cambian el horario se actualiza.";
+          var ver = document.createElement("a");
+          ver.className = "enlace-registro";
+          ver.href = "/upcoming";
+          ver.textContent = "Ver mis partidos";
+          caja.replaceChildren(h, p, ver);
+          return;
+        }
+
+        h.textContent = "Que se agenden solos";
+        var fila = document.createElement("div");
+        fila.className = "botones";
+
+        if (d.versus === "1") {
+          p.textContent = "Sigue a " + d.local + " o a " + d.visita +
+            " y sus partidos entran a tu calendario sin que hagas nada.";
+          fila.appendChild(boton("Seguir a " + d.local));
+          fila.appendChild(boton("Seguir a " + d.visita));
+        } else {
+          // Una carrera no tiene dos equipos enfrentados: se sigue la competencia.
+          p.textContent = "Sigue a " + d.competencia +
+            " y sus carreras entran a tu calendario sin que hagas nada.";
+          fila.appendChild(boton("Seguir a " + d.competencia));
+        }
+
+        caja.replaceChildren(h, p, fila);
+      }
+
+      function boton(texto) {
+        var a = document.createElement("a");
+        a.className = "boton boton-chico";
+        a.href = caja.dataset.seguir;
+        a.textContent = texto;
+        return a;
+      }
+    })();`;
 
 function paginaNoEncontrada() {
   // Sin rastro del error ni de la consulta: es una página pública.
@@ -640,9 +808,11 @@ ${barra()}
 ${lineaAviso}      <div class="datos">
 ${lineaCompetencia}${lineaFecha}${lineaSede}      </div>
 ${seccionDondeVerlo(vista, transmision, momento)}
-${cuadroDeRegistro(vista)}
+${cuadroDeRegistro(vista, match)}
     </main>
 ${pie()}
+    <script>${SCRIPT_CUADRO}
+    </script>
   </body>
 </html>
 `;
