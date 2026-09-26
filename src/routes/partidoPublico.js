@@ -676,6 +676,97 @@ async function indiceEquipos() {
   return porSlug;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Seguir equipos al volver del registro
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// El botón de conectar de la página pública lleva "&seguir=equipo:<slug>" o
+// "&seguir=partido:<id>". La app lo guarda, y al volver de Google le pregunta a
+// GET /api/seguir qué equipos ofrecer. La suscripción se crea con el MISMO POST /subscriptions
+// de TeamPicker, en modo "Todos los partidos": competitionKey null.
+
+// Etiqueta (competitionName) y deporte con que se guarda la suscripción de un equipo.
+//
+// Se calcula desde el EQUIPO —todas sus competencias del catálogo— y no desde la página por la
+// que llegó: el Real Madrid queda "La Liga" entre por un partido de Champions o de La Liga. Se
+// prefiere la liga; si solo tiene copas (Bayern, PSG: solo los conocemos por la Champions), la
+// copa. Nunca se inventa una liga que no está en los datos. Con varias opciones gana el orden
+// del catálogo, para que el resultado no dependa del orden en que la base devuelva las filas.
+function competenciaParaSeguir(claves) {
+  const orden = clavesDelCatalogo();
+  const entradas = [...new Set(claves.map(String))]
+    .map((c) => COMPETENCIAS_POR_CLAVE.get(c))
+    .filter(Boolean)
+    .sort((a, b) => orden.indexOf(a.clave) - orden.indexOf(b.clave));
+  const ligas = entradas.filter((e) => e.tipo === "liga");
+  if (ligas.length > 1) {
+    console.warn(
+      `[seguir] un equipo con varias ligas del catálogo (${ligas.map((e) => e.clave).join(", ")}): se etiqueta con ${ligas[0].nombrePublico}`
+    );
+  }
+  const elegida = (ligas.length ? ligas : entradas)[0];
+  // Sin sport en el catálogo NO se adivina: ese equipo no se ofrece.
+  if (!elegida || !elegida.sport) return null;
+  return { sport: elegida.sport, competitionName: elegida.nombrePublico };
+}
+
+// El contexto que va en el botón de conectar. null si la página no tiene equipos que ofrecer.
+// En una página de partido, el partido tiene que ser de una competencia del catálogo: sus dos
+// equipos están entonces en el índice de equipos por construcción.
+function contextoDeEquipo(equipo) {
+  return `equipo:${equipo.slug}`;
+}
+function contextoDePartido(vista, match) {
+  return vista.esVersus && esIndexable(match.competitionKey) ? `partido:${match.providerMatchId}` : null;
+}
+
+// Los equipos que se le ofrecen a quien llegó con ese contexto. teamName es el nombre EXACTO de
+// la base (el que empata con los partidos) y apodo es solo para el texto del botón: "Seguir
+// Chivas" guarda "CD Guadalajara". Si la lista de equipos de la app escribe distinto a un equipo
+// —"Atlético de San Luis" contra "Atletico de San Luis" en los partidos—, aquí gana el de los
+// partidos, que es el que sí trae eventos.
+async function equiposParaSeguir(contexto) {
+  const m = /^(equipo|partido):([A-Za-z0-9._~:-]{1,120})$/.exec(String(contexto || ""));
+  if (!m) return [];
+  const indice = await indiceEquipos();
+
+  const equipos = [];
+  if (m[1] === "equipo") {
+    const equipo = indice.get(m[2].toLowerCase());
+    if (equipo) equipos.push(equipo);
+  } else {
+    const match = await matchRepository.getByProviderMatchId(m[2]);
+    if (match) {
+      for (const base of [match.homeParticipantName, match.awayParticipantName]) {
+        if (!base) continue;
+        const equipo = indice.get(identidadDeEquipo(base).slug);
+        if (equipo && equipo.base === base && !equipos.includes(equipo)) equipos.push(equipo);
+      }
+    }
+  }
+
+  return equipos
+    .map((equipo) => {
+      const competencia = competenciaParaSeguir(equipo.claves);
+      if (!competencia) return null;
+      return { teamName: equipo.base, apodo: equipo.nombre, ...competencia };
+    })
+    .filter(Boolean);
+}
+
+// GET /api/seguir?contexto=equipo:<slug> | partido:<id>. Solo lectura y solo datos públicos
+// (nombres de equipos y de competencias): no necesita sesión.
+async function seguirHandler(req, res) {
+  try {
+    const equipos = await equiposParaSeguir(req.query.contexto);
+    res.set("Cache-Control", "no-store");
+    return res.json({ ok: true, equipos });
+  } catch (error) {
+    console.error("[seguir] Error:", error.message);
+    return res.status(500).json({ ok: false, error: "No se pudo leer el contexto" });
+  }
+}
+
 // Los próximos partidos de un equipo, ya ordenados. `desde` es inyectable para poder probar
 // contra datos que no son de hoy; en la ruta siempre es el instante actual.
 function proximosDeEquipo(nombreBase, desde, limite = 10) {
@@ -813,22 +904,31 @@ function seccionDondeVerlo(vista, transmision, momento) {
 //   claves     competencias que cuentan como "ya lo sigue" si está suscrito a la liga entera
 //   sustantivo "partidos" o "carreras", según qué se agenda
 //   seguir     a dónde manda el botón dentro de la app
-//   origen     la clave ?g= del botón de conectar, para distinguir qué página convierte más
+//   origen     la clave ?g= del botón de conectar cuando la URL de la página NO trae una. Si la
+//              trae (el código de cada grupo de Facebook), el script la pone en el botón desde
+//              el navegador: este HTML está cacheado e idéntico para todos, así que el servidor
+//              no puede meterla sin repartirle el código de un grupo a la gente de otro.
+//   contexto   "equipo:<slug>" o "partido:<id>": qué equipos ofrecerle al volver del registro.
+//              null si la página no tiene equipos que ofrecer (una carrera, por ejemplo).
 //
 // Los valores van como JSON dentro de atributos data-, no interpolados en el <script>: un nombre
 // con comillas o con "</script>" no puede romperlo. Todo es información pública, nada del usuario.
-function cuadroDeRegistro({ bases, sujetos, claves, sustantivo, seguir, origen }) {
+function cuadroDeRegistro({ bases, sujetos, claves, sustantivo, seguir, origen, contexto }) {
+  const conectar = `/?g=${encodeURIComponent(origen)}${
+    contexto ? `&seguir=${encodeURIComponent(contexto)}` : ""
+  }`;
   return `      <section class="registro" id="fs-cuadro"
         data-api="${esc(API_PUBLICA)}"
         data-bases="${esc(JSON.stringify(bases))}"
         data-sujetos="${esc(JSON.stringify(sujetos))}"
         data-claves="${esc(JSON.stringify(claves))}"
         data-sustantivo="${esc(sustantivo)}"
-        data-seguir="${esc(seguir)}">
+        data-seguir="${esc(seguir)}"
+        data-contexto="${esc(contexto || "")}">
         <h2>No te vuelvas a quedar con la duda</h2>
         <p>FanSchedule pone los partidos de tus equipos en tu Google Calendar.
         Te avisa solo, aunque cambien de horario.</p>
-        <a class="boton" href="/?g=${esc(origen)}">Conectar mi calendario</a>
+        <a class="boton" id="fs-conectar" href="${esc(conectar)}">Conectar mi calendario</a>
       </section>`;
 }
 
@@ -846,6 +946,7 @@ function cuadroDePartido(vista, match) {
     sustantivo: vista.esVersus ? "partidos" : "carreras",
     seguir: urlParaSeguir(match),
     origen: vista.origen,
+    contexto: contextoDePartido(vista, match),
   });
 }
 
@@ -864,6 +965,25 @@ const SCRIPT_CUADRO = `
     (function () {
       var caja = document.getElementById("fs-cuadro");
       if (!caja) return;
+
+      // El código del grupo de Facebook (?g=cw7) de la URL de ESTA página pasa al botón de
+      // conectar, que trae de fábrica el genérico ("seo-equipo"). Se hace aquí y no en el
+      // servidor porque este HTML es el mismo para todos durante 15 minutos en el CDN. Mismas
+      // reglas y mismo orden que sanearOrigen (server.js y frontend/src/origen.js): minúsculas
+      // ANTES de filtrar. El guion va al final de la clase a propósito, sin barra invertida:
+      // esto vive dentro de un template literal, donde la barra se come.
+      try {
+        var g = new URL(window.location.href).searchParams.get("g");
+        if (g !== null) {
+          g = g.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 40);
+          var conectar = document.getElementById("fs-conectar");
+          if (g && conectar) {
+            var destino = new URL(conectar.getAttribute("href"), window.location.origin);
+            destino.searchParams.set("g", g);
+            conectar.setAttribute("href", destino.pathname + destino.search);
+          }
+        }
+      } catch (e) { /* el botón se queda con el código genérico: nunca se rompe */ }
 
       // La app guarda la sesión en estas dos llaves de localStorage (frontend/src/auth.js).
       // Modo privado o storage bloqueado: se sale sin tocar nada.
@@ -941,10 +1061,15 @@ const SCRIPT_CUADRO = `
         caja.replaceChildren(h, p, fila);
       }
 
+      // Con equipos que ofrecer, "Seguir a X" lleva al MISMO camino que el registro: la app
+      // guarda el contexto y muestra la pantalla de seguir (ahí se ve cuál ya sigue y se crea la
+      // suscripción con el nombre exacto). Sin equipos (una carrera), el enlace de siempre.
       function boton(texto) {
         var a = document.createElement("a");
         a.className = "boton boton-chico";
-        a.href = caja.dataset.seguir;
+        a.href = caja.dataset.contexto
+          ? "/?seguir=" + encodeURIComponent(caja.dataset.contexto)
+          : caja.dataset.seguir;
         a.textContent = texto;
         return a;
       }
@@ -1180,6 +1305,7 @@ ${partidos.map((m) => renglonDePartido(m, equipo.base)).join("\n")}
     // Clave propia para poder comparar después qué convierte más, si las páginas de equipo o
     // las de partido.
     origen: "seo-equipo",
+    contexto: contextoDeEquipo(equipo),
   });
 
   return `<!doctype html>
@@ -1425,6 +1551,8 @@ module.exports = {
   partidoPublicoHandler,
   equipoPublicoHandler,
   sitemapHandler,
+  seguirHandler,
+  equiposParaSeguir,
   direccionesDelSitemap,
   aSlug,
   slugCanonico,

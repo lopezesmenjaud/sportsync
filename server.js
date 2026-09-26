@@ -21,7 +21,7 @@ const { sessionRepository } = require("./src/repositories/sessionRepositorySqlit
 const { requireUser, optionalUser, isLegacyAllowed } = require("./src/middleware/auth");
 const { withRateLimitRetry, sleep, backfillUserEvents } = require("./src/services/userBackfillService");
 const { esClaveDeCategoria, categorias: categoriasTenis, esClaveDeCircuito, dondeVerTenis } = require("./src/services/tenisCategorias");
-const { partidoPublicoHandler, equipoPublicoHandler, sitemapHandler } = require("./src/routes/partidoPublico");
+const { partidoPublicoHandler, equipoPublicoHandler, sitemapHandler, seguirHandler } = require("./src/routes/partidoPublico");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1013,6 +1013,12 @@ app.get("/partido/:id{/:slug}", partidoPublicoHandler);
 // de enlaces internos que conecta las de partido entre sí: sin ellas cada partido es una
 // página huérfana a la que no apunta nada.
 app.get("/equipo/:slug", equipoPublicoHandler);
+
+// ── Qué equipos ofrecer al volver del registro ──
+// La página pública manda "&seguir=equipo:<slug>" o "partido:<id>"; la app lo guarda y al volver
+// de Google pregunta aquí. Solo lectura y datos públicos (nombres), sin sesión. La suscripción NO
+// se crea aquí: la crea la app con el POST /subscriptions de siempre.
+app.get("/api/seguir", seguirHandler);
 
 // ── Sitemap ──
 // Se genera EN EL MOMENTO de cada petición y NUNCA se escribe a disco: el día que entre una
@@ -2026,6 +2032,32 @@ app.post("/subscriptions", requireUser(), async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+// Rellena el calendario de QUIEN LLAMA, y de nadie más, con los partidos que ya están en la base
+// y le faltan (backfillUserEvents: solo lee la base, no le pide nada al proveedor). Lo usa la
+// pantalla de seguir equipos después del registro. NO es /subscriptions/sync: ése descarga todo
+// de todos y recorre las cuentas de todos, y un registro nuevo no tiene por qué disparar eso.
+// Responde de inmediato y trabaja en segundo plano: la persona entra a la app sin esperar.
+app.post("/subscriptions/rellenar", requireUser(), async (req, res) => {
+  const userId = req.auth.userId;
+  res.json({ ok: true });
+  setImmediate(async () => {
+    try {
+      // Mismo filtro que el scheduler (y que el relleno de las categorías de tenis). La fila de
+      // la cuenta trae tokens: solo se usa para decidir, nunca se imprime.
+      const cuenta = await googleAccountRepository.getByUserId(userId);
+      const motivo = cuenta ? shouldSkipUser(cuenta, new Set()) : "sin cuenta de Google";
+      if (motivo) {
+        console.log(`[rellenar] saltado para ${userId} (${motivo})`);
+        return;
+      }
+      const r = await backfillUserEvents(userId);
+      console.log(`[rellenar] ${userId}: +${r.created} evento(s)`);
+    } catch (error) {
+      console.error(`[rellenar] ${userId}:`, error.message);
+    }
+  });
 });
 
 app.get("/subscriptions/:userId", requireUser(), async (req, res) => {

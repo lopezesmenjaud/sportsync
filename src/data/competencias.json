@@ -1,13 +1,14 @@
 {
   "_nota": "Catálogo ÚNICO de competencias. Decide dos cosas y nada más: qué se indexa (estar aquí = se indexa) y cómo se llama la competencia en público. La clave es el idLeague de TheSportsDB, verificado contra lookupleague.php. El campo base es el nombre que manda el proveedor, y está solo como referencia: toda la lógica va por clave, que no cambia aunque el proveedor renombre la liga.",
+  "_nota_sport_tipo": "sport es el valor que la APP guarda en subscriptions.sport para esta competencia (el tramo :sport de /dashboard/:sport/:leagueId), NO el de la tabla matches: son dos vocabularios y aquí va el de la app, escrito a mano para que no haya traducción escondida. tipo es 'liga' si en la app se sigue por equipos y 'copa' si se sigue entera. Los dos se comprobaron contra frontend/src/pages/LeaguePicker.jsx, que tiene su propia copia: si cambias uno allá, cámbialo aquí. nombrePublico coincide con el name de LeaguePicker, y es la etiqueta (competitionName) de las suscripciones de equipo que se crean desde las páginas públicas.",
   "competencias": [
-    {"clave":"4350","base":"Mexican Primera League","nombrePublico":"Liga MX"},
-    {"clave":"4391","base":"NFL","nombrePublico":"NFL"},
-    {"clave":"4387","base":"NBA","nombrePublico":"NBA"},
-    {"clave":"4480","base":"UEFA Champions League","nombrePublico":"Champions League"},
-    {"clave":"4335","base":"Spanish La Liga","nombrePublico":"La Liga"},
-    {"clave":"4328","base":"English Premier League","nombrePublico":"Premier League"},
-    {"clave":"4370","base":"Formula 1","nombrePublico":"Fórmula 1"},
-    {"clave":"4424","base":"MLB","nombrePublico":"MLB"}
+    {"clave":"4350","base":"Mexican Primera League","nombrePublico":"Liga MX","sport":"futbol","tipo":"liga"},
+    {"clave":"4391","base":"NFL","nombrePublico":"NFL","sport":"futbol_americano","tipo":"liga"},
+    {"clave":"4387","base":"NBA","nombrePublico":"NBA","sport":"basketball","tipo":"liga"},
+    {"clave":"4480","base":"UEFA Champions League","nombrePublico":"Champions League","sport":"futbol","tipo":"copa"},
+    {"clave":"4335","base":"Spanish La Liga","nombrePublico":"La Liga","sport":"futbol","tipo":"liga"},
+    {"clave":"4328","base":"English Premier League","nombrePublico":"Premier League","sport":"futbol","tipo":"liga"},
+    {"clave":"4370","base":"Formula 1","nombrePublico":"Fórmula 1","sport":"automovilismo","tipo":"copa"},
+    {"clave":"4424","base":"MLB","nombrePublico":"MLB","sport":"baseball","tipo":"liga"}
   ]
 }

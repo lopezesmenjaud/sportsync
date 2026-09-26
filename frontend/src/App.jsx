@@ -7,7 +7,10 @@ import { consumirDestino } from './api'
 import { useEstadoGoogle, invalidarEstadoGoogle } from './googleStatus'
 import { PUBLIC_PATHS, isPublicPath } from './publicRoutes'
 import { capturarOrigenDeUrl, enviarOrigenSiHace } from './origen'
+import { capturarSeguirDeUrl } from './seguir'
+import { useMarcarModal } from './modalesEnCurso'
 import EmailConsentModal from './components/EmailConsentModal'
+import SeguirEquiposGate from './components/SeguirEquiposGate'
 import CalendarConnectModal from './components/CalendarConnectModal'
 import LandingPage from './pages/LandingPage'
 import Dashboard from './pages/Dashboard'
@@ -60,6 +63,10 @@ saveUserFromUrl()
 // del post de Facebook cae en el landing, que es una de ellas.
 capturarOrigenDeUrl()
 
+// Qué equipos ofrecerle al volver del registro (?seguir= del botón de la página pública). Va
+// DESPUÉS del origen: los dos leen la misma URL y éste le quita su parámetro.
+capturarSeguirDeUrl()
+
 // Manda el origen al backend cuando ya hay sesión. Va en un componente y no en el bloque de
 // arriba porque el orden importa: al volver de Google, saveUserFromUrl guarda el token en el
 // mismo tick, así que para cuando esto monta ya hay con qué autenticarse.
@@ -101,6 +108,8 @@ function EmailConsentGate() {
   const [show, setShow] = useState(() => {
     return isLoggedIn() && !localStorage.getItem('fanschedule_email_consent_shown')
   })
+  // Solo avisa si está abierto, para que la pantalla de seguir equipos salga después.
+  useMarcarModal('correos', show)
 
   if (!show) return null
 
@@ -133,6 +142,14 @@ function CalendarConnectGate() {
   // /privacy y /terms; y /auth/google/status exige sesión, así que preguntar ahí con un token
   // vencido daba 401 y disparaba la redirección global.
   const { estado, cargando } = useEstadoGoogle(!enRutaPublica && isLoggedIn())
+
+  // Abierto, o todavía por decidirse (cargando): la pantalla de seguir equipos espera a que este
+  // gate se resuelva. Es la MISMA condición de abajo; no cambia cuándo sale este modal.
+  useMarcarModal(
+    'calendario',
+    !enRutaPublica && isLoggedIn() && !dismissed &&
+      (cargando || Boolean(estado && estado.connected && !estado.hasCalendarScope))
+  )
 
   // No bloquear en rutas públicas: el usuario debe poder leer el partido, la política o los
   // términos sin que se le encime un modal de conectar calendario.
@@ -192,6 +209,8 @@ function App() {
       <RegistrarOrigen />
       <CalendarConnectGate />
       <EmailConsentGate />
+      {/* Al final a propósito: sale después de los dos de arriba, nunca encima. */}
+      <SeguirEquiposGate />
       <Routes>
         {/* Las rutas PÚBLICAS se generan recorriendo PUBLIC_PATHS: es la misma lista que usa
             api.js para decidir qué hacer ante un 401. Si una página pública no está en el
