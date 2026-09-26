@@ -3,8 +3,9 @@
 // Dado un partido, dice a qué circuito (ATP / WTA) y a qué categoría de torneo
 // pertenece ("grand-slam", "atp-250", ...), según src/data/tenisTorneos.json.
 //
-// Hoy NADIE lo usa para decidir nada: solo lo llama el reporte de solo lectura
-// src/jobs/runReporteCategoriasTenis.js. No toca suscripciones ni sincronización.
+// Lo usa subscriptionMatchService para las suscripciones de tenis POR CATEGORÍA
+// (competitionKey = "grand-slam-atp", "atp-250", ...). Las de clave vieja (4464/4517)
+// y las de jugador no pasan por aquí. También lo usan los reportes y la conversión.
 //
 // Las reglas, en orden:
 //   1. Si el deporte no es tenis, no aplica.
@@ -78,4 +79,69 @@ function clasificarTorneoTenis(match) {
   return { circuito, categoria, torneo: torneo.nombre, motivo: null };
 }
 
-module.exports = { clasificarTorneoTenis, MOTIVOS, categorias: tabla.categorias };
+const clavesDeCategoria = new Set(tabla.categorias.map(c => c.clave));
+
+// ¿Esta competitionKey es una categoría de la tabla ("grand-slam-atp", "atp-250"...)?
+// Las claves de circuito viejas (4464/4517) NO lo son.
+function esClaveDeCategoria(clave) {
+  return clave != null && clavesDeCategoria.has(String(clave));
+}
+
+// Las categorías que juega un circuito, sacadas de la tabla: las que aparecen en su
+// columna (atp o wta). Así la conversión nunca le mete a un circuito una categoría del otro.
+function categoriasDelCircuito(circuito) {
+  const columna = String(circuito).toLowerCase();
+  const usadas = new Set(tabla.torneos.map(t => t[columna]).filter(Boolean));
+  return tabla.categorias.filter(c => usadas.has(c.clave));
+}
+
+// Mismos valores que traduce SPORT_NAME_MAP (syncService.js) a "tennis". No se importa de
+// ahí para que este módulo siga siendo solo datos y no arrastre proveedores al cargarse.
+function esTenis(sport) {
+  return ["tenis", "tennis"].includes(normalizar(sport));
+}
+
+// Plan para pasar las suscripciones de tenis por CIRCUITO (4464/4517, sin jugador) a
+// suscripciones por categoría. Función pura: no lee ni escribe la base.
+//   - Cada suscripción de circuito se borra y se reemplaza por las categorías de SU
+//     circuito: ATP Tour -> las de ATP, WTA Tour -> las de WTA.
+//   - Las de jugador (con teamName, con o sin circuito) NO se tocan.
+//   - No se crea una categoría que el usuario ya tenga.
+// La usan la conversión Y el reporte de antes/después: los dos calculan lo mismo.
+function planDeConversion(subs) {
+  const aBorrar = [];
+  const aCrear = [];
+  const yaTiene = new Set(
+    subs.filter(s => !s.teamName && esTenis(s.sport)).map(s => `${s.userId}|${s.competitionKey}`)
+  );
+
+  for (const sub of subs) {
+    if (sub.teamName || !esTenis(sub.sport)) continue;
+    const circuito = tabla.clavesDeCircuito[String(sub.competitionKey == null ? "" : sub.competitionKey).trim()];
+    if (!circuito) continue;
+
+    aBorrar.push(sub);
+    for (const cat of categoriasDelCircuito(circuito)) {
+      const llave = `${sub.userId}|${cat.clave}`;
+      if (yaTiene.has(llave)) continue;
+      yaTiene.add(llave);
+      aCrear.push({
+        userId: sub.userId,
+        sport: "tenis",
+        competitionKey: cat.clave,
+        competitionName: cat.nombre,
+        teamName: null,
+      });
+    }
+  }
+  return { aBorrar, aCrear };
+}
+
+module.exports = {
+  clasificarTorneoTenis,
+  esClaveDeCategoria,
+  categoriasDelCircuito,
+  planDeConversion,
+  MOTIVOS,
+  categorias: tabla.categorias,
+};

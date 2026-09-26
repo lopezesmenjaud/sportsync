@@ -1,10 +1,34 @@
 const { subscriptionRepository } = require("../repositories/subscriptionRepositorySqlite");
 const { matchRepository } = require("../repositories/matchRepositorySqlite");
 const { normalizeSport } = require("./syncService");
+const { clasificarTorneoTenis, esClaveDeCategoria } = require("./tenisCategorias");
+
+// Suscripción de tenis POR CATEGORÍA: sin jugador y con competitionKey = una categoría de
+// src/data/tenisTorneos.json ("grand-slam-atp", "atp-250", ...). Para ésas el partido se
+// clasifica con tenisCategorias y casa solo si cae en ESA categoría; si no clasifica (sin
+// clave = challenger/ITF/juvenil, fuera de la tabla, circuito que no juega ahí) no casa.
+//
+// Todo lo demás sigue EXACTAMENTE la regla de antes, a propósito:
+//   - las de clave de circuito vieja (4464/4517): transición, hasta correr la conversión;
+//   - las de jugador, con o sin circuito: se sigue a la persona, no al torneo, así que le
+//     siguen llegando sus partidos aunque sean de challenger.
+function esSuscripcionPorCategoriaTenis(subscription) {
+  return !subscription.teamName &&
+    normalizeSport(subscription.sport) === "tennis" &&
+    esClaveDeCategoria(subscription.competitionKey);
+}
+
+function casaConCategoriaTenis(match, subscription) {
+  return clasificarTorneoTenis(match).categoria === subscription.competitionKey;
+}
 
 function matchAppliesToSubscription(match, subscription) {
   if (subscription.sport && normalizeSport(subscription.sport) !== normalizeSport(match.sport)) {
     return false;
+  }
+
+  if (esSuscripcionPorCategoriaTenis(subscription)) {
+    return casaConCategoriaTenis(match, subscription);
   }
 
   if (
@@ -49,6 +73,9 @@ function matchAppliesToSubscription(match, subscription) {
 // descuido: se mantiene idéntico a la visibilidad de hoy para no cambiar lo que el usuario ya ve.
 function isInclusionReason(match, subscription) {
   if (normalizeSport(subscription.sport) !== normalizeSport(match.sport)) return false;
+  // Misma regla que en matchAppliesToSubscription, para que lo que llega al calendario
+  // también se vea en "Próximos partidos".
+  if (esSuscripcionPorCategoriaTenis(subscription)) return casaConCategoriaTenis(match, subscription);
   if (subscription.teamName) {
     return match.homeParticipantName === subscription.teamName ||
            match.awayParticipantName === subscription.teamName;

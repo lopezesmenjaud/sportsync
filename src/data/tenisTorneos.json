@@ -10,7 +10,8 @@
   "clavesDeCircuito": { "4464": "ATP", "4517": "WTA" },
   "dondeVerPorDefecto": "ESPN, en Disney+",
   "categorias": [
-    { "clave": "grand-slam", "nombre": "Grand Slam" },
+    { "clave": "grand-slam-atp", "nombre": "Grand Slams varonil" },
+    { "clave": "grand-slam-wta", "nombre": "Grand Slams femenil" },
     { "clave": "atp-1000", "nombre": "ATP Masters 1000" },
     { "clave": "atp-500", "nombre": "ATP 500" },
     { "clave": "atp-250", "nombre": "ATP 250" },
@@ -23,10 +24,10 @@
   ],
   "_nota_torneos": "atp y wta son la categoría de ese torneo en cada circuito. null significa que ese circuito no juega ahí. 'visto' marca los que YA aparecen en la base de FanSchedule; los demás son suposición del nombre.",
   "torneos": [
-    { "nombre": "US Open", "atp": "grand-slam", "wta": "grand-slam", "visto": true },
-    { "nombre": "Australian Open", "atp": "grand-slam", "wta": "grand-slam" },
-    { "nombre": "Roland Garros", "alias": ["French Open"], "atp": "grand-slam", "wta": "grand-slam" },
-    { "nombre": "Wimbledon", "atp": "grand-slam", "wta": "grand-slam" },
+    { "nombre": "US Open", "atp": "grand-slam-atp", "wta": "grand-slam-wta", "visto": true },
+    { "nombre": "Australian Open", "atp": "grand-slam-atp", "wta": "grand-slam-wta" },
+    { "nombre": "Roland Garros", "alias": ["French Open"], "atp": "grand-slam-atp", "wta": "grand-slam-wta" },
+    { "nombre": "Wimbledon", "atp": "grand-slam-atp", "wta": "grand-slam-wta" },
 
     { "nombre": "ATP Laver Cup", "alias": ["Laver Cup"], "atp": "laver", "wta": null, "visto": true },
     { "nombre": "ATP Davis Cup - World Group", "atp": "davis", "wta": null, "visto": true },
