@@ -20,7 +20,7 @@ const googleCalendarProvider = require("./src/services/googleCalendarProvider");
 const { sessionRepository } = require("./src/repositories/sessionRepositorySqlite");
 const { requireUser, optionalUser, isLegacyAllowed } = require("./src/middleware/auth");
 const { withRateLimitRetry, sleep, backfillUserEvents } = require("./src/services/userBackfillService");
-const { esClaveDeCategoria, categorias: categoriasTenis } = require("./src/services/tenisCategorias");
+const { esClaveDeCategoria, categorias: categoriasTenis, esClaveDeCircuito, dondeVerTenis } = require("./src/services/tenisCategorias");
 const { partidoPublicoHandler, equipoPublicoHandler, sitemapHandler } = require("./src/routes/partidoPublico");
 
 const app = express();
@@ -485,6 +485,23 @@ app.get("/api/broadcasting/:competitionKey/:country", async (req, res) => {
   try {
     const { competitionKey, country } = req.params;
     const competitionName = req.query.competitionName || competitionKey;
+
+    // TENIS DE CIRCUITO (4464/4517): se contesta desde src/data/tenisTorneos.json y se sale ANTES
+    // de la caché. Ni se lee, ni se escribe, ni se llama al modelo: todos los partidos de ATP
+    // traen la misma clave, así que compartían una fila por país y el primero que abría "dónde
+    // verlo" decidía lo que veían los demás. Misma forma de respuesta que la caché, para que
+    // WatchPanel lo pinte sin cambios. Fuera de México van listas vacías y WatchPanel pinta su
+    // texto de "No encontramos información…". Los challengers no traen clave: WatchPanel ni
+    // llama. Este endpoint no recibe el deporte, así que el corte es por clave.
+    if (esClaveDeCircuito(competitionKey)) {
+      const tenis = dondeVerTenis(competitionKey, country);
+      const data = {
+        freeTV: [],
+        paidTV: [],
+        streaming: tenis ? [{ name: tenis.texto, url: tenis.url }] : [],
+      };
+      return res.json({ ok: true, data, source: "tenis" });
+    }
 
     const cached = await getBroadcastingFromDb(competitionKey, country);
     if (cached) {

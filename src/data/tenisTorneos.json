@@ -8,7 +8,8 @@
     "Revisar cada temporada: los calendarios ATP y WTA cambian de sede y de categoría."
   ],
   "clavesDeCircuito": { "4464": "ATP", "4517": "WTA" },
-  "dondeVerPorDefecto": "ESPN, en Disney+",
+  "dondeVerPorDefecto": "ESPN, en Disney+ (plan Premium)",
+  "dondeVerPorDefectoUrl": "https://www.disneyplus.com/es-mx",
   "categorias": [
     { "clave": "grand-slam-atp", "nombre": "Grand Slams varonil" },
     { "clave": "grand-slam-wta", "nombre": "Grand Slams femenil" },

@@ -41,6 +41,7 @@ const LIGA_MX_POR_BASE = new Map(LIGA_MX.equipos.map((e) => [e.base, e]));
 // Fórmula 1: el proveedor manda los eventos en inglés ("Azerbaijan Grand Prix Qualifying") y
 // nadie en México busca así. Esta tabla los traduce.
 const F1 = require("../data/f1.json");
+const { dondeVerTenis } = require("../services/tenisCategorias");
 
 // Los grandes premios, ORDENADOS DE MÁS LARGO A MÁS CORTO. El nombre del evento se reconoce por
 // prefijo, así que el orden es lo que hace que gane el más específico: sin él,
@@ -247,6 +248,11 @@ function vistaDelPartido(match) {
     // Solo se llena cuando el equipo LOCAL está en la tabla. Es lo que decide si "Dónde verlo"
     // muestra el canal de este partido o cae a la caché por competencia.
     dondeVerLocal: entradaLocal ? entradaLocal.dondeVer : null,
+    // Tenis: igual que Liga MX, se resuelve aquí y NO se toca la caché por competencia (todos
+    // los partidos de ATP comparten clave, y ahí se cruzaban los canales de un torneo con otro).
+    // La página es de México, así que el país va fijo. null = texto honesto.
+    esTenis: match.sport === "tennis",
+    dondeVerTenis: match.sport === "tennis" ? dondeVerTenis(match.competitionKey, "Mexico") : null,
   };
 }
 
@@ -728,6 +734,32 @@ function seccionDondeVerlo(vista, transmision, momento) {
     return `      <section class="tarjeta">
         <h2>${encabezado}</h2>
         <p>${esc(vista.dondeVerLocal)}</p>
+      </section>`;
+  }
+
+  // Tenis: texto y link de src/data/tenisTorneos.json para el circuito ATP/WTA; para lo demás
+  // (challenger, ITF, juvenil) el texto honesto. Nunca la caché y nunca una "note" de modelo.
+  // El botón lleva el mismo texto de la tabla, así que si Julio cambia el servicio en el JSON
+  // el botón no se queda diciendo otro.
+  if (vista.esTenis) {
+    const t = vista.dondeVerTenis;
+    let cuerpo;
+    if (t && t.url) {
+      cuerpo = `
+        <p><a class="boton boton-chico" href="${esc(t.url)}" target="_blank" rel="noopener noreferrer">${esc(t.texto)} ↗</a></p>`;
+    } else if (t) {
+      cuerpo = `
+        <p>${esc(t.texto)}</p>`;
+    } else {
+      cuerpo =
+        momento === MOMENTO.YA_PASO
+          ? `
+        <p>No tenemos confirmado dónde se transmitió este partido.</p>`
+          : `
+        <p>Todavía no tenemos confirmado dónde se transmite este partido.</p>`;
+    }
+    return `      <section class="tarjeta">
+        <h2>${encabezado}</h2>${cuerpo}
       </section>`;
   }
 
@@ -1374,7 +1406,8 @@ async function partidoPublicoHandler(req, res) {
       ? `${SITIO}/partido/${encodeURIComponent(id)}/${canonico}`
       : `${SITIO}/partido/${encodeURIComponent(id)}`;
 
-    const transmision = await transmisionGuardada(match.competitionKey);
+    // El tenis no lee la caché: su "dónde verlo" ya viene resuelto en la vista.
+    const transmision = vista.esTenis ? null : await transmisionGuardada(match.competitionKey);
 
     res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=3600");
     res.set("Content-Type", "text/html; charset=utf-8");

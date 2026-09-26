@@ -137,8 +137,41 @@ function planDeConversion(subs) {
   return { aBorrar, aCrear };
 }
 
+// ── Dónde verlo ──
+//
+// El tenis NO se le pregunta al modelo: broadcasting_cache es UNIQUE(competitionKey, country) y
+// todos los partidos de ATP traen la misma clave 4464, así que compartían UNA fila por país y el
+// primero que abría "dónde verlo" decidía lo que veían todos los demás.
+//
+// Regla, con la clave sola (no hace falta que el torneo esté en la lista):
+//   - clave de circuito (clavesDeCircuito) y país México -> texto y link de la tabla;
+//   - cualquier otra cosa -> null, y quien llame muestra su texto honesto.
+// El texto y el link se editan en tenisTorneos.json, sin tocar código.
+
+const PAISES_MEXICO = new Set(["mexico", "méxico", "mx"]);
+
+function esClaveDeCircuito(clave) {
+  return clave != null && Object.prototype.hasOwnProperty.call(tabla.clavesDeCircuito, String(clave).trim());
+}
+
+const clavesDesconocidasAvisadas = new Set();
+
+// Devuelve { texto, url } o null. pais: el nombre que manda el cliente ("Mexico").
+function dondeVerTenis(competitionKey, pais) {
+  const clave = competitionKey == null ? "" : String(competitionKey).trim();
+  if (clave !== "" && !esClaveDeCircuito(clave) && !clavesDesconocidasAvisadas.has(clave)) {
+    clavesDesconocidasAvisadas.add(clave);
+    console.warn(`[tenisCategorias] Dónde verlo: partido de tenis con clave desconocida "${clave}"`);
+  }
+  if (!esClaveDeCircuito(clave) || !PAISES_MEXICO.has(normalizar(pais))) return null;
+  if (!tabla.dondeVerPorDefecto) return null;
+  return { texto: tabla.dondeVerPorDefecto, url: tabla.dondeVerPorDefectoUrl || null };
+}
+
 module.exports = {
   clasificarTorneoTenis,
+  esClaveDeCircuito,
+  dondeVerTenis,
   esClaveDeCategoria,
   categoriasDelCircuito,
   planDeConversion,
