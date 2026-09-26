@@ -203,7 +203,11 @@ export default function TeamPicker() {
           Mis favoritos → {sportInfo.emoji} {sportInfo.name} → <strong style={{ color: '#1C2430' }}>{league.name}</strong>
         </div>
 
-        {/* Seguir liga completa */}
+        {/* Seguir liga completa. En TENIS no se ofrece: creaba la suscripción de circuito
+            (competitionKey 4464/4517 sin jugador), que se retira a favor de las categorías de
+            torneo de la pantalla de Tenis. Dejarlo reviviría esa suscripción. Lo de jugadores
+            (la lista, el modal, "Solo en este circuito") sigue igual. */}
+        {!isTennis && (<>
         <div style={{ background: '#ffffff', border: '1px solid #e8e8e8', borderRadius: 14, padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 500, color: '#1C2430' }}>{isTennis ? 'Seguir todo el circuito' : 'Seguir toda la liga'}</div>
@@ -221,6 +225,7 @@ export default function TeamPicker() {
           <span style={{ fontSize: 12, color: '#666666' }}>{isTennis ? 'o elige jugadores específicos' : 'o elige equipos específicos'}</span>
           <div style={{ flex: 1, height: '1px', background: '#e8e8e8' }} />
         </div>
+        </>)}
 
         {/* Buscador */}
         {!loadingTeams && !teamsError && teams.length > 0 && (
@@ -290,9 +295,11 @@ export default function TeamPicker() {
               : 'Esta liga no tiene equipos registrados en TheSportsDB.'}
             <br />
             <span style={{ fontSize: 12 }}>
-              {isTennis && rosterLista === false
-                ? 'Vuelve en un rato — o sigue el circuito completo con el botón de arriba, que ya funciona.'
-                : `Puedes seguir ${isTennis ? 'el circuito completo' : 'la liga completa'} usando el botón de arriba.`}
+              {isTennis
+                ? (rosterLista === false
+                    ? 'Vuelve en un rato — o sigue categorías de torneo desde la pantalla de Tenis.'
+                    : 'Puedes seguir categorías de torneo desde la pantalla de Tenis.')
+                : 'Puedes seguir la liga completa usando el botón de arriba.'}
             </span>
           </div>
         )}

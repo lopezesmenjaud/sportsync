@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import { apiFetch } from '../api'
@@ -146,10 +146,15 @@ const LEAGUES_BY_SPORT = {
       { id: '4591', name: 'NPB',           apiName: 'Japanese Nippon Baseball', country: 'Japón',          type: 'cup'    },
     ]},
   ],
+  // En tenis estas dos filas ya NO son para seguir el circuito entero (eso ahora son las
+  // categorías de torneo, que vienen del backend): son la entrada a la lista de jugadores.
+  // `label` es solo lo que se pinta aquí. `name` se queda como "ATP Tour"/"WTA Tour" a propósito:
+  // TeamPicker y TeamSubscriptionModal lo usan como competitionName de las suscripciones por
+  // jugador y en sus textos, y ésas no se tocan.
   tenis: [
-    { id: 'tenis_all', title: 'Circuitos', leagues: [
-      { id: '4464', name: 'ATP Tour', apiName: 'ATP World Tour', country: 'Internacional', type: 'league' },
-      { id: '4517', name: 'WTA Tour', apiName: 'WTA Tour', country: 'Internacional', type: 'league' },
+    { id: 'tenis_jugadores', title: 'Jugadores', leagues: [
+      { id: '4464', name: 'ATP Tour', label: 'Jugadores ATP', apiName: 'ATP World Tour', country: 'Internacional', type: 'league' },
+      { id: '4517', name: 'WTA Tour', label: 'Jugadores WTA', apiName: 'WTA Tour', country: 'Internacional', type: 'league' },
     ]},
   ],
   combate: [
@@ -251,6 +256,78 @@ export default function LeaguePicker() {
   const [errorSub, setErrorSub]                       = useState(null)
   const [mostrarAviso, setMostrarAviso]               = useState(false)
 
+  // ── Categorías de torneo de tenis ──
+  // La lista sale del backend (GET /api/tenis/categorias, que lee src/data/tenisTorneos.json):
+  // escrita aquí a mano se desincronizaría de la tabla que usa el clasificador.
+  // null = cargando; [] con errorCategorias = no se pudo cargar. Si falla NO se cae a
+  // "ATP Tour": eso reviviría la suscripción de circuito que se está retirando.
+  const esTenis = sport === 'tenis'
+  const [categoriasTenis, setCategoriasTenis]   = useState(null)
+  const [errorCategorias, setErrorCategorias]   = useState(false)
+  // clave de categoría -> id de la suscripción. Sale de GET /subscriptions/:userId, así que
+  // lo prendido se ve prendido aunque se haya prendido en otra visita.
+  const [subPorCategoria, setSubPorCategoria]   = useState({})
+  const [cambiandoCategoria, setCambiandoCategoria] = useState(null)
+
+  useEffect(() => {
+    if (!esTenis) return
+    let vivo = true
+    Promise.all([
+      apiFetch('/api/tenis/categorias').then(r => r.json()),
+      apiFetch(`/subscriptions/${userId}`).then(r => r.json()),
+    ])
+      .then(([cats, subs]) => {
+        if (!vivo) return
+        if (!cats.ok || !Array.isArray(cats.categorias) || !subs.ok) throw new Error('respuesta incompleta')
+        const claves = new Set(cats.categorias.map(c => c.clave))
+        const mapa = {}
+        for (const s of subs.subscriptions || []) {
+          if (s.sport === 'tenis' && !s.teamName && claves.has(s.competitionKey)) mapa[s.competitionKey] = s.id
+        }
+        setCategoriasTenis(cats.categorias)
+        setSubPorCategoria(mapa)
+      })
+      .catch(err => {
+        console.error('Error cargando categorías de tenis:', err)
+        if (vivo) { setCategoriasTenis([]); setErrorCategorias(true) }
+      })
+    return () => { vivo = false }
+  }, [esTenis, userId])
+
+  // Prender = POST /subscriptions (el backend corre el relleno de este usuario al momento).
+  // Apagar = el mismo DELETE /subscriptions/:id de Dashboard y Perfil, sin confirmación: es
+  // reversible, porque volver a prender vuelve a correr el relleno.
+  const toggleCategoria = async (cat) => {
+    if (cambiandoCategoria) return
+    setCambiandoCategoria(cat.clave)
+    setErrorSub(null)
+    const subId = subPorCategoria[cat.clave]
+    try {
+      if (subId) {
+        const res  = await apiFetch(`/subscriptions/${subId}`, { method: 'DELETE' })
+        const data = await res.json()
+        if (!data.ok) { setErrorSub(`No se pudo dejar de seguir ${cat.nombre}. Intenta de nuevo.`); return }
+        setSubPorCategoria(prev => { const n = { ...prev }; delete n[cat.clave]; return n })
+      } else {
+        const res  = await apiFetch('/subscriptions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: userId, sport: 'tenis', competitionKey: cat.clave, competitionName: cat.nombre, teamName: null })
+        })
+        const data = await res.json()
+        if (!data.ok || !data.subscription) { setErrorSub(`No se pudo seguir ${cat.nombre}. Intenta de nuevo.`); return }
+        setSubPorCategoria(prev => ({ ...prev, [cat.clave]: data.subscription.id }))
+        // Mismo orden que handleDirectSubscribe: primero se confirma que se guardó, luego el permiso.
+        if (debeAvisarDePermiso(await obtenerEstadoGoogle())) setMostrarAviso(true)
+      }
+    } catch (e) {
+      console.error(e)
+      setErrorSub(`No se pudo cambiar ${cat.nombre}. Revisa tu conexión.`)
+    } finally {
+      setCambiandoCategoria(null)
+    }
+  }
+
   // ORDEN: primero se guarda y se MIRA la respuesta; solo si se guardó bien se evalúa el permiso.
   // Si el POST falló se muestra el error de la suscripción y NO el del calendario: mandar a
   // arreglar un permiso a alguien cuya suscripción no se guardó es mandarlo a arreglar lo que no
@@ -335,7 +412,7 @@ export default function LeaguePicker() {
           <div style={{ width: 48, height: 48, background: '#ffffff', border: '1px solid #e8e8e8', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>{sportInfo.emoji}</div>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 500, color: '#1C2430' }}>{sportInfo.name}</h1>
-            <p style={{ fontSize: 13, color: '#666666', marginTop: 2 }}>Elige las ligas que quieres seguir</p>
+            <p style={{ fontSize: 13, color: '#666666', marginTop: 2 }}>{esTenis ? 'Elige las categorías de torneo o los jugadores que quieres seguir' : 'Elige las ligas que quieres seguir'}</p>
           </div>
         </div>
 
@@ -344,6 +421,49 @@ export default function LeaguePicker() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar liga, copa o competición..." style={{ border: 'none', outline: 'none', fontSize: 14, color: '#1C2430', flex: 1, background: 'transparent' }} />
           {search && <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#666666', padding: 0, lineHeight: 1 }}>×</button>}
         </div>
+
+        {esTenis && (() => {
+          const visibles = (categoriasTenis || []).filter(c => !search || c.nombre.toLowerCase().includes(search.toLowerCase()))
+          if (search && categoriasTenis && visibles.length === 0) return null
+          return (
+            <div style={{ marginBottom: 32 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <span style={{ fontSize: 13, fontWeight: 500, color: '#666666', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Categorías de torneo</span>
+                {categoriasTenis && !errorCategorias && <span style={{ fontSize: 11, color: '#666666', background: '#e8e8e8', borderRadius: 10, padding: '2px 8px' }}>{visibles.length}</span>}
+              </div>
+              {categoriasTenis === null ? (
+                <div style={{ fontSize: 13, color: '#666666', padding: '12px 0' }}>Cargando categorías...</div>
+              ) : errorCategorias ? (
+                <div style={{ fontSize: 13, color: '#666666', padding: '12px 0' }}>No pudimos cargar las categorías de torneo. Recarga la página para intentar de nuevo.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {visibles.map(cat => {
+                    const prendida = Boolean(subPorCategoria[cat.clave])
+                    const cambiando = cambiandoCategoria === cat.clave
+                    return (
+                      <div key={cat.clave} style={{ background: prendida ? 'rgba(16,177,199,0.04)' : '#ffffff', border: `0.5px solid ${prendida ? '#10B1C7' : '#e8e8e8'}`, borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(255,92,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, border: '0.5px solid #ffe8b0' }}>🏆</div>
+                          <div style={{ fontSize: 14, fontWeight: 500, color: '#1C2430' }}>{cat.nombre}</div>
+                        </div>
+                        <button
+                          onClick={() => toggleCategoria(cat)}
+                          disabled={Boolean(cambiandoCategoria)}
+                          aria-pressed={prendida}
+                          style={prendida
+                            ? { background: 'transparent', color: '#06D6A0', border: '1px solid #06D6A0', borderRadius: 20, padding: '6px 16px', fontSize: 12, fontWeight: 500, cursor: cambiandoCategoria ? 'wait' : 'pointer', opacity: cambiando ? 0.7 : 1, flexShrink: 0 }
+                            : { background: '#F18006', color: '#fff', border: '1px solid #F18006', borderRadius: 20, padding: '6px 16px', fontSize: 12, fontWeight: 500, cursor: cambiandoCategoria ? 'wait' : 'pointer', opacity: cambiando ? 0.7 : 1, flexShrink: 0 }}
+                        >
+                          {cambiando ? '...' : prendida ? '✓ Siguiendo' : '+ Seguir'}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {categories.length === 0 && (
           <div style={{ textAlign: 'center', padding: '60px 0', color: '#666666', fontSize: 14 }}>
@@ -354,7 +474,7 @@ export default function LeaguePicker() {
         {categories.map(category => {
           const isSelecciones  = category.special === 'selecciones'
           const visibleLeagues = category.leagues.filter(l =>
-            !search || l.name.toLowerCase().includes(search.toLowerCase()) || l.country.toLowerCase().includes(search.toLowerCase())
+            !search || (l.label || l.name).toLowerCase().includes(search.toLowerCase()) || l.country.toLowerCase().includes(search.toLowerCase())
           )
           if (search && !isSelecciones && visibleLeagues.length === 0) return null
 
@@ -446,10 +566,10 @@ export default function LeaguePicker() {
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                           <div style={{ width: 40, height: 40, borderRadius: 10, background: isCup ? 'rgba(255,92,0,0.1)' : '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isCup ? 18 : 15, fontWeight: 500, color: isCup ? '#e0a020' : '#10B1C7', flexShrink: 0, border: `0.5px solid ${isCup ? '#ffe8b0' : '#e8e8e8'}` }}>
-                            {isCup ? '🏆' : league.name.charAt(0)}
+                            {isCup ? '🏆' : (league.label || league.name).charAt(0)}
                           </div>
                           <div>
-                            <div style={{ fontSize: 14, fontWeight: 500, color: '#1C2430' }}>{league.name}</div>
+                            <div style={{ fontSize: 14, fontWeight: 500, color: '#1C2430' }}>{league.label || league.name}</div>
                             <div style={{ fontSize: 12, color: '#666666', marginTop: 2 }}>{league.country}</div>
                           </div>
                         </div>
@@ -461,7 +581,7 @@ export default function LeaguePicker() {
                               {isSubscribing ? '...' : '+ Suscribir'}
                             </button>
                           ) : (
-                            <span style={{ fontSize: 13, color: '#10B1C7', fontWeight: 500 }}>Ver equipos →</span>
+                            <span style={{ fontSize: 13, color: '#10B1C7', fontWeight: 500 }}>{esTenis ? 'Ver jugadores →' : 'Ver equipos →'}</span>
                           )}
                         </div>
                       </div>

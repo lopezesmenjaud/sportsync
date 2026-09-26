@@ -11,15 +11,16 @@ const { tennisPlayerRepository } = require("./src/repositories/tennisPlayerRepos
 const { googleAccountRepository } = require("./src/repositories/googleAccountRepositorySqlite");
 const { syncMatchToCalendars } = require("./src/services/calendarSyncService");
 const { invalidate: invalidateRoundLabel } = require("./src/services/roundLabelService");
-const { syncMatches, syncLeague, syncTeam } = require("./src/services/syncService");
+const { syncMatches, syncLeague, syncTeam, normalizeSport } = require("./src/services/syncService");
 const { getUserSide, isInclusionReason } = require("./src/services/subscriptionMatchService");
 const { matchRepository } = require("./src/repositories/matchRepositorySqlite");
-const { startScheduler } = require("./src/services/scheduler");
+const { startScheduler, shouldSkipUser } = require("./src/services/scheduler");
 const { calendarEventRepository } = require("./src/repositories/calendarEventRepositorySqlite");
 const googleCalendarProvider = require("./src/services/googleCalendarProvider");
 const { sessionRepository } = require("./src/repositories/sessionRepositorySqlite");
 const { requireUser, optionalUser, isLegacyAllowed } = require("./src/middleware/auth");
-const { withRateLimitRetry, sleep } = require("./src/services/userBackfillService");
+const { withRateLimitRetry, sleep, backfillUserEvents } = require("./src/services/userBackfillService");
+const { esClaveDeCategoria, categorias: categoriasTenis } = require("./src/services/tenisCategorias");
 const { partidoPublicoHandler, equipoPublicoHandler, sitemapHandler } = require("./src/routes/partidoPublico");
 
 const app = express();
@@ -854,6 +855,15 @@ app.get("/api/teams/:leagueId", async (req, res) => {
 // leagueId del catálogo → circuito en tennis_players. Son los dos ÚNICOS ids que una
 // suscripción de tenis puede traer hoy (LEAGUES_BY_SPORT en LeaguePicker.jsx).
 const TENIS_LEAGUE_A_TOUR = { "4464": "atp", "4517": "wta" };
+
+// ── Categorías de torneo de tenis ──
+//
+// Las once que se prenden y apagan en la pantalla de ligas de tenis. Salen de
+// src/data/tenisTorneos.json, la misma tabla que usa el clasificador: si el frontend las
+// tuviera escritas a mano, un cambio en la tabla lo dejaría ofreciendo claves que ya no casan.
+app.get("/api/tenis/categorias", (req, res) => {
+  res.json({ ok: true, categorias: categoriasTenis.map(c => ({ clave: c.clave, nombre: c.nombre })) });
+});
 
 // ── Jugadores ──
 //
@@ -1965,7 +1975,21 @@ app.post("/subscriptions", requireUser(), async (req, res) => {
       try {
         const skipUserIds = new Set();
         const subsCache = new Map(); // subs memoizadas por usuario para esta corrida
-        if (competitionKey && !competitionKey.startsWith("national_")) {
+        // Categoría de tenis ("grand-slam-atp", "atp-250"...): NO es una liga de TheSportsDB,
+        // así que syncLeague sería una llamada inútil. Los partidos de tenis ya están en la
+        // base (los trae el barrido de tenis); lo que falta es agendárselos a ESTE usuario ya,
+        // sin esperar al scheduler. backfillUserEvents solo lee la base: no gasta llamadas al
+        // proveedor. Mismo filtro que el scheduler para no pegarle a Google en balde.
+        if (normalizeSport(sport) === "tennis" && !teamName && esClaveDeCategoria(competitionKey)) {
+          const cuenta = await googleAccountRepository.getByUserId(userId);
+          const motivo = cuenta ? shouldSkipUser(cuenta, skipUserIds) : "sin cuenta de Google";
+          if (motivo) {
+            console.log(`[sub] Categoría ${competitionKey}: relleno inmediato saltado para ${userId} (${motivo})`);
+          } else {
+            const r = await backfillUserEvents(userId);
+            console.log(`[sub] Categoría ${competitionKey}: relleno inmediato de ${userId}, +${r.created} evento(s)`);
+          }
+        } else if (competitionKey && !competitionKey.startsWith("national_")) {
           const results = await syncLeague(competitionKey, sport);
           console.log(`[sub] Immediate sync for league ${competitionKey}: ${results.length} changes`);
           for (const r of results) {
