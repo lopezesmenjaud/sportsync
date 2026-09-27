@@ -104,10 +104,16 @@ const LEAGUES_BY_SPORT = {
         { id: '4721', name: 'CONCACAF Champions Cup', apiName: 'CONCACAF Champions League',    country: 'CONCACAF', type: 'cup' },
       ]
     },
+    // APAGADA a propósito (hidden). Prometía suscripciones que nunca reciben partidos: guarda
+    // competitionKey "national_all"/"national_official", que el sync brinca y ninguna liga real
+    // trae, y el teamName en español ("México") cuando el proveedor escribe "Mexico". Se va a
+    // reemplazar por la sección de confederaciones + selección específica. El código de abajo
+    // (NATIONAL_TEAMS, handleNationalSubscribe, el bloque isSelecciones) se queda para reusarlo.
     {
       id: 'selecciones',
       title: 'Selecciones nacionales',
       special: 'selecciones',
+      hidden: true,
       leagues: []
     }
   ],
@@ -472,6 +478,7 @@ export default function LeaguePicker() {
         )}
 
         {categories.map(category => {
+          if (category.hidden) return null
           const isSelecciones  = category.special === 'selecciones'
           const visibleLeagues = category.leagues.filter(l =>
             !search || (l.label || l.name).toLowerCase().includes(search.toLowerCase()) || l.country.toLowerCase().includes(search.toLowerCase())
