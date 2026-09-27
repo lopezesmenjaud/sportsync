@@ -1,0 +1,131 @@
+{
+  "_lee_esto_primero": [
+    "Tabla de competencias de SELECCIONES NACIONALES para FanSchedule. Decide UNA cosa: a qué confederación (y a qué rama, varonil o femenil) pertenece cada competencia. Es lo que se va a seguir al elegir 'Concacaf' o 'UEFA'.",
+    "La clave es el idLeague de TheSportsDB. TODAS se verificaron una por una contra lookupleague.php el 27 sep 2026, no se tomaron del repo ni se supusieron. El campo base es el nombre que manda el proveedor y está solo como referencia, igual que en competencias.json: toda la lógica va por clave, que no cambia aunque el proveedor renombre la competencia.",
+    "Dos formas de seguir: por CONFEDERACIÓN llegan solo los partidos OFICIALES de las competencias de su lista. Por SELECCIÓN llegan TODOS los partidos de ese equipo, oficiales y amistosos, en cualquier competencia.",
+    "'mundial' NO es una confederación: es la casilla aparte de la Copa del Mundo, que no pertenece a ninguna. El repechaje intercontinental va ahí porque tampoco es de nadie.",
+    "Los AMISTOSOS (4562 varonil, 5400 femenil) NO pertenecen a ninguna confederación: el proveedor mete los de todo el mundo en una sola competencia genérica. Van en su propio bloque y solo llegan por suscripción a una selección, nunca por confederación.",
+    "En los amistosos femeniles (5400) vienen mezcladas las sub-17 ('Mexico Women U17' vs 'Poland Women U17'). El empate de la suscripción por selección es por nombre EXACTO, así que 'Mexico Women' no jala a 'Mexico Women U17'. Queda anotado por si algún día se empata por 'contiene'.",
+    "La ficha de 'Mexico Women' en el proveedor dice strGender 'Male'. Dato mal cargado: ese campo NO sirve para filtrar nada. La rama sale de ESTA tabla, nunca del proveedor.",
+    "El proveedor escribe 'Mexico', 'USA', 'Mexico Women', 'USA Women'. Sin acentos y sin 'National Team'. Se comprobó que en la lista de equipos y en los partidos viene igual. 'México' con acento no regresa nada.",
+    "_revisar marca las claves o los huecos donde hay duda. Una competencia que falta aquí simplemente no llega por confederación: falla del lado seguro.",
+    "otrasConocidas son competencias de selecciones que YA vimos y que a propósito no van en ninguna confederación (juveniles, torneos por invitación, subregionales, olímpicos). Estar ahí sirve para que el clasificador no avise por ellas. Si una competencia de selecciones no está ni en las confederaciones ni ahí, el clasificador avisa en consola una vez: así aparece en el log en vez de perderse en silencio.",
+    "membresia dice qué competencia define QUIÉN es de esa confederación (para armar la lista de selecciones): la eliminatoria mundialista, o el campeonato continental donde no hay eliminatoria. NO sirve cualquier competencia: la Copa Oro W y la Copa América tienen INVITADOS de otras confederaciones (Brasil y Argentina femenil en la Copa Oro W, Canadá y Costa Rica en la Copa América 2024). null = no hay competencia que lo diga.",
+    "pistasDeNombre y noSonDeSelecciones solo deciden CUÁNDO avisar por una clave desconocida (si el nombre de la competencia 'suena' a selecciones). No deciden nada más: ningún partido se clasifica por nombre."
+  ],
+  "amistosos": {
+    "varonil": { "clave": "4562", "base": "International Friendlies" },
+    "femenil": { "clave": "5400", "base": "International Friendlies Women", "_revisar": "Trae mezcladas las sub-17 (p. ej. 'Mexico Women U17')." }
+  },
+  "confederaciones": [
+    {
+      "clave": "concacaf",
+      "membresia": { "varonil": "5516", "femenil": "5841" },
+      "nombre": "Concacaf",
+      "varonil": [
+        { "clave": "5516", "base": "World Cup Qualifying CONCACAF" },
+        { "clave": "5280", "base": "CONCACAF Nations League" },
+        { "clave": "4873", "base": "CONCACAF Gold Cup" },
+        { "clave": "5522", "base": "CONCACAF Gold Cup Qualifying" }
+      ],
+      "femenil": [
+        { "clave": "5841", "base": "Womens World Cup Qualifying CONCACAF" },
+        { "clave": "5439", "base": "CONCACAF W Gold Cup" }
+      ]
+    },
+    {
+      "clave": "uefa",
+      "membresia": { "varonil": "5518", "femenil": "5840" },
+      "nombre": "UEFA",
+      "varonil": [
+        { "clave": "5518", "base": "World Cup Qualifying UEFA" },
+        { "clave": "4490", "base": "UEFA Nations League" },
+        { "clave": "4502", "base": "UEFA European Championships" },
+        { "clave": "5519", "base": "UEFA European Championships Qualifying", "_revisar": "lookupleague la regresa con temporada actual vacía y sin fecha del primer partido. Existe, pero puede no tener calendario cargado." }
+      ],
+      "femenil": [
+        { "clave": "5840", "base": "Womens World Cup Qualifying UEFA", "_revisar": "lookupleague la regresa sin fecha del primer partido." },
+        { "clave": "4865", "base": "UEFA Womens Euro" },
+        { "clave": "5410", "base": "UEFA Womens Nations League" }
+      ],
+      "_revisar": "No encontré la clasificación a la Euro femenil. Puede que el proveedor no la tenga o que no la destapé: la llave gratuita capa las listas a 5 resultados."
+    },
+    {
+      "clave": "conmebol",
+      "membresia": { "varonil": "5515", "femenil": "5655" },
+      "nombre": "Conmebol",
+      "varonil": [
+        { "clave": "5515", "base": "World Cup Qualifying CONMEBOL" },
+        { "clave": "4499", "base": "Copa America", "_revisar": "Es de Conmebol, pero la edición 2024 tuvo invitados de Concacaf (México, USA, Canadá...). Siguiendo 'Concacaf' no llega; siguiendo a la selección, sí." }
+      ],
+      "femenil": [
+        { "clave": "5655", "base": "Copa America Femenina", "_revisar": "lookupleague la regresa sin fecha del primer partido." },
+        { "clave": "5743", "base": "CONMEBOL Liga de Naciones Femenina" }
+      ]
+    },
+    {
+      "clave": "afc",
+      "membresia": { "varonil": "5513", "femenil": "5179" },
+      "nombre": "AFC (Asia)",
+      "varonil": [
+        { "clave": "5513", "base": "World Cup Qualifying AFC" },
+        { "clave": "4866", "base": "AFC Asian Cup" },
+        { "clave": "5521", "base": "AFC Asian Cup Qualifying" }
+      ],
+      "femenil": [
+        { "clave": "5179", "base": "Asian Cup Women" }
+      ],
+      "_revisar": "No encontré eliminatoria mundialista femenil de la AFC (allá la Asian Cup Women hace de eliminatoria)."
+    },
+    {
+      "clave": "caf",
+      "membresia": { "varonil": "5514", "femenil": "5433" },
+      "nombre": "CAF (África)",
+      "varonil": [
+        { "clave": "5514", "base": "World Cup Qualifying CAF", "_revisar": "lookupleague dice temporada actual 2018: puede estar abandonada en el proveedor." },
+        { "clave": "4496", "base": "African Cup of Nations" },
+        { "clave": "5520", "base": "African Cup of Nations Qualifying" }
+      ],
+      "femenil": [
+        { "clave": "5433", "base": "Africa Cup of Nations Women" }
+      ]
+    },
+    {
+      "clave": "ofc",
+      "membresia": { "varonil": "5517", "femenil": null },
+      "nombre": "OFC (Oceanía)",
+      "varonil": [
+        { "clave": "5517", "base": "World Cup Qualifying OFC" },
+        { "clave": "4867", "base": "OFC Nations Cup" }
+      ],
+      "femenil": [],
+      "_revisar": "No encontré ninguna competencia femenil de la OFC. Las selecciones femeniles de Oceanía (Fiji, Samoa, Tonga...) solo aparecen en amistosos (5400)."
+    },
+    {
+      "clave": "mundial",
+      "nombre": "Copa del Mundo",
+      "varonil": [
+        { "clave": "4429", "base": "FIFA World Cup" },
+        { "clave": "5850", "base": "World Cup Qualifying Inter-Confederation Play-offs", "_revisar": "Repechaje intercontinental. lookupleague la regresa con strGender vacío (no dice Male)." }
+      ],
+      "femenil": [
+        { "clave": "4565", "base": "FIFA Womens World Cup" }
+      ]
+    }
+  ],
+  "otrasConocidas": [
+    { "clave": "5819", "base": "Finalissima", "rama": "varonil", "porque": "Campeón de Europa contra campeón de Sudamérica: es de dos confederaciones." },
+    { "clave": "5182", "base": "COSAFA Cup", "rama": "varonil", "porque": "Subregional del sur de África.", "_revisar": "¿Debería llegar con 'CAF'?" },
+    { "clave": "5105", "base": "FIFA Arab Cup", "rama": "varonil", "porque": "Mezcla selecciones de la AFC y de la CAF." },
+    { "clave": "5889", "base": "ASEAN Championship", "rama": "varonil", "porque": "Subregional del sureste asiático." },
+    { "clave": "5960", "base": "FIFA ASEAN Cup", "rama": "varonil", "porque": "Subregional del sureste asiático." },
+    { "clave": "5890", "base": "Baltic Cup", "rama": "varonil", "porque": "Subregional báltico." },
+    { "clave": "5416", "base": "FIFA U-17 World Cup", "rama": "varonil", "porque": "Juvenil." },
+    { "clave": "5944", "base": "FIFA U20 Womens World Cup", "rama": "femenil", "porque": "Juvenil." },
+    { "clave": "5384", "base": "Olympics Soccer Women", "rama": "femenil", "porque": "Olímpicos: los organiza el COI, no una confederación." },
+    { "clave": "5263", "base": "SheBelieves Cup", "rama": "femenil", "porque": "Torneo por invitación en Estados Unidos." },
+    { "clave": "5432", "base": "CAF Womens Olympic Qualifying Tournament", "rama": "femenil", "porque": "Eliminatoria olímpica, no mundialista ni continental.", "_revisar": "¿Debería llegar con 'CAF'?" }
+  ],
+  "pistasDeNombre": ["World Cup", "Nations League", "Nations Cup", "Cup of Nations", "Gold Cup", "Copa America", "European Championships", "Womens Euro", "Asian Cup", "Friendlies", "Qualifying", "Olympics"],
+  "noSonDeSelecciones": ["Club", "Champions", "Libertadores", "Sudamericana", "Europa League", "Conference League"]
+}
