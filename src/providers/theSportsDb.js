@@ -137,6 +137,18 @@ class TheSportsDbProvider {
     return events;
   }
 
+  // Las temporadas que el proveedor tiene para una liga, de la más vieja a la más nueva:
+  // ["2024-2025", "2025-2026", ...]. Si la llamada falla, lanza: quien llama decide qué hacer
+  // (syncLeague vuelve a la regla de adivinar, que es la de antes).
+  async getSeasons(leagueId) {
+    const url = `${this.baseUrl}/${this.apiKey}/search_all_seasons.php`;
+    const response = await axios.get(url, {
+      params: { id: leagueId },
+      timeout: 15000
+    });
+    return (response.data?.seasons || []).map(s => s && s.strSeason).filter(Boolean);
+  }
+
   async searchTeam(teamName) {
     const url = `${this.baseUrl}/${this.apiKey}/searchteams.php`;
     const response = await axios.get(url, {

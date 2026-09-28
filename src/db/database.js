@@ -251,6 +251,21 @@ async function initializeDatabase() {
     `);
     console.log("✅ League teams cache table ready");
 
+    // Temporadas por liga (search_all_seasons), para que syncLeague no las pida en cada corrida.
+    // NO se borra al arrancar, igual que league_teams_cache: con Render reiniciando en cada push,
+    // una caché que se vaciara al arrancar estaría fría casi siempre.
+    //
+    // Invariante: aquí NUNCA se escribe una lista vacía (ver leagueSeasonsCacheRepositorySqlite).
+    // La vigencia (6 h) la decide syncLeague leyendo cachedAt, no esta tabla.
+    await runAsync(`
+      CREATE TABLE IF NOT EXISTS league_seasons_cache (
+        leagueId TEXT PRIMARY KEY,
+        seasons  TEXT NOT NULL,
+        cachedAt TEXT NOT NULL
+      )
+    `);
+    console.log("✅ League seasons cache table ready");
+
     // Jugadores de tenis vistos en los barridos. Es la lista que sirve el picker.
     //
     // NO se llena con peticiones propias: los datos ya vienen dentro de la respuesta que el

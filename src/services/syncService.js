@@ -3,6 +3,63 @@ const { detectMatchChanges } = require("./matchChangeDetector");
 const { matchRepository } = require("../repositories/matchRepositorySqlite");
 const { subscriptionRepository } = require("../repositories/subscriptionRepositorySqlite");
 const { syncTennis } = require("./tennisSyncService");
+const { leagueSeasonsCacheRepository } = require("../repositories/leagueSeasonsCacheRepositorySqlite");
+const { buscarPorTemporadas } = require("./reglaTemporadas");
+
+// Vigencia de la lista de temporadas guardada. 6 h y no 24: el proveedor a veces crea una
+// temporada nueva a media competencia (las finales de la Nations League de 2019 y 2021 quedaron
+// como temporada aparte). Ojo con el costo: el cron de fútbol corre cada 12 h, así que en esas
+// corridas la lista siempre está vencida y se vuelve a pedir (+1 llamada por liga). La caché
+// solo se aprovecha entre corridas con menos de 6 h de distancia (arranque, sync inmediato).
+const VIGENCIA_TEMPORADAS_MS = 6 * 60 * 60 * 1000;
+
+// Contador de llamadas a TheSportsDB de UNA corrida. Se pasa como argumento (y no como variable
+// del módulo) porque a medianoche corren varios crons a la vez y se mezclarían las cuentas.
+function nuevoContador() {
+  return { llamadas: 0, listasPedidas: 0, listasDeCache: 0, listasFallidas: 0 };
+}
+
+function resumenContador(c) {
+  return `${c.llamadas} llamadas a TheSportsDB ` +
+    `(listas de temporadas: ${c.listasPedidas} pedidas, ${c.listasDeCache} de caché, ${c.listasFallidas} fallidas)`;
+}
+
+// La lista de temporadas de una liga: de la caché si tiene menos de 6 h; si no, del proveedor.
+// Devuelve { lista, origen } donde origen es "caché", "proveedor" o "falló: <motivo>".
+// lista null = no hay lista y syncLeague adivina como antes. Un error de la tabla de caché NO
+// detiene nada: se trata como caché vacía (al leer) o se registra y se sigue (al guardar).
+async function obtenerListaDeTemporadas(provider, leagueId, contador) {
+  try {
+    const guardada = await leagueSeasonsCacheRepository.get(leagueId);
+    if (guardada && Date.now() - Date.parse(guardada.cachedAt) < VIGENCIA_TEMPORADAS_MS) {
+      contador.listasDeCache += 1;
+      return { lista: guardada.seasons, origen: "caché" };
+    }
+  } catch (error) {
+    console.log(`[sync] League ${leagueId}: no se pudo leer league_seasons_cache (${error.message})`);
+  }
+
+  contador.llamadas += 1;
+  let lista;
+  try {
+    lista = await provider.getSeasons(leagueId);
+  } catch (error) {
+    contador.listasFallidas += 1;
+    return { lista: null, origen: `falló: ${error.message}` };
+  }
+  if (lista.length === 0) {
+    contador.listasFallidas += 1;
+    return { lista: null, origen: "falló: vino vacía" };
+  }
+
+  contador.listasPedidas += 1;
+  try {
+    await leagueSeasonsCacheRepository.set(leagueId, lista);
+  } catch (error) {
+    console.log(`[sync] League ${leagueId}: no se pudo guardar en league_seasons_cache (${error.message})`);
+  }
+  return { lista, origen: "proveedor" };
+}
 
 // Mapeo de nombres del frontend (español) a nombres internos de TheSportsDB
 const SPORT_NAME_MAP = {
@@ -112,51 +169,68 @@ function getSyncDateRange() {
   };
 }
 
-// Sincroniza los partidos de una liga específica
-async function syncLeague(leagueId, sport) {
+// Sincroniza los partidos de una liga específica.
+//
+// contador es OPCIONAL (lo pasan syncMatches y syncSport para el total de la corrida); el sync
+// inmediato de server.js no lo pasa y funciona igual.
+async function syncLeague(leagueId, sport, contador = nuevoContador()) {
   const provider        = getProvider("the_sports_db");
   const normalizedSport = normalizeSport(sport);
   const { fromDate, toDate } = getSyncDateRange();
+  const llamadasAntes   = contador.llamadas;
 
-  let rawMatches = [];
-
-  // ── Estrategia PRIMARIA: eventsseason.php con variantes de temporada ──
+  // ── Estrategia PRIMARIA: eventsseason.php, con las temporadas que decide reglaTemporadas ──
   // Devuelve la temporada completa y se recorta a la ventana hoy→+30d dentro del
   // provider. Evita el tope por cantidad (~15-20 eventos) de eventsnextleague, que
   // dejaba cortas a las ligas densas (p.ej. MLB cubría solo ~2 días).
-  const seasons = getSeasonVariants(normalizedSport);
-  for (const season of seasons) {
-    try {
-      const seasonEvents = await provider.getEventsByLeagueAndSeason({ leagueId, season, fromDate, toDate });
-      if (seasonEvents.length > 0) {
-        rawMatches = seasonEvents;
-        console.log(`[sync] League ${leagueId} (${normalizedSport}): ${rawMatches.length} events via eventsseason (season "${season}")`);
-        break;
-      }
-    } catch (error) {
-      console.log(`[sync] League ${leagueId} season "${season}" failed: ${error.message}`);
-    }
-  }
+  //
+  // La lista de temporadas del proveedor evita pedir las que no existen y deja encontrar las
+  // que no se adivinan ("2027"). Sin lista (falló o vino vacía) se adivina EXACTAMENTE como antes.
+  const { lista, origen } = await obtenerListaDeTemporadas(provider, leagueId, contador);
+  const busqueda = await buscarPorTemporadas({
+    variantes:  getSeasonVariants(normalizedSport),
+    lista,
+    anioActual: Number(new Date().toISOString().slice(0, 4)),
+    pedirTemporada: (season) => provider.getEventsByLeagueAndSeason({ leagueId, season, fromDate, toDate }),
+    log: (msg) => console.log(`[sync] League ${leagueId} ${msg}`),
+  });
+  contador.llamadas += busqueda.llamadas;
+  let rawMatches = busqueda.eventos;
 
-  // ── Estrategia FALLBACK: eventsnextleague.php (solo si eventsseason no dio nada) ──
-  if (rawMatches.length === 0) {
+  // ── Estrategia FALLBACK: eventsnextleague.php, siempre que las variantes no dieron nada ──
+  // Con la regla nueva corre también cuando una temporada extra sí trajo partidos, y se SUMA:
+  // así nunca trae menos que antes, cuando el respaldo era lo único que corría en ese caso.
+  let delRespaldo = 0;
+  if (busqueda.camino !== "variante") {
+    contador.llamadas += 1;
     try {
-      const nextEvents = await provider.getNextLeagueEvents(leagueId);
-      if (nextEvents.length > 0) {
-        rawMatches = nextEvents.filter(e => {
-          const d = e.dateEvent;
-          if (!d) return false;
-          return d >= fromDate && d <= toDate;
-        });
-        console.log(`[sync] League ${leagueId} (${normalizedSport}): ${rawMatches.length} events via eventsnextleague (fallback)`);
-      }
+      const nextEvents = (await provider.getNextLeagueEvents(leagueId)).filter(e => {
+        const d = e.dateEvent;
+        if (!d) return false;
+        return d >= fromDate && d <= toDate;
+      });
+      const yaEstan = new Set(rawMatches.map(e => e.idEvent));
+      const nuevos  = nextEvents.filter(e => !yaEstan.has(e.idEvent));
+      delRespaldo   = nuevos.length;
+      rawMatches    = rawMatches.concat(nuevos);
     } catch (error) {
       console.log(`[sync] League ${leagueId} eventsnextleague failed: ${error.message}`);
     }
   }
 
+  // Un renglón por liga: por dónde llegaron los partidos, de dónde salió la lista y cuánto costó.
+  const detalle = `lista: ${lista ? `${origen}, ${lista.length} temporadas` : `${origen} → se adivina como antes`} | ` +
+    `llamadas: ${contador.llamadas - llamadasAntes}`;
+  if (busqueda.camino === "variante") {
+    console.log(`[sync] League ${leagueId} (${normalizedSport}): ${rawMatches.length} events via eventsseason (season "${busqueda.temporada}") [variante] | ${detalle}`);
+  } else if (busqueda.camino === "extra") {
+    console.log(`[sync] League ${leagueId} (${normalizedSport}): ${rawMatches.length} events via eventsseason (season "${busqueda.temporada}") [temporada extra de la lista] + ${delRespaldo} via eventsnextleague (fallback) | ${detalle}`);
+  } else if (rawMatches.length > 0) {
+    console.log(`[sync] League ${leagueId} (${normalizedSport}): ${rawMatches.length} events via eventsnextleague (fallback) | ${detalle}`);
+  }
+
   if (rawMatches.length === 0) {
-    console.log(`[sync] No matches found for league ${leagueId} (${normalizedSport}) in range ${fromDate} → ${toDate}`);
+    console.log(`[sync] No matches found for league ${leagueId} (${normalizedSport}) in range ${fromDate} → ${toDate} | ${detalle}`);
     return [];
   }
 
@@ -190,12 +264,13 @@ async function syncLeague(leagueId, sport) {
 // cubre solo 1-3 días por equipo. Aceptable mientras los usuarios solo sigan
 // equipos de fútbol/F1/golf (~10+ semanas de cobertura). Se resolverá nativamente
 // al migrar a un provider enterprise (SportRadar, Stats Perform, etc.).
-async function syncTeam(teamName, sport) {
+async function syncTeam(teamName, sport, contador = nuevoContador()) {
   const provider        = getProvider("the_sports_db");
   const { fromDate, toDate } = getSyncDateRange();
 
   try {
     // Paso 1: buscar el teamId por nombre
+    contador.llamadas += 1;
     const team = await provider.searchTeam(teamName);
     if (!team) {
       console.log(`[sync] Team "${teamName}" not found in TheSportsDB`);
@@ -206,6 +281,7 @@ async function syncTeam(teamName, sport) {
     console.log(`[sync] Found team "${teamName}" → id ${teamId}`);
 
     // Paso 2: obtener próximos eventos del equipo
+    contador.llamadas += 1;
     let rawMatches = await provider.getNextTeamEvents(teamId);
 
     // Filtrar por rango de 30 días
@@ -287,6 +363,7 @@ async function syncMatches() {
   }
 
   const allResults = [];
+  const contador   = nuevoContador();
 
   // Tenis (proveedor propio). Si TENNIS_SYNC_ENABLED está apagado devuelve [] sin gastar
   // ni una petición, así que esta llamada es inofensiva mientras el interruptor esté abajo.
@@ -298,7 +375,7 @@ async function syncMatches() {
   if (leagueMap.size > 0) {
     console.log(`[sync] Syncing ${leagueMap.size} leagues...`);
     for (const [leagueId, sport] of leagueMap) {
-      const results = await syncLeague(leagueId, sport);
+      const results = await syncLeague(leagueId, sport, contador);
       allResults.push(...results);
     }
   }
@@ -308,12 +385,12 @@ async function syncMatches() {
     const uniqueTeams = [...new Map(teamSubs.map(s => [s.teamName, s])).values()];
     console.log(`[sync] Syncing ${uniqueTeams.length} teams...`);
     for (const sub of uniqueTeams) {
-      const results = await syncTeam(sub.teamName, sub.sport);
+      const results = await syncTeam(sub.teamName, sub.sport, contador);
       allResults.push(...results);
     }
   }
 
-  console.log(`[sync] Full sync complete. Total changes: ${allResults.length}`);
+  console.log(`[sync] Full sync complete. Total changes: ${allResults.length} | ${resumenContador(contador)}`);
   return allResults;
 }
 
@@ -350,15 +427,17 @@ async function syncSport(sport) {
   }
 
   const allResults = [];
+  const contador   = nuevoContador();
   for (const leagueId of leagueIds) {
-    const results = await syncLeague(leagueId, sport);
+    const results = await syncLeague(leagueId, sport, contador);
     allResults.push(...results);
   }
   for (const teamName of teamNames) {
-    const results = await syncTeam(teamName, sport);
+    const results = await syncTeam(teamName, sport, contador);
     allResults.push(...results);
   }
 
+  console.log(`[sync] Sport ${sport} complete. Total changes: ${allResults.length} | ${resumenContador(contador)}`);
   return allResults;
 }
 
