@@ -10,7 +10,10 @@
     "El proveedor escribe 'Mexico', 'USA', 'Mexico Women', 'USA Women'. Sin acentos y sin 'National Team'. Se comprobó que en la lista de equipos y en los partidos viene igual. 'México' con acento no regresa nada.",
     "_revisar marca las claves o los huecos donde hay duda. Una competencia que falta aquí simplemente no llega por confederación: falla del lado seguro.",
     "otrasConocidas son competencias de selecciones que YA vimos y que a propósito no van en ninguna confederación (juveniles, torneos por invitación, subregionales, olímpicos). Estar ahí sirve para que el clasificador no avise por ellas. Si una competencia de selecciones no está ni en las confederaciones ni ahí, el clasificador avisa en consola una vez: así aparece en el log en vez de perderse en silencio.",
-    "membresia dice qué competencia define QUIÉN es de esa confederación (para armar la lista de selecciones): la eliminatoria mundialista, o el campeonato continental donde no hay eliminatoria. NO sirve cualquier competencia: la Copa Oro W y la Copa América tienen INVITADOS de otras confederaciones (Brasil y Argentina femenil en la Copa Oro W, Canadá y Costa Rica en la Copa América 2024). null = no hay competencia que lo diga.",
+    "membresia dice qué competencia define QUIÉN es de esa confederación (para armar la lista de selecciones): la eliminatoria mundialista, o el campeonato continental donde no hay eliminatoria. NO sirve cualquier competencia: la Copa Oro W y la Copa América tienen INVITADOS de otras confederaciones (Brasil y Argentina femenil en la Copa Oro W, Canadá y Costa Rica en la Copa América 2024). null = no hay competencia que lo diga. En 'mundial' la membresía es la Copa del Mundo misma: la lista son las selecciones que la han jugado.",
+    "SUSCRIPCIONES POR CONFEDERACIÓN: la competitionKey es '<confederacion>-<rama>' ('concacaf-varonil', 'uefa-femenil', 'mundial-varonil'...). Son 14: seis confederaciones y el Mundial, cada una en sus dos ramas. Separadas por rama a propósito, como el Grand Slam en el tenis: quien sigue la Concacaf varonil no recibe los partidos femeniles si no los pidió. Un partido le llega si su clave está en la lista de ESA confederación y ESA rama. Los amistosos nunca entran por aquí. La OFC femenil existe como clave pero no tiene competencias: seguirla no trae nada.",
+    "SUSCRIPCIONES POR SELECCIÓN: son suscripciones de equipo de siempre (teamName con el nombre EXACTO del proveedor, competitionKey null, sport 'futbol'). Empatan por nombre en cualquier competencia, amistosos incluidos. No usan esta tabla para empatar: la tabla solo arma la LISTA que se le enseña a la persona.",
+    "equiposAMano completa esa lista: selecciones que el proveedor no deja acomodar solas porque su ficha no trae la competencia de membresía (Portugal no trae la eliminatoria UEFA; USA Women y Canada Women no traen la eliminatoria Concacaf; las femeniles de Oceanía solo juegan amistosos). Cada nombre se comprobó EXACTO contra searchteams.php el 28 sep 2026. TODA la tabla es revisable; las que tienen _revisar son las que dieron duda. Una selección que no se pudo ubicar con confianza se deja fuera: falla del lado seguro, se puede seguir igual si alguien la busca por nombre en el futuro.",
     "pistasDeNombre y noSonDeSelecciones solo deciden CUÁNDO avisar por una clave desconocida (si el nombre de la competencia 'suena' a selecciones). No deciden nada más: ningún partido se clasifica por nombre."
   ],
   "amistosos": {
@@ -103,6 +106,7 @@
     },
     {
       "clave": "mundial",
+      "membresia": { "varonil": "4429", "femenil": "4565" },
       "nombre": "Copa del Mundo",
       "varonil": [
         { "clave": "4429", "base": "FIFA World Cup" },
@@ -125,6 +129,30 @@
     { "clave": "5384", "base": "Olympics Soccer Women", "rama": "femenil", "porque": "Olímpicos: los organiza el COI, no una confederación." },
     { "clave": "5263", "base": "SheBelieves Cup", "rama": "femenil", "porque": "Torneo por invitación en Estados Unidos." },
     { "clave": "5432", "base": "CAF Womens Olympic Qualifying Tournament", "rama": "femenil", "porque": "Eliminatoria olímpica, no mundialista ni continental.", "_revisar": "¿Debería llegar con 'CAF'?" }
+  ],
+  "equiposAMano": [
+    { "equipo": "Portugal", "confederacion": "uefa", "rama": "varonil" },
+    { "equipo": "Russia", "confederacion": "uefa", "rama": "varonil", "_revisar": "Miembro de la UEFA, pero suspendida por UEFA y FIFA desde 2022: hoy solo juega amistosos." },
+    { "equipo": "Bonaire", "confederacion": "concacaf", "rama": "varonil", "_revisar": "Miembro de Concacaf que no es de la FIFA: juega Nations League, no eliminatorias." },
+    { "equipo": "French Guiana", "confederacion": "concacaf", "rama": "varonil", "_revisar": "Miembro de Concacaf que no es de la FIFA." },
+    { "equipo": "Guadeloupe", "confederacion": "concacaf", "rama": "varonil", "_revisar": "Miembro de Concacaf que no es de la FIFA." },
+    { "equipo": "Martinique", "confederacion": "concacaf", "rama": "varonil", "_revisar": "Miembro de Concacaf que no es de la FIFA." },
+    { "equipo": "St Maarten", "confederacion": "concacaf", "rama": "varonil", "_revisar": "Miembro de Concacaf que no es de la FIFA. El proveedor le pone país 'The Netherlands'." },
+    { "equipo": "St Martin", "confederacion": "concacaf", "rama": "varonil", "_revisar": "Miembro de Concacaf que no es de la FIFA." },
+    { "equipo": "Northern Mariana Islands", "confederacion": "afc", "rama": "varonil", "nota": "Miembro de la AFC (confirmado por Julio el 28 sep 2026). Juega la clasificación a la Asian Cup." },
+    { "equipo": "Tuvalu", "confederacion": "ofc", "rama": "varonil", "_revisar": "Miembro ASOCIADO de la OFC, no de la FIFA. Juega la OFC Nations Cup." },
+    { "equipo": "USA Women", "confederacion": "concacaf", "rama": "femenil" },
+    { "equipo": "Canada Women", "confederacion": "concacaf", "rama": "femenil" },
+    { "equipo": "New Zealand Women", "confederacion": "ofc", "rama": "femenil" },
+    { "equipo": "American Samoa Women", "confederacion": "ofc", "rama": "femenil" },
+    { "equipo": "Cook Islands Women", "confederacion": "ofc", "rama": "femenil" },
+    { "equipo": "Fiji Women", "confederacion": "ofc", "rama": "femenil" },
+    { "equipo": "Papua New Guinea Women", "confederacion": "ofc", "rama": "femenil" },
+    { "equipo": "Samoa Women", "confederacion": "ofc", "rama": "femenil" },
+    { "equipo": "Solomon Islands Women", "confederacion": "ofc", "rama": "femenil" },
+    { "equipo": "Tahiti Women", "confederacion": "ofc", "rama": "femenil" },
+    { "equipo": "Tonga Women", "confederacion": "ofc", "rama": "femenil" },
+    { "equipo": "Vanuatu Women", "confederacion": "ofc", "rama": "femenil" }
   ],
   "pistasDeNombre": ["World Cup", "Nations League", "Nations Cup", "Cup of Nations", "Gold Cup", "Copa America", "European Championships", "Womens Euro", "Asian Cup", "Friendlies", "Qualifying", "Olympics"],
   "noSonDeSelecciones": ["Club", "Champions", "Libertadores", "Sudamericana", "Europa League", "Conference League"]

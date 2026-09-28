@@ -174,9 +174,132 @@ function claveDeMembresia(confederacion, rama) {
   return k == null ? null : String(k);
 }
 
+// ── Suscripciones por confederación ──
+//
+// competitionKey = "<confederacion>-<rama>": "concacaf-varonil", "mundial-femenil"... Son 14.
+// No chocan con nada que exista: los idLeague son numéricos, las categorías de tenis son
+// "grand-slam-atp"/"atp-250"... y las viejas de selecciones empiezan con "national_".
+
+const suscripciones = [];
+for (const conf of tabla.confederaciones) {
+  for (const rama of RAMAS) {
+    suscripciones.push({
+      clave: `${conf.clave}-${rama}`,
+      confederacion: conf.clave,
+      nombre: conf.nombre,
+      rama,
+      competencias: (conf[rama] || []).map(c => ({ clave: String(c.clave), base: c.base })),
+    });
+  }
+}
+const suscripcionPorClave = new Map(suscripciones.map(s => [s.clave, s]));
+
+// { confederacion, rama } si la clave es una de las 14; null si no.
+function leerClaveDeSuscripcion(clave) {
+  const s = suscripcionPorClave.get(normalizar(clave));
+  return s ? { confederacion: s.confederacion, rama: s.rama } : null;
+}
+
+function esClaveDeSuscripcionSelecciones(clave) {
+  return suscripcionPorClave.has(normalizar(clave));
+}
+
+// ¿Esta suscripción es POR CONFEDERACIÓN? Sin teamName y con una de las 14 claves. Las de
+// selección (teamName "Mexico") son suscripciones de equipo de siempre y NO pasan por aquí.
+function esSuscripcionDeSelecciones(subscription) {
+  return !!subscription && !subscription.teamName && esClaveDeSuscripcionSelecciones(subscription.competitionKey);
+}
+
+// ¿Este partido le llega a esta suscripción por confederación? Su competencia tiene que estar en
+// la lista de ESA confederación y ESA rama, según clasificarPartidoSelecciones. Un amistoso
+// nunca casa: el clasificador lo regresa sin confederación.
+function casaConSuscripcionDeSelecciones(match, subscription) {
+  const k = leerClaveDeSuscripcion(subscription && subscription.competitionKey);
+  if (!k) return false;
+  const r = clasificarPartidoSelecciones(match);
+  return r.confederacion === k.confederacion && r.rama === k.rama;
+}
+
+// Los idLeague que hay que sincronizar para una suscripción por confederación ([] si no es una).
+function competenciasDeSuscripcion(clave) {
+  const s = suscripcionPorClave.get(normalizar(clave));
+  return s ? s.competencias.map(c => c.clave) : [];
+}
+
+// ── Lista de selecciones por confederación y rama ──
+//
+// El proveedor no tiene una lista por confederación: search_all_teams.php?l=<competencia> regresa
+// solo las selecciones cuya competencia PRINCIPAL es ésa. Quien llama junta las listas de todas
+// las competencias de la tabla y las pasa aquí. Una selección entra a un grupo si entre sus
+// competencias (idLeague a idLeague7) está la de membresía de ese grupo, o si está en equiposAMano.
+
+const equiposAMano = tabla.equiposAMano || [];
+for (const e of equiposAMano) {
+  if (!clavesDeConfederacion.has(e.confederacion) || !RAMAS.includes(e.rama)) {
+    throw new Error(`[seleccionesConfederaciones] equiposAMano: "${e.equipo}" trae confederación o rama inválida (${e.confederacion}/${e.rama}).`);
+  }
+}
+
+// Todas las competencias cuyas listas de equipos hay que pedir para armar los grupos.
+function competenciasParaListas() {
+  const claves = new Map(); // clave -> base
+  for (const conf of tabla.confederaciones) for (const rama of RAMAS) for (const c of conf[rama] || []) claves.set(String(c.clave), c.base);
+  for (const rama of RAMAS) if (tabla.amistosos[rama]) claves.set(String(tabla.amistosos[rama].clave), tabla.amistosos[rama].base);
+  for (const o of tabla.otrasConocidas || []) claves.set(String(o.clave), o.base);
+  return [...claves].map(([clave, base]) => ({ clave, base }));
+}
+
+/**
+ * Función pura. equipos: fichas crudas del proveedor (strTeam, idTeam, idLeague..idLeague7, ...).
+ * Devuelve { grupos: Map("concacaf-varonil" -> [{ id, name, badge, country, aMano }]), sinConfederacion: [nombres] }.
+ */
+function armarListasDeSelecciones(equipos) {
+  const membresiaAGrupo = new Map();
+  for (const conf of tabla.confederaciones) {
+    for (const rama of RAMAS) {
+      const k = conf.membresia && conf.membresia[rama];
+      if (k != null) membresiaAGrupo.set(String(k), `${conf.clave}-${rama}`);
+    }
+  }
+  const aManoPorNombre = new Map(equiposAMano.map(e => [e.equipo, `${e.confederacion}-${e.rama}`]));
+
+  const grupos = new Map(suscripciones.map(s => [s.clave, new Map()])); // clave -> Map(nombre -> equipo)
+  const porNombre = new Map();
+  for (const t of equipos || []) if (t && t.strTeam && !porNombre.has(t.strTeam)) porNombre.set(t.strTeam, t);
+
+  const sinConfederacion = [];
+  for (const t of porNombre.values()) {
+    const suyas = [1, 2, 3, 4, 5, 6, 7].map(i => t[i === 1 ? "idLeague" : `idLeague${i}`]).filter(Boolean).map(String);
+    const destino = new Set(suyas.map(k => membresiaAGrupo.get(k)).filter(Boolean));
+    if (aManoPorNombre.has(t.strTeam)) destino.add(aManoPorNombre.get(t.strTeam));
+    if (destino.size === 0) { sinConfederacion.push(t.strTeam); continue; }
+    const equipo = { id: t.idTeam || null, name: t.strTeam, badge: t.strBadge || null, country: t.strCountry || "", aMano: aManoPorNombre.has(t.strTeam) };
+    for (const g of destino) grupos.get(g).set(t.strTeam, equipo);
+  }
+  // Los de equiposAMano entran aunque el proveedor no los haya regresado en ninguna lista: para
+  // seguirlos solo hace falta el nombre exacto, que ya está comprobado.
+  for (const e of equiposAMano) {
+    const g = grupos.get(`${e.confederacion}-${e.rama}`);
+    if (!g.has(e.equipo)) g.set(e.equipo, { id: null, name: e.equipo, badge: null, country: "", aMano: true });
+  }
+
+  const salida = new Map();
+  for (const [clave, m] of grupos) salida.set(clave, [...m.values()].sort((a, b) => a.name.localeCompare(b.name)));
+  return { grupos: salida, sinConfederacion: sinConfederacion.sort() };
+}
+
 module.exports = {
   clasificarPartidoSelecciones,
   claveDeMembresia,
+  leerClaveDeSuscripcion,
+  esClaveDeSuscripcionSelecciones,
+  esSuscripcionDeSelecciones,
+  casaConSuscripcionDeSelecciones,
+  competenciasDeSuscripcion,
+  competenciasParaListas,
+  armarListasDeSelecciones,
+  suscripciones,
+  equiposAMano,
   confederacionDeCompetencia,
   competenciasDeConfederacion,
   esClaveDeConfederacion,

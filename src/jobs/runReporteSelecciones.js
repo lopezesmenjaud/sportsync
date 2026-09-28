@@ -4,16 +4,20 @@
 // confederación y por rama dice:
 //   1. qué competencias la componen, con su nombre y su temporada actual EN EL PROVEEDOR;
 //   2. cuáles tienen partidos en los próximos 60 días y cuáles están dormidas;
-//   3. cuántas llamadas al proveedor costaría sincronizarla, con la lógica REAL de syncLeague.
+//   3. cuántas llamadas al proveedor costaría sincronizarla: con la regla VIEJA de temporadas
+//      (la lógica real de syncService, leída de su texto) y con la NUEVA (reglaTemporadas).
 // Y además, para decidir lo que sigue:
 //   4. cuántos próximos partidos regresa el proveedor para una selección (lo que usa syncTeam);
-//   5. de dónde saldría la lista de selecciones de cada confederación, y si trae a todas.
+//   5. la lista de selecciones de cada confederación y rama (membresía + equiposAMano), y cuáles
+//      siguen sin confederación;
+//   6. si alguna suscripción de equipo que YA existe se llama como una selección.
 //
 // No escribe nada en ningún lado:
 //   - La base se abre con { readonly: true } y solo para contar partidos que ya estén en
-//     matches. NO carga src/db/database.js ni llama a initializeDatabase(). SIN_BASE=1 la salta.
-//   - Al proveedor solo se le hacen GET de lectura. Sí GASTA peticiones de TheSportsDB (~300
-//     con las 36 claves de hoy); por eso va una pausa entre cada una (PAUSA_MS, 700 por omisión)
+//     matches y revisar choques de nombre. NO carga src/db/database.js ni llama a
+//     initializeDatabase(). SIN_BASE=1 la salta.
+//   - Al proveedor solo se le hacen GET de lectura. Sí GASTA peticiones de TheSportsDB (~290
+//     con las 32 claves de hoy); por eso va una pausa entre cada una (PAUSA_MS, 700 por omisión)
 //     y al final se imprime cuántas gastó.
 //
 // Por qué NO importa syncService.js: importa los repositorios, y ésos cargan database.js, que
@@ -37,10 +41,12 @@ const { TheSportsDbProvider } = require("../providers/theSportsDb");
 const {
   confederaciones,
   competenciasDeConfederacion,
-  claveDeMembresia,
   amistosos,
   RAMAS,
+  competenciasParaListas,
+  armarListasDeSelecciones,
 } = require("../services/seleccionesConfederaciones");
+const { buscarPorTemporadas, anioMayor } = require("../services/reglaTemporadas");
 
 const PAUSA_MS = Number(process.env.PAUSA_MS || 700);
 const SIN_BASE = process.env.SIN_BASE === "1";
@@ -154,6 +160,7 @@ async function main() {
     let acierto = -1;
     let en60 = 0;
     const porTemporada = [];
+    const datos = new Map(); // temporada -> eventos de la temporada completa (para la regla nueva)
     for (let i = 0; i < variantes.length; i++) {
       let eventos = [];
       let error = null;
@@ -165,6 +172,7 @@ async function main() {
       const n30 = eventos.filter(enVentana(fromDate, toDate)).length;
       const n60 = eventos.filter(enVentana(fromDate, hasta60)).length;
       en60 = Math.max(en60, n60);
+      datos.set(variantes[i], eventos);
       porTemporada.push(error ? `${variantes[i]}:error` : `${variantes[i]}:${eventos.length}`);
       if (acierto < 0 && n30 > 0) acierto = i;
     }
@@ -179,6 +187,36 @@ async function main() {
     }
 
     fila.llamadasSync = acierto >= 0 ? acierto + 1 : variantes.length + 1;
+
+    // ── La regla NUEVA de syncLeague (reglaTemporadas), con los mismos datos ──
+    // Costo por corrida = 1 (la lista: su vigencia es de 6 h y el cron de fútbol corre cada 12, así
+    // que en cada corrida del cron se vuelve a pedir) + lo que pida la regla + 1 del respaldo si
+    // las variantes no trajeron nada. Si la lista falla, la regla nueva adivina como la vieja.
+    let lista = null;
+    try {
+      lista = await pedir(() => provider.getSeasons(clave));
+      if (!lista.length) lista = null;
+    } catch (e) {
+      lista = null;
+    }
+    const anioActual = Number(fromDate.slice(0, 4));
+    for (const t of lista || []) {
+      const a = anioMayor(t);
+      if (datos.has(t) || a === null || a < anioActual) continue;
+      try {
+        datos.set(t, await pedir(() => provider.getEventsByLeagueAndSeason({ leagueId: clave, season: t })));
+      } catch (e) {
+        datos.set(t, []);
+      }
+      en60 = Math.max(en60, datos.get(t).filter(enVentana(fromDate, hasta60)).length);
+    }
+    const nueva = await buscarPorTemporadas({
+      variantes, lista, anioActual,
+      pedirTemporada: async (t) => (datos.get(t) || []).filter(enVentana(fromDate, toDate)),
+    });
+    fila.llamadasNueva = 1 + nueva.llamadas + (nueva.camino === "variante" ? 0 : 1);
+    fila.caminoNueva = nueva.camino === "ninguno" ? "respaldo" : `${nueva.camino} "${nueva.temporada}"`;
+    fila.listaDelProveedor = lista ? lista.slice(-4).join(",") : "(falló o vacía)";
     fila.acertaCon = acierto >= 0 ? variantes[acierto] : "(ninguna: respaldo)";
     fila.partidos60 = en60;
     fila.proximo = proximo ? `${proximo.dateEvent} (temp. ${proximo.strSeason || "?"})` : "-";
@@ -206,20 +244,18 @@ async function main() {
 
   // ── 1-3: por confederación y por rama ──
   const totales = [];
-  const ligasEstudiadas = new Map(); // clave -> fila, para no pedir dos veces
   for (const conf of confederaciones) {
     for (const rama of RAMAS) {
       const comps = competenciasDeConfederacion(conf.clave, rama);
       console.log(`\n── ${conf.nombre.toUpperCase()} · ${rama} ──`);
       if (comps.length === 0) {
         console.log("   (sin competencias en la tabla)");
-        totales.push({ confederacion: conf.nombre, rama, competencias: 0, activas: 0, dormidas: 0, llamadasPorSync: 0 });
+        totales.push({ confederacion: conf.nombre, rama, competencias: 0, activas: 0, dormidas: 0, llamadasPorSync: 0, nuevaPorSync: 0 });
         continue;
       }
       const filas = [];
       for (const c of comps) {
         const fila = await estudiarCompetencia(c.clave, c.base);
-        ligasEstudiadas.set(c.clave, fila);
         filas.push(fila);
       }
       console.table(filas.map(f => ({
@@ -229,12 +265,13 @@ async function main() {
         estado: f.estado,
         "partidos 60d": f.partidos60,
         "próximo": f.proximo,
-        "llamadas/sync": f.llamadasSync,
-        "acierta con": f.acertaCon,
+        "vieja/sync": f.llamadasSync,
+        "nueva/sync": f.llamadasNueva,
+        "nueva por": f.caminoNueva,
         "ya en matches": f.yaEnMatches,
       })));
       for (const f of filas) {
-        console.log(`   ${f.clave} temporadas → ${f.temporadasVistas}${f.nota ? `   ⚠ ${f.nota}` : ""}`);
+        console.log(`   ${f.clave} temporadas → ${f.temporadasVistas} | lista (últimas): ${f.listaDelProveedor}${f.nota ? `   ⚠ ${f.nota}` : ""}`);
       }
       totales.push({
         confederacion: conf.nombre,
@@ -243,6 +280,7 @@ async function main() {
         activas: filas.filter(f => f.estado === "ACTIVA").length,
         dormidas: filas.filter(f => f.estado !== "ACTIVA").length,
         llamadasPorSync: filas.reduce((s, f) => s + f.llamadasSync, 0),
+        nuevaPorSync: filas.reduce((s, f) => s + f.llamadasNueva, 0),
       });
     }
   }
@@ -265,14 +303,21 @@ async function main() {
   console.log("========================================================");
   console.table(totales);
   const porConf = new Map();
-  for (const t of totales) porConf.set(t.confederacion, (porConf.get(t.confederacion) || 0) + t.llamadasPorSync);
-  console.table([...porConf].map(([confederacion, llamadas]) => ({
+  for (const t of totales) {
+    const p = porConf.get(t.confederacion) || { vieja: 0, nueva: 0 };
+    p.vieja += t.llamadasPorSync; p.nueva += t.nuevaPorSync;
+    porConf.set(t.confederacion, p);
+  }
+  console.table([...porConf].map(([confederacion, p]) => ({
     confederacion,
-    "llamadas por sync (ambas ramas)": llamadas,
-    "al día (cron de fútbol cada 12 h)": llamadas * 2,
+    "vieja por sync (ambas ramas)": p.vieja,
+    "NUEVA por sync (ambas ramas)": p.nueva,
+    "nueva al día (cron cada 12 h)": p.nueva * 2,
   })));
   const total = totales.reduce((s, t) => s + t.llamadasPorSync, 0);
-  console.log(`TOTAL, todas las confederaciones y ambas ramas: ${total} llamadas por sync, ~${total * 2} al día.`);
+  const totalNueva = totales.reduce((s, t) => s + t.nuevaPorSync, 0);
+  console.log(`TOTAL, todas las confederaciones y ambas ramas: vieja ${total} → NUEVA ${totalNueva} llamadas por sync (~${totalNueva * 2} al día).`);
+  console.log("La nueva incluye 1 llamada por competencia para la lista de temporadas (vigencia 6 h, cron cada 12 h).");
   console.log("Se suma una corrida en cada arranque del servidor y una por competencia al suscribirse.");
   console.log("Solo se paga lo que alguien siga: syncMatches solo baja ligas con al menos una suscripción.");
 
@@ -290,52 +335,56 @@ async function main() {
     for (const e of siguientes) console.log(`      ${e.dateEvent}  ${e.strLeague}  ${e.strHomeTeam} vs ${e.strAwayTeam}`);
   }
 
-  // ── 5: de dónde saldría la lista de selecciones de cada confederación ──
+  // ── 5: la lista de selecciones de cada confederación y rama ──
   //
-  // search_all_teams.php?l=<liga> regresa solo las selecciones cuya competencia PRINCIPAL
-  // (idLeague) es esa liga. Por eso se piden todas las de la tabla, más el Mundial y los
-  // amistosos. A cada selección se le asigna confederación SOLO por la competencia de membresía
-  // (claveDeMembresia: su eliminatoria o su campeonato continental), buscada entre todas sus
-  // competencias (idLeague a idLeague7). Cualquier competencia no sirve: la Copa Oro W y la Copa
-  // América tienen invitados de otras confederaciones.
+  // search_all_teams.php?l=<competencia> regresa solo las selecciones cuya competencia PRINCIPAL
+  // es ésa. Se piden las de todas las competencias de la tabla (confederaciones, amistosos y
+  // otrasConocidas) y armarListasDeSelecciones las acomoda: por la competencia de membresía de
+  // cada grupo, más equiposAMano. Es la MISMA función que usará el endpoint de la pantalla.
   console.log("\n========================================================");
-  console.log(" 5) SELECCIONES POR CONFEDERACIÓN  (search_all_teams por competencia principal)");
+  console.log(" 5) SELECCIONES POR CONFEDERACIÓN Y RAMA  (membresía + equiposAMano)");
   console.log("========================================================");
-  const clavesAConf = new Map(); // clave de membresía -> { conf, rama }
-  for (const conf of confederaciones) {
-    for (const rama of RAMAS) {
-      const k = claveDeMembresia(conf.clave, rama);
-      if (k) clavesAConf.set(k, { conf: conf.clave, rama });
-    }
-  }
-  const ligasParaListas = [...ligasEstudiadas.values(), ...filasAmistosos];
-  const equipos = new Map(); // idTeam -> equipo
+  const fichas = [];
   const topadas = [];
-  for (const liga of ligasParaListas) {
-    if (!liga.nombreProveedor || liga.nombreProveedor.startsWith("(")) continue;
-    const lista = (await getJson("search_all_teams.php", { l: liga.nombreProveedor })).teams || [];
-    if (lista.length > 0 && lista.length % 10 === 0) topadas.push(`${liga.nombreProveedor} (${lista.length})`);
-    for (const t of lista) equipos.set(t.idTeam, t);
-  }
-  const porGrupo = new Map();
-  const sinConf = [];
-  for (const t of equipos.values()) {
-    const suyas = [1, 2, 3, 4, 5, 6, 7].map(i => t[i === 1 ? "idLeague" : `idLeague${i}`]).filter(Boolean);
-    const grupos = new Set(suyas.map(k => clavesAConf.get(String(k))).filter(Boolean).map(g => `${g.conf}|${g.rama}`));
-    if (grupos.size === 0) { sinConf.push(t.strTeam); continue; }
-    for (const g of grupos) {
-      if (!porGrupo.has(g)) porGrupo.set(g, []);
-      porGrupo.get(g).push(t.strTeam);
+  const fallidas = [];
+  for (const c of competenciasParaListas()) {
+    try {
+      const lista = (await getJson("search_all_teams.php", { l: c.base })).teams || [];
+      if (lista.length > 0 && lista.length % 10 === 0) topadas.push(`${c.base} (${lista.length})`);
+      fichas.push(...lista.filter(t => t.strSport === "Soccer"));
+    } catch (e) {
+      fallidas.push(`${c.base}: ${e.message}`);
     }
   }
-  for (const [g, nombres] of [...porGrupo].sort()) {
-    nombres.sort();
-    console.log(`   ${g.replace("|", " · ")}: ${nombres.length} selecciones`);
-    console.log(`      ${nombres.join(", ")}`);
+  const { grupos, sinConfederacion } = armarListasDeSelecciones(fichas);
+  for (const [clave, equipos] of grupos) {
+    const aMano = equipos.filter(e => e.aMano).length;
+    console.log(`   ${clave}: ${equipos.length} selecciones${aMano ? ` (${aMano} de equiposAMano)` : ""}`);
+    console.log(`      ${equipos.map(e => e.name).join(", ") || "(ninguna)"}`);
   }
-  console.log(`   Sin confederación deducible (${sinConf.length}): ${sinConf.sort().join(", ") || "(ninguna)"}`);
-  if (topadas.length) {
-    console.log(`   ⚠ Listas con un múltiplo exacto de 10 (posible tope del proveedor): ${topadas.join(", ")}`);
+  console.log(`\n   SIGUEN SIN CONFEDERACIÓN (${sinConfederacion.length}): ${sinConfederacion.join(", ") || "(ninguna)"}`);
+  console.log("   Ésas no salen en ninguna lista. Si alguna importa, va a equiposAMano en selecciones.json.");
+  if (fallidas.length) console.log(`   ⚠ Listas que no se pudieron pedir (las de arriba pueden venir incompletas): ${fallidas.join("; ")}`);
+  if (topadas.length) console.log(`   ⚠ Listas con un múltiplo exacto de 10 (posible tope del proveedor): ${topadas.join(", ")}`);
+
+  // ── 6: ¿algún nombre de selección choca con una suscripción de equipo que YA existe? ──
+  //
+  // Una suscripción de equipo empata por nombre en CUALQUIER competencia. Si alguien sigue hoy un
+  // equipo que se llama exactamente como una selección, en cuanto el sync baje las competencias de
+  // selecciones le empezarían a llegar esos partidos. Tiene que salir vacío.
+  console.log("\n========================================================");
+  console.log(" 6) SUSCRIPCIONES DE EQUIPO QUE YA EXISTEN CON NOMBRE DE SELECCIÓN  (tiene que ser 0)");
+  console.log("========================================================");
+  if (SIN_BASE) {
+    console.log("   (saltado, SIN_BASE=1)");
+  } else {
+    const nombresSeleccion = new Set([...fichas.map(t => t.strTeam), ...[...grupos.values()].flat().map(e => e.name)]);
+    const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+    const deEquipo = db.prepare("SELECT id, sport, competitionKey, teamName FROM subscriptions WHERE teamName IS NOT NULL").all();
+    db.close();
+    const choques = deEquipo.filter(s => nombresSeleccion.has(s.teamName));
+    console.log(`   Suscripciones de equipo revisadas: ${deEquipo.length}. Con nombre de selección: ${choques.length}`);
+    if (choques.length) console.table(choques);
   }
 
   console.log(`\nListo. No se escribió nada. Este reporte gastó ${llamadasDelReporte} llamadas a TheSportsDB.`);
