@@ -43,8 +43,7 @@
       "varonil": [
         { "clave": "5518", "base": "World Cup Qualifying UEFA" },
         { "clave": "4490", "base": "UEFA Nations League" },
-        { "clave": "4502", "base": "UEFA European Championships" },
-        { "clave": "5519", "base": "UEFA European Championships Qualifying", "_revisar": "lookupleague la regresa con temporada actual vacía y sin fecha del primer partido. Existe, pero puede no tener calendario cargado." }
+        { "clave": "4502", "base": "UEFA European Championships" }
       ],
       "femenil": [
         { "clave": "5840", "base": "Womens World Cup Qualifying UEFA", "_revisar": "lookupleague la regresa sin fecha del primer partido." },
@@ -72,8 +71,7 @@
       "nombre": "AFC (Asia)",
       "varonil": [
         { "clave": "5513", "base": "World Cup Qualifying AFC" },
-        { "clave": "4866", "base": "AFC Asian Cup" },
-        { "clave": "5521", "base": "AFC Asian Cup Qualifying" }
+        { "clave": "4866", "base": "AFC Asian Cup" }
       ],
       "femenil": [
         { "clave": "5179", "base": "Asian Cup Women" }
@@ -118,6 +116,8 @@
     }
   ],
   "otrasConocidas": [
+    { "clave": "5519", "base": "UEFA European Championships Qualifying", "rama": "varonil", "porque": "SALIÓ de UEFA varonil el 28 sep 2026: su lista de temporadas en el proveedor está VACÍA, así que nunca trae un partido y sincronizarla cuesta 6 llamadas por corrida para nada. Si algún día el proveedor la llena (search_all_seasons.php?id=5519 deja de venir vacía), regresa a UEFA varonil." },
+    { "clave": "5521", "base": "AFC Asian Cup Qualifying", "rama": "varonil", "porque": "SALIÓ de AFC varonil el 28 sep 2026: su lista de temporadas en el proveedor está VACÍA, así que nunca trae un partido y sincronizarla cuesta 6 llamadas por corrida para nada. Si algún día el proveedor la llena (search_all_seasons.php?id=5521 deja de venir vacía), regresa a AFC varonil." },
     { "clave": "5819", "base": "Finalissima", "rama": "varonil", "porque": "Campeón de Europa contra campeón de Sudamérica: es de dos confederaciones." },
     { "clave": "5182", "base": "COSAFA Cup", "rama": "varonil", "porque": "Subregional del sur de África.", "_revisar": "¿Debería llegar con 'CAF'?" },
     { "clave": "5105", "base": "FIFA Arab Cup", "rama": "varonil", "porque": "Mezcla selecciones de la AFC y de la CAF." },
@@ -133,6 +133,7 @@
   "equiposAMano": [
     { "equipo": "Portugal", "confederacion": "uefa", "rama": "varonil" },
     { "equipo": "Russia", "confederacion": "uefa", "rama": "varonil", "_revisar": "Miembro de la UEFA, pero suspendida por UEFA y FIFA desde 2022: hoy solo juega amistosos." },
+    { "equipo": "Russia Women", "confederacion": "uefa", "rama": "femenil", "_revisar": "Miembro de la UEFA, pero suspendida por UEFA y FIFA desde 2022: hoy solo juega amistosos." },
     { "equipo": "Bonaire", "confederacion": "concacaf", "rama": "varonil", "_revisar": "Miembro de Concacaf que no es de la FIFA: juega Nations League, no eliminatorias." },
     { "equipo": "French Guiana", "confederacion": "concacaf", "rama": "varonil", "_revisar": "Miembro de Concacaf que no es de la FIFA." },
     { "equipo": "Guadeloupe", "confederacion": "concacaf", "rama": "varonil", "_revisar": "Miembro de Concacaf que no es de la FIFA." },

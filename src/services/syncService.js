@@ -5,6 +5,9 @@ const { subscriptionRepository } = require("../repositories/subscriptionReposito
 const { syncTennis } = require("./tennisSyncService");
 const { leagueSeasonsCacheRepository } = require("../repositories/leagueSeasonsCacheRepositorySqlite");
 const { buscarPorTemporadas } = require("./reglaTemporadas");
+// Una suscripción por confederación ("concacaf-varonil") NO es una liga del proveedor: se
+// sincronizan sus competencias (5516, 5280, 4873, 5522...). Ver src/data/selecciones.json.
+const { esSuscripcionDeSelecciones, competenciasDeSuscripcion } = require("./seleccionesConfederaciones");
 
 // Vigencia de la lista de temporadas guardada. 6 h y no 24: el proveedor a veces crea una
 // temporada nueva a media competencia (las finales de la Nations League de 2019 y 2021 quedaron
@@ -348,7 +351,9 @@ async function syncMatches() {
       haySuscripcionesDeTenis = true;
       continue;
     }
-    if (sub.competitionKey && !sub.competitionKey.startsWith("national_")) {
+    if (esSuscripcionDeSelecciones(sub)) {
+      for (const clave of competenciasDeSuscripcion(sub.competitionKey)) leagueMap.set(clave, normalizeSport(sub.sport));
+    } else if (sub.competitionKey && !sub.competitionKey.startsWith("national_")) {
       leagueMap.set(sub.competitionKey, normalizeSport(sub.sport));
     } else if (sub.teamName && !sub.competitionKey) {
       teamSubs.push(sub);
@@ -411,7 +416,7 @@ async function syncSport(sport) {
   const leagueIds        = [...new Set(
     allSubscriptions
       .filter(s => normalizeSport(s.sport) === normalizedTarget && s.competitionKey && !s.competitionKey.startsWith("national_"))
-      .map(s => s.competitionKey)
+      .flatMap(s => esSuscripcionDeSelecciones(s) ? competenciasDeSuscripcion(s.competitionKey) : [s.competitionKey])
   )];
 
   // Equipos del mismo deporte

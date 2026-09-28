@@ -2,6 +2,11 @@ const { subscriptionRepository } = require("../repositories/subscriptionReposito
 const { matchRepository } = require("../repositories/matchRepositorySqlite");
 const { normalizeSport } = require("./syncService");
 const { clasificarTorneoTenis, esClaveDeCategoria } = require("./tenisCategorias");
+// Suscripciones por CONFEDERACIÓN ("concacaf-varonil", ...): casan por la tabla de
+// src/data/selecciones.json. Pura adición: ninguna suscripción que existía usa esas 14 claves
+// (medido con runCompararSuscripcionesSelecciones antes de conectar esto). Las de SELECCIÓN
+// ("Mexico") son de equipo de siempre y no pasan por aquí.
+const { esSuscripcionDeSelecciones, casaConSuscripcionDeSelecciones } = require("./seleccionesConfederaciones");
 
 // Suscripción de tenis POR CATEGORÍA: sin jugador y con competitionKey = una categoría de
 // src/data/tenisTorneos.json ("grand-slam-atp", "atp-250", ...). Para ésas el partido se
@@ -29,6 +34,10 @@ function matchAppliesToSubscription(match, subscription) {
 
   if (esSuscripcionPorCategoriaTenis(subscription)) {
     return casaConCategoriaTenis(match, subscription);
+  }
+
+  if (esSuscripcionDeSelecciones(subscription)) {
+    return casaConSuscripcionDeSelecciones(match, subscription);
   }
 
   if (
@@ -76,6 +85,7 @@ function isInclusionReason(match, subscription) {
   // Misma regla que en matchAppliesToSubscription, para que lo que llega al calendario
   // también se vea en "Próximos partidos".
   if (esSuscripcionPorCategoriaTenis(subscription)) return casaConCategoriaTenis(match, subscription);
+  if (esSuscripcionDeSelecciones(subscription)) return casaConSuscripcionDeSelecciones(match, subscription);
   if (subscription.teamName) {
     return match.homeParticipantName === subscription.teamName ||
            match.awayParticipantName === subscription.teamName;

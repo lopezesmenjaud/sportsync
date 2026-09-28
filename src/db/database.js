@@ -266,6 +266,19 @@ async function initializeDatabase() {
     `);
     console.log("✅ League seasons cache table ready");
 
+    // Listas de selecciones por confederación y rama (GET /api/selecciones/:clave/equipos). Se
+    // arman con ~43 llamadas al proveedor, así que se guardan. NO se borra al arrancar, igual que
+    // league_teams_cache, y nunca se escribe vacía ni incompleta (ver setSeleccionesCache en
+    // server.js). Una sola fila (clave "listas") con las 14 listas.
+    await runAsync(`
+      CREATE TABLE IF NOT EXISTS selecciones_equipos_cache (
+        clave    TEXT PRIMARY KEY,
+        data     TEXT NOT NULL,
+        cachedAt TEXT NOT NULL
+      )
+    `);
+    console.log("✅ Selecciones equipos cache table ready");
+
     // Jugadores de tenis vistos en los barridos. Es la lista que sirve el picker.
     //
     // NO se llena con peticiones propias: los datos ya vienen dentro de la respuesta que el

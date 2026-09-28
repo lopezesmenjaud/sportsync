@@ -22,6 +22,14 @@ const { requireUser, optionalUser, isLegacyAllowed } = require("./src/middleware
 const { withRateLimitRetry, sleep, backfillUserEvents } = require("./src/services/userBackfillService");
 const { esClaveDeCategoria, categorias: categoriasTenis, esClaveDeCircuito, dondeVerTenis } = require("./src/services/tenisCategorias");
 const { partidoPublicoHandler, equipoPublicoHandler, sitemapHandler, seguirHandler } = require("./src/routes/partidoPublico");
+const {
+  esClaveDeSuscripcionSelecciones,
+  competenciasDeSuscripcion,
+  suscripciones: suscripcionesSelecciones,
+  amistosos: amistososSelecciones,
+  competenciasParaListas,
+  armarListasDeSelecciones,
+} = require("./src/services/seleccionesConfederaciones");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -880,6 +888,114 @@ const TENIS_LEAGUE_A_TOUR = { "4464": "atp", "4517": "wta" };
 // tuviera escritas a mano, un cambio en la tabla lo dejaría ofreciendo claves que ya no casan.
 app.get("/api/tenis/categorias", (req, res) => {
   res.json({ ok: true, categorias: categoriasTenis.map(c => ({ clave: c.clave, nombre: c.nombre })) });
+});
+
+// ── Selecciones nacionales ──
+//
+// Las 14 cosas seguibles por confederación ("concacaf-varonil", ...). Salen de
+// src/data/selecciones.json, sin proveedor. sinCompetencias marca la OFC femenil: existe como
+// clave pero seguirla no trae nada, y la pantalla debería esconderla.
+app.get("/api/selecciones/confederaciones", (req, res) => {
+  res.json({
+    ok: true,
+    suscripciones: suscripcionesSelecciones.map(s => ({
+      clave: s.clave, confederacion: s.confederacion, nombre: s.nombre, rama: s.rama,
+      competencias: s.competencias, sinCompetencias: s.competencias.length === 0,
+    })),
+  });
+});
+
+// La lista de selecciones de UNA confederación y rama, para "Seguir a México".
+//
+// El proveedor no tiene esa lista: se arma con las ~43 listas de search_all_teams de las
+// competencias de la tabla (armarListasDeSelecciones: membresía + equiposAMano). Como son ~43
+// llamadas, el resultado se guarda en selecciones_equipos_cache (las 14 listas en una fila) con
+// las mismas reglas que league_teams_cache: se sirve aunque esté vencido y se refresca por detrás,
+// nunca se escribe vacío ni incompleto, un solo armado a la vez, y pausa tras un armado fallido.
+// Cada equipo trae name = el nombre EXACTO del proveedor: es el teamName de la suscripción.
+const SELECCIONES_CACHE_TTL_DAYS = 7;
+const SELECCIONES_CACHE_CLAVE = "listas";
+let armadoDeSeleccionesEnVuelo = null;
+let armadoDeSeleccionesFallidoEn = 0;
+let ultimoArmadoParcial = null; // para no reintentar las ~43 llamadas en cada visita si nunca hubo caché
+
+const getSeleccionesCache = () => new Promise((resolve) => {
+  db.get(`SELECT data, cachedAt FROM selecciones_equipos_cache WHERE clave = ?`, [SELECCIONES_CACHE_CLAVE], (err, row) => {
+    if (err) { console.warn(`[selecciones] caché ILEGIBLE: ${err.message}`); return resolve(null); }
+    if (!row) return resolve(null);
+    try {
+      const data = JSON.parse(row.data);
+      if (!data || !data.grupos) { console.warn("[selecciones] caché CORRUPTO"); return resolve(null); }
+      resolve({ data, cachedAt: row.cachedAt });
+    } catch (e) {
+      console.warn(`[selecciones] caché CORRUPTO (JSON ilegible): ${e.message}`);
+      resolve(null);
+    }
+  });
+});
+
+const setSeleccionesCache = (data) => new Promise((resolve, reject) => {
+  const total = Object.values(data.grupos || {}).reduce((s, l) => s + l.length, 0);
+  if (total === 0) return resolve(false);
+  db.run(`INSERT OR REPLACE INTO selecciones_equipos_cache (clave, data, cachedAt) VALUES (?, ?, ?)`,
+    [SELECCIONES_CACHE_CLAVE, JSON.stringify(data), new Date().toISOString()],
+    (err) => { if (err) reject(err); else resolve(true); });
+});
+
+async function armarSelecciones() {
+  const comps = competenciasParaListas();
+  const fichas = [];
+  let fallidas = 0;
+  let siguiente = 0;
+  // 6 a la vez: ~43 llamadas en unos segundos, sin acercarse al tope por minuto del proveedor.
+  const trabajador = async () => {
+    while (siguiente < comps.length) {
+      const c = comps[siguiente++];
+      const data = await safeFetchJson(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/search_all_teams.php?l=${encodeURIComponent(c.base)}`);
+      if (data === null) { fallidas += 1; continue; }
+      fichas.push(...(data.teams || []).filter(t => t && t.strSport === "Soccer"));
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, trabajador));
+  const { grupos, sinConfederacion } = armarListasDeSelecciones(fichas);
+  return { data: { grupos: Object.fromEntries(grupos), sinConfederacion }, completo: fallidas === 0, fallidas };
+}
+
+function refrescarSelecciones() {
+  if (armadoDeSeleccionesEnVuelo) return armadoDeSeleccionesEnVuelo;
+  armadoDeSeleccionesEnVuelo = (async () => {
+    const r = await armarSelecciones();
+    if (r.completo) {
+      ultimoArmadoParcial = null;
+      try { await setSeleccionesCache(r.data); } catch (e) { console.warn(`[selecciones] no se pudo guardar el caché: ${e.message}`); }
+    } else {
+      armadoDeSeleccionesFallidoEn = Date.now();
+      ultimoArmadoParcial = r;
+      console.warn(`[selecciones] armado INCOMPLETO: ${r.fallidas} lista(s) fallaron; no se guarda en caché`);
+    }
+    return r;
+  })().finally(() => { armadoDeSeleccionesEnVuelo = null; });
+  return armadoDeSeleccionesEnVuelo;
+}
+
+app.get("/api/selecciones/:clave/equipos", async (req, res) => {
+  const clave = String(req.params.clave || "").trim().toLowerCase();
+  if (!esClaveDeSuscripcionSelecciones(clave)) {
+    return res.status(404).json({ ok: false, error: "Confederación desconocida" });
+  }
+  try {
+    const enPausa = Date.now() - armadoDeSeleccionesFallidoEn < TEAMS_REFRESH_COOLDOWN_MIN * 60 * 1000;
+    const cache = await getSeleccionesCache();
+    if (cache) {
+      const vencido = Date.now() - Date.parse(cache.cachedAt) > SELECCIONES_CACHE_TTL_DAYS * 24 * 60 * 60 * 1000;
+      if (vencido && !enPausa) refrescarSelecciones().catch(e => console.warn(`[selecciones] refresco falló: ${e.message}`));
+      return res.json({ ok: true, clave, equipos: cache.data.grupos[clave] || [], cachedAt: cache.cachedAt, completo: true });
+    }
+    const r = (enPausa && ultimoArmadoParcial) ? ultimoArmadoParcial : await refrescarSelecciones();
+    res.json({ ok: true, clave, equipos: r.data.grupos[clave] || [], cachedAt: null, completo: r.completo });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
 });
 
 // ── Jugadores ──
@@ -2011,6 +2127,25 @@ app.post("/subscriptions", requireUser(), async (req, res) => {
           } else {
             const r = await backfillUserEvents(userId);
             console.log(`[sub] Categoría ${competitionKey}: relleno inmediato de ${userId}, +${r.created} evento(s)`);
+          }
+        } else if (!teamName && esClaveDeSuscripcionSelecciones(competitionKey)) {
+          // Confederación ("concacaf-varonil"): NO es una liga de TheSportsDB. Se bajan SUS
+          // competencias y luego se rellena a ESTE usuario con lo que ya esté en la base, porque
+          // syncMatchToCalendars solo agenda los partidos que CAMBIARON: los que ya estaban (los
+          // bajó otra suscripción) no le llegarían hasta el siguiente backfill del scheduler.
+          for (const clave of competenciasDeSuscripcion(competitionKey)) {
+            const results = await syncLeague(clave, sport);
+            for (const r of results) {
+              try { await syncMatchToCalendars(r.newMatch, skipUserIds, subsCache); } catch (e) { /* skip */ }
+            }
+          }
+          const cuenta = await googleAccountRepository.getByUserId(userId);
+          const motivo = cuenta ? shouldSkipUser(cuenta, skipUserIds) : "sin cuenta de Google";
+          if (motivo) {
+            console.log(`[sub] Confederación ${competitionKey}: relleno inmediato saltado para ${userId} (${motivo})`);
+          } else {
+            const r = await backfillUserEvents(userId);
+            console.log(`[sub] Confederación ${competitionKey}: relleno inmediato de ${userId}, +${r.created} evento(s)`);
           }
         } else if (competitionKey && !competitionKey.startsWith("national_")) {
           const results = await syncLeague(competitionKey, sport);
