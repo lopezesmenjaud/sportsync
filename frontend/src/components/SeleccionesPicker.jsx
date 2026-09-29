@@ -48,7 +48,7 @@ function paraMostrar(nombreProveedor) {
 
 // Para buscar sin que importen mayúsculas ni acentos: "mexico" encuentra "México".
 function sinAcentos(texto) {
-  return String(texto || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  return String(texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 }
 
 const MSG_SIN_PARTIDOS = 'Por ahora no hay partidos en los próximos 30 días. Cuando se acerquen, te llegan solos a tu calendario.'
