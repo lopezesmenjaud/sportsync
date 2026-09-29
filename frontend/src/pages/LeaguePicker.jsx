@@ -6,7 +6,6 @@ import { getUserId } from '../auth'
 import { obtenerEstadoGoogle, debeAvisarDePermiso, marcarAvisoDePermisoVisto, invalidarEstadoGoogle } from '../googleStatus'
 import CalendarConnectModal from '../components/CalendarConnectModal'
 import AvisoError from '../components/AvisoError'
-import SeleccionesPicker from '../components/SeleccionesPicker'
 import { API_BASE } from '../config'
 
 const SPORT_LABELS = {
@@ -472,13 +471,26 @@ export default function LeaguePicker() {
           )
         })()}
 
-        {/* Selecciones nacionales: arriba de las ligas, que no se mueven. Es la sección NUEVA; la
-            vieja ('selecciones' con hidden: true, más abajo) sigue apagada. */}
-        {sport === 'futbol' && (
-          <SeleccionesPicker
-            userId={userId}
-            onSuscrito={async () => { if (debeAvisarDePermiso(await obtenerEstadoGoogle())) setMostrarAviso(true) }}
-          />
+        {/* Selecciones nacionales: UN renglón arriba de las ligas, que no se mueven. Lleva a su
+            propia pantalla (SeleccionesPage) con el mismo patrón que "Ver equipos →" de una liga.
+            Es la sección NUEVA; la vieja ('selecciones' con hidden: true, más abajo) sigue apagada.
+            Siempre se puede entrar: el estado (qué sigues) se carga allá, del servidor, cada vez. */}
+        {sport === 'futbol' && (!search || 'futbol de selecciones nacionales mundial copa oro eurocopa copa america concacaf uefa conmebol'.includes(search.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''))) && (
+          <div
+            onClick={() => navigate('/dashboard/futbol/selecciones')}
+            style={{ background: '#ffffff', border: '0.5px solid #e8e8e8', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', marginBottom: 32 }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#10B1C7' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#e8e8e8' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(255,92,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, border: '0.5px solid #ffe8b0' }}>🌎</div>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 500, color: '#1C2430' }}>Fútbol de selecciones</div>
+                <div style={{ fontSize: 12, color: '#666666', marginTop: 2 }}>Confederaciones y selecciones, varonil y femenil</div>
+              </div>
+            </div>
+            <span style={{ fontSize: 13, color: '#10B1C7', fontWeight: 500 }}>Ver selecciones →</span>
+          </div>
         )}
 
         {categories.length === 0 && (

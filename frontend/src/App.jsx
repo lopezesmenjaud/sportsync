@@ -16,6 +16,7 @@ import LandingPage from './pages/LandingPage'
 import Dashboard from './pages/Dashboard'
 import LeaguePicker from './pages/LeaguePicker'
 import TeamPicker from './pages/TeamPicker'
+import SeleccionesPage from './pages/SeleccionesPage'
 import UpcomingMatches from './pages/UpcomingMatches'
 import NearbyMatches from './pages/NearbyMatches'
 import TravelPlanner from './pages/TravelPlanner'
@@ -220,6 +221,9 @@ function App() {
         ))}
         <Route path="/dashboard"                   element={<Protected><Dashboard /></Protected>} />
         <Route path="/dashboard/:sport"            element={<Protected><LeaguePicker /></Protected>} />
+        {/* Ruta fija: react-router le da prioridad sobre /dashboard/:sport/:leagueId, así que
+            "selecciones" nunca se confunde con el id de una liga. */}
+        <Route path="/dashboard/futbol/selecciones" element={<Protected><SeleccionesPage /></Protected>} />
         <Route path="/dashboard/:sport/:leagueId"  element={<Protected><TeamPicker /></Protected>} />
         <Route path="/upcoming"                    element={<Protected><UpcomingMatches /></Protected>} />
         <Route path="/nearby"                      element={<Protected><NearbyMatches /></Protected>} />
