@@ -6,6 +6,7 @@ import { getUserId } from '../auth'
 import { obtenerEstadoGoogle, debeAvisarDePermiso, marcarAvisoDePermisoVisto, invalidarEstadoGoogle } from '../googleStatus'
 import CalendarConnectModal from '../components/CalendarConnectModal'
 import AvisoError from '../components/AvisoError'
+import SeleccionesPicker from '../components/SeleccionesPicker'
 import { API_BASE } from '../config'
 
 const SPORT_LABELS = {
@@ -470,6 +471,15 @@ export default function LeaguePicker() {
             </div>
           )
         })()}
+
+        {/* Selecciones nacionales: arriba de las ligas, que no se mueven. Es la sección NUEVA; la
+            vieja ('selecciones' con hidden: true, más abajo) sigue apagada. */}
+        {sport === 'futbol' && (
+          <SeleccionesPicker
+            userId={userId}
+            onSuscrito={async () => { if (debeAvisarDePermiso(await obtenerEstadoGoogle())) setMostrarAviso(true) }}
+          />
+        )}
 
         {categories.length === 0 && (
           <div style={{ textAlign: 'center', padding: '60px 0', color: '#666666', fontSize: 14 }}>
