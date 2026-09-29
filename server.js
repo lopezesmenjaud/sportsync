@@ -11,7 +11,7 @@ const { tennisPlayerRepository } = require("./src/repositories/tennisPlayerRepos
 const { googleAccountRepository } = require("./src/repositories/googleAccountRepositorySqlite");
 const { syncMatchToCalendars } = require("./src/services/calendarSyncService");
 const { invalidate: invalidateRoundLabel } = require("./src/services/roundLabelService");
-const { syncMatches, syncLeague, syncTeam, normalizeSport } = require("./src/services/syncService");
+const { syncMatches, syncLeague, syncTeam, normalizeSport, nuevoContador } = require("./src/services/syncService");
 const { getUserSide, isInclusionReason } = require("./src/services/subscriptionMatchService");
 const { matchRepository } = require("./src/repositories/matchRepositorySqlite");
 const { startScheduler, shouldSkipUser } = require("./src/services/scheduler");
@@ -895,15 +895,95 @@ app.get("/api/tenis/categorias", (req, res) => {
 // Las 14 cosas seguibles por confederación ("concacaf-varonil", ...). Salen de
 // src/data/selecciones.json, sin proveedor. sinCompetencias marca la OFC femenil: existe como
 // clave pero seguirla no trae nada, y la pantalla debería esconderla.
-app.get("/api/selecciones/confederaciones", (req, res) => {
+//
+// proximos30d: partidos de sus competencias que YA están en la base para los próximos 30 días (un
+// conteo, sin proveedor). Solo dice la verdad para las casillas que alguien sigue: las que nadie
+// sigue no se sincronizan y salen en 0 aunque tengan partidos. Por eso la pantalla lo muestra solo
+// en las que la persona sigue. null si la consulta falló.
+app.get("/api/selecciones/confederaciones", async (req, res) => {
+  const todas = [...new Set(suscripcionesSelecciones.flatMap(s => s.competencias.map(c => c.clave)))];
+  const porClave = await contarProximos30dPorClave(todas);
   res.json({
     ok: true,
     suscripciones: suscripcionesSelecciones.map(s => ({
       clave: s.clave, confederacion: s.confederacion, nombre: s.nombre, rama: s.rama,
       competencias: s.competencias, sinCompetencias: s.competencias.length === 0,
+      proximos30d: porClave ? s.competencias.reduce((n, c) => n + (porClave.get(c.clave) || 0), 0) : null,
     })),
   });
 });
+
+// Tope para esperar la bajada de partidos de una confederación en POST /subscriptions. Render deja
+// que una respuesta HTTP tarde hasta 100 minutos, y la petición va directo del navegador a Render
+// (no pasa por el proxy de Vercel), así que 25 s no choca con ningún tope. Lo normal son 3-6 s.
+const CONFEDERACION_SYNC_TOPE_MS = 25 * 1000;
+
+// Baja los partidos de las competencias de una confederación, una tras otra. Nunca rechaza: una
+// liga que falla se registra y se sigue con la siguiente.
+//
+// Devuelve { cambios, ligas, sinConsultar }. sinConsultar = ligas que NO se pudieron consultar.
+// Ojo: syncLeague casi nunca lanza cuando el proveedor falla — atrapa por dentro los errores de la
+// lista, de cada temporada y del respaldo, y regresa [] como si no hubiera nada. Por eso una liga
+// cuenta como no consultada si TODAS sus llamadas fallaron (su contador: errores >= llamadas), o si
+// syncLeague lanzó. Sin esto, "no pude preguntar" se vería igual que "pregunté y no hay partidos".
+function bajarPartidosDeConfederacion(clave, sport) {
+  return (async () => {
+    const cambios = [];
+    const ligas = competenciasDeSuscripcion(clave);
+    let sinConsultar = 0;
+    for (const liga of ligas) {
+      const contador = nuevoContador();
+      try {
+        cambios.push(...await syncLeague(liga, sport, contador));
+        if (contador.llamadas > 0 && contador.errores >= contador.llamadas) sinConsultar += 1;
+      } catch (error) {
+        sinConsultar += 1;
+        console.error(`[sub] Confederación ${clave}: falló la liga ${liga}: ${error.message}`);
+      }
+    }
+    if (sinConsultar > 0) {
+      console.warn(`[sub] Confederación ${clave}: ${sinConsultar} de ${ligas.length} liga(s) no se pudieron consultar al proveedor; el conteo de partidos puede quedarse corto.`);
+    }
+    return { cambios, ligas: ligas.length, sinConsultar };
+  })();
+}
+
+// true si la promesa termina (bien o mal) antes de ms; false si se acaba el tiempo. No la cancela:
+// la bajada sigue por detrás y el relleno del usuario la espera.
+function terminaAntesDe(promesa, ms) {
+  let reloj;
+  const tope = new Promise((resolve) => { reloj = setTimeout(() => resolve(false), ms); });
+  return Promise.race([promesa.then(() => true, () => true), tope]).finally(() => clearTimeout(reloj));
+}
+
+// Partidos por competitionKey que caen entre ahora y 30 días (la ventana del sync). Map, o null si
+// la consulta falla: quien llama no afirma nada en ese caso.
+function contarProximos30dPorClave(claves) {
+  return new Promise((resolve) => {
+    if (!claves.length) return resolve(new Map());
+    const ahora = new Date().toISOString();
+    const en30 = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const marcas = claves.map(() => "?").join(",");
+    db.all(
+      `SELECT competitionKey, COUNT(*) AS n FROM matches
+       WHERE competitionKey IN (${marcas})
+         AND COALESCE(currentStartUtc, scheduledStartUtc) >= ?
+         AND COALESCE(currentStartUtc, scheduledStartUtc) <= ?
+       GROUP BY competitionKey`,
+      [...claves.map(String), ahora, en30],
+      (err, rows) => {
+        if (err) { console.warn(`[selecciones] no se pudieron contar partidos próximos: ${err.message}`); return resolve(null); }
+        resolve(new Map((rows || []).map(r => [String(r.competitionKey), r.n])));
+      }
+    );
+  });
+}
+
+async function contarProximos30d(claves) {
+  const porClave = await contarProximos30dPorClave(claves);
+  if (!porClave) return null;
+  return claves.reduce((n, k) => n + (porClave.get(String(k)) || 0), 0);
+}
 
 // La lista de selecciones de UNA confederación y rama, para "Seguir a México".
 //
@@ -2107,7 +2187,40 @@ app.post("/subscriptions", requireUser(), async (req, res) => {
       competitionName: competitionName || null,
       teamName: teamName || null
     });
-    res.json({ ok: true, subscription });
+
+    // Confederación ("concacaf-varonil"): se ESPERA el sync de sus competencias antes de contestar
+    // (tope CONFEDERACION_SYNC_TOPE_MS) para que la pantalla diga la verdad: cuántos partidos hay
+    // en los próximos 30 días. Decisión de Julio (28 sep 2026): mejor "Buscando partidos…" unos
+    // segundos que instantáneo y enterarse después. Solo se espera la BAJADA de partidos; agendarlos
+    // en Google y el relleno del usuario siguen por detrás. Liga, equipo y tenis NO cambian:
+    // contestan al instante como siempre.
+    //   partidosProximos: número de partidos en los próximos 30 días, o null = DESCONOCIDO.
+    //   sinDatos (solo cuando es null) dice por qué, porque no significan lo mismo:
+    //     "tope":  pasó el tope y la bajada sigue por detrás (todavía puede traer partidos);
+    //     "falla": no se pudo consultar al proveedor. Pasa si fallaron TODAS sus ligas, o si falló
+    //              alguna y el conteo dio 0: ese 0 no prueba que no haya partidos, la liga que falló
+    //              podría tenerlos. Con alguna falla y conteo mayor que 0, el número sí se manda
+    //              (es verdad que hay al menos esos) y la falla queda en el log.
+    const esConfederacion = !teamName && esClaveDeSuscripcionSelecciones(competitionKey);
+    let bajadaConfederacion = null;
+    if (esConfederacion) {
+      bajadaConfederacion = bajarPartidosDeConfederacion(competitionKey, sport);
+      const aTiempo = await terminaAntesDe(bajadaConfederacion, CONFEDERACION_SYNC_TOPE_MS);
+      let partidosProximos = null;
+      let sinDatos = null;
+      if (!aTiempo) {
+        sinDatos = "tope";
+      } else {
+        const bajada = await bajadaConfederacion;
+        const conteo = await contarProximos30d(competenciasDeSuscripcion(competitionKey));
+        const todasFallaron = bajada.ligas > 0 && bajada.sinConsultar === bajada.ligas;
+        if (conteo === null || todasFallaron || (bajada.sinConsultar > 0 && conteo === 0)) sinDatos = "falla";
+        else partidosProximos = conteo;
+      }
+      res.json({ ok: true, subscription, partidosProximos, sinDatos });
+    } else {
+      res.json({ ok: true, subscription });
+    }
 
     // Sync inmediato en background (no bloquea la respuesta)
     setImmediate(async () => {
@@ -2128,16 +2241,15 @@ app.post("/subscriptions", requireUser(), async (req, res) => {
             const r = await backfillUserEvents(userId);
             console.log(`[sub] Categoría ${competitionKey}: relleno inmediato de ${userId}, +${r.created} evento(s)`);
           }
-        } else if (!teamName && esClaveDeSuscripcionSelecciones(competitionKey)) {
-          // Confederación ("concacaf-varonil"): NO es una liga de TheSportsDB. Se bajan SUS
-          // competencias y luego se rellena a ESTE usuario con lo que ya esté en la base, porque
-          // syncMatchToCalendars solo agenda los partidos que CAMBIARON: los que ya estaban (los
-          // bajó otra suscripción) no le llegarían hasta el siguiente backfill del scheduler.
-          for (const clave of competenciasDeSuscripcion(competitionKey)) {
-            const results = await syncLeague(clave, sport);
-            for (const r of results) {
-              try { await syncMatchToCalendars(r.newMatch, skipUserIds, subsCache); } catch (e) { /* skip */ }
-            }
+        } else if (esConfederacion) {
+          // Confederación: la bajada de sus competencias ya arrancó arriba (y puede seguir
+          // corriendo si pasó el tope). Aquí se espera a que termine, se agendan los partidos que
+          // cambiaron, y luego se rellena a ESTE usuario con lo que ya esté en la base, porque
+          // syncMatchToCalendars solo agenda los que CAMBIARON: los que ya estaban (los bajó otra
+          // suscripción) no le llegarían hasta el siguiente backfill del scheduler.
+          const { cambios: results } = await bajadaConfederacion;
+          for (const r of results) {
+            try { await syncMatchToCalendars(r.newMatch, skipUserIds, subsCache); } catch (e) { /* skip */ }
           }
           const cuenta = await googleAccountRepository.getByUserId(userId);
           const motivo = cuenta ? shouldSkipUser(cuenta, skipUserIds) : "sin cuenta de Google";

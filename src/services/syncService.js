@@ -18,13 +18,32 @@ const VIGENCIA_TEMPORADAS_MS = 6 * 60 * 60 * 1000;
 
 // Contador de llamadas a TheSportsDB de UNA corrida. Se pasa como argumento (y no como variable
 // del módulo) porque a medianoche corren varios crons a la vez y se mezclarían las cuentas.
+//
+// errores = llamadas que fallaron (red, proveedor caído). syncLeague las atrapa y sigue, así que
+// sin este número "no pude preguntar" se ve igual que "pregunté y no hay nada". Lo usa el POST de
+// confederación para no decir "no hay partidos" cuando en realidad no se pudo consultar.
 function nuevoContador() {
-  return { llamadas: 0, listasPedidas: 0, listasDeCache: 0, listasFallidas: 0 };
+  return { llamadas: 0, listasPedidas: 0, listasDeCache: 0, listasFallidas: 0, errores: 0 };
 }
 
+// "N llamadas a TheSportsDB, M fallaron (...)". M es el total de la corrida (ligas Y equipos): si
+// el proveedor empieza a cortarnos (429, caída), se ve aquí de un vistazo sin buscar en el log.
+// OJO: "listas ... fallidas" es otra cosa: incluye las listas que vinieron VACÍAS, que no son error.
 function resumenContador(c) {
-  return `${c.llamadas} llamadas a TheSportsDB ` +
-    `(listas de temporadas: ${c.listasPedidas} pedidas, ${c.listasDeCache} de caché, ${c.listasFallidas} fallidas)`;
+  return `${c.llamadas} llamadas a TheSportsDB, ${c.errores} fallaron ` +
+    `(listas de temporadas: ${c.listasPedidas} pedidas, ${c.listasDeCache} de caché, ${c.listasFallidas} sin lista)`;
+}
+
+// Hace UNA llamada al proveedor y la cuenta; si falla, la cuenta también como error y deja pasar
+// el error, para que quien llama lo maneje igual que siempre.
+async function llamarContando(contador, fn) {
+  contador.llamadas += 1;
+  try {
+    return await fn();
+  } catch (error) {
+    contador.errores += 1;
+    throw error;
+  }
 }
 
 // La lista de temporadas de una liga: de la caché si tiene menos de 6 h; si no, del proveedor.
@@ -48,6 +67,7 @@ async function obtenerListaDeTemporadas(provider, leagueId, contador) {
     lista = await provider.getSeasons(leagueId);
   } catch (error) {
     contador.listasFallidas += 1;
+    contador.errores += 1;
     return { lista: null, origen: `falló: ${error.message}` };
   }
   if (lista.length === 0) {
@@ -198,6 +218,7 @@ async function syncLeague(leagueId, sport, contador = nuevoContador()) {
     log: (msg) => console.log(`[sync] League ${leagueId} ${msg}`),
   });
   contador.llamadas += busqueda.llamadas;
+  contador.errores  += busqueda.errores;
   let rawMatches = busqueda.eventos;
 
   // ── Estrategia FALLBACK: eventsnextleague.php, siempre que las variantes no dieron nada ──
@@ -217,6 +238,7 @@ async function syncLeague(leagueId, sport, contador = nuevoContador()) {
       delRespaldo   = nuevos.length;
       rawMatches    = rawMatches.concat(nuevos);
     } catch (error) {
+      contador.errores += 1;
       console.log(`[sync] League ${leagueId} eventsnextleague failed: ${error.message}`);
     }
   }
@@ -273,8 +295,7 @@ async function syncTeam(teamName, sport, contador = nuevoContador()) {
 
   try {
     // Paso 1: buscar el teamId por nombre
-    contador.llamadas += 1;
-    const team = await provider.searchTeam(teamName);
+    const team = await llamarContando(contador, () => provider.searchTeam(teamName));
     if (!team) {
       console.log(`[sync] Team "${teamName}" not found in TheSportsDB`);
       return [];
@@ -284,8 +305,7 @@ async function syncTeam(teamName, sport, contador = nuevoContador()) {
     console.log(`[sync] Found team "${teamName}" → id ${teamId}`);
 
     // Paso 2: obtener próximos eventos del equipo
-    contador.llamadas += 1;
-    let rawMatches = await provider.getNextTeamEvents(teamId);
+    let rawMatches = await llamarContando(contador, () => provider.getNextTeamEvents(teamId));
 
     // Filtrar por rango de 30 días
     rawMatches = rawMatches.filter(e => {
@@ -446,4 +466,4 @@ async function syncSport(sport) {
   return allResults;
 }
 
-module.exports = { syncMatches, syncSport, syncLeague, syncTeam, normalizeSport, getSyncDateRange };
+module.exports = { syncMatches, syncSport, syncLeague, syncTeam, normalizeSport, getSyncDateRange, nuevoContador };

@@ -37,18 +37,22 @@ function anioMayor(temporada) {
  *        pide UNA temporada ya recortada a la ventana del sync. Si lanza, se registra y se sigue
  *        con la siguiente, igual que antes.
  * @param {(msg: string) => void} [p.log]
- * @returns {Promise<{ eventos: object[], camino: "variante"|"extra"|"ninguno", temporada: string|null, llamadas: number }>}
+ * @returns {Promise<{ eventos: object[], camino: "variante"|"extra"|"ninguno", temporada: string|null, llamadas: number, errores: number }>}
  *   camino "variante": lo encontró el paso 1. "extra": el paso 2. "ninguno": ni uno ni otro
  *   (syncLeague corre el respaldo en los casos "extra" y "ninguno").
+ *   errores: cuántas de esas llamadas fallaron (red, proveedor caído). Solo se cuentan: el
+ *   comportamiento es el mismo de siempre (se registra y se sigue con la siguiente).
  */
 async function buscarPorTemporadas({ variantes, lista, anioActual, pedirTemporada, log = () => {} }) {
   let llamadas = 0;
+  let errores = 0;
 
   async function probar(temporada) {
     llamadas += 1;
     try {
       return await pedirTemporada(temporada);
     } catch (error) {
+      errores += 1;
       log(`season "${temporada}" failed: ${error.message}`);
       return [];
     }
@@ -60,7 +64,7 @@ async function buscarPorTemporadas({ variantes, lista, anioActual, pedirTemporad
   for (const temporada of variantes) {
     if (enLista && !enLista.has(temporada)) continue;
     const eventos = await probar(temporada);
-    if (eventos.length > 0) return { eventos, camino: "variante", temporada, llamadas };
+    if (eventos.length > 0) return { eventos, camino: "variante", temporada, llamadas, errores };
   }
 
   // Paso 2: solo con lista. Sin lista no hay de dónde sacar temporadas extra.
@@ -71,11 +75,11 @@ async function buscarPorTemporadas({ variantes, lista, anioActual, pedirTemporad
       .reverse();
     for (const temporada of extras) {
       const eventos = await probar(temporada);
-      if (eventos.length > 0) return { eventos, camino: "extra", temporada, llamadas };
+      if (eventos.length > 0) return { eventos, camino: "extra", temporada, llamadas, errores };
     }
   }
 
-  return { eventos: [], camino: "ninguno", temporada: null, llamadas };
+  return { eventos: [], camino: "ninguno", temporada: null, llamadas, errores };
 }
 
 module.exports = { buscarPorTemporadas, anioMayor };
