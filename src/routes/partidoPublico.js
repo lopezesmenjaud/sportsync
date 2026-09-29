@@ -23,6 +23,23 @@ const COMPETENCIAS = require("../data/competencias.json");
 // como "Mexican Primera League"— y un índice por texto se rompería en silencio con cada cambio.
 const COMPETENCIAS_POR_CLAVE = new Map(COMPETENCIAS.competencias.map((c) => [c.clave, c]));
 
+// Selecciones nacionales: sus competencias salen de src/data/selecciones.json, que es SU catálogo
+// (confederaciones, amistosos 4562/5400 y otrasConocidas). No se copian a competencias.json para
+// no tener dos tablas de lo mismo.
+const {
+  clavesDeSelecciones,
+  dondeVerSeleccionEnMexico,
+  suscripciones: SUSCRIPCIONES_SELECCIONES,
+} = require("../services/seleccionesConfederaciones");
+const CLAVES_DE_SELECCIONES = new Set(clavesDeSelecciones().map(String));
+
+// La lista ÚNICA de claves que conocen las páginas públicas: el catálogo MÁS las de selecciones,
+// como strings y sin repetir. De aquí salen las DOS cosas que dependen de ella —esIndexable() y
+// clavesDelCatalogo()— para que no se separen nunca: si una competencia tiene página de equipo y
+// entra al sitemap, sus partidos también se indexan, y al revés.
+const CLAVES_PUBLICAS = [...new Set([...COMPETENCIAS_POR_CLAVE.keys(), ...CLAVES_DE_SELECCIONES].map(String))];
+const CLAVES_PUBLICAS_SET = new Set(CLAVES_PUBLICAS);
+
 // Liga MX es la única competencia con tabla de equipos propia, así que su clave se nombra aquí.
 const CLAVE_LIGA_MX = "4350";
 
@@ -90,9 +107,10 @@ const AZUL = "#1C2430";
 const GRIS = "#6B7280";
 const FONDO = "#FFFFFF";
 
-// Estar en el catálogo es lo que hace que una competencia se indexe. No hay segunda lista.
+// Estar en el catálogo O en las competencias de selecciones es lo que hace que una competencia se
+// indexe. Es la misma lista que clavesDelCatalogo(): no hay segunda versión.
 function esIndexable(competitionKey) {
-  return COMPETENCIAS_POR_CLAVE.has(String(competitionKey || ""));
+  return CLAVES_PUBLICAS_SET.has(String(competitionKey || ""));
 }
 
 // Cómo se llama la competencia en público. Del catálogo si está; si no, lo que traiga la base,
@@ -253,6 +271,11 @@ function vistaDelPartido(match) {
     // La página es de México, así que el país va fijo. null = texto honesto.
     esTenis: match.sport === "tennis",
     dondeVerTenis: match.sport === "tennis" ? dondeVerTenis(match.competitionKey, "Mexico") : null,
+    // Selecciones: canales en México POR PARTICIPANTE (selecciones.json, dondeVerEnMexico). Hoy solo
+    // la selección mexicana: un partido de México da Azteca 7, Canal 5 y VIX; Brasil vs Argentina,
+    // aunque sea la misma competencia, no da nada. Como el tenis, la página es de México y el país
+    // va fijo. null = no aplica.
+    dondeVerSeleccion: dondeVerSeleccionEnMexico(match),
   };
 }
 
@@ -595,7 +618,8 @@ const TTL_EQUIPOS_MS = 10 * 60 * 1000;
 
 let cacheEquipos = null; // { porSlug: Map, generado: número }
 
-const clavesDelCatalogo = () => [...COMPETENCIAS_POR_CLAVE.keys()];
+// Catálogo + selecciones (CLAVES_PUBLICAS). El nombre se queda por los cuatro lugares que la usan.
+const clavesDelCatalogo = () => [...CLAVES_PUBLICAS];
 
 // Cómo se llama y cómo se direcciona un equipo. Si está en la tabla hecha a mano manda ella —"CD
 // Guadalajara" se publica como "Chivas" en /equipo/chivas—; si no, el nombre del proveedor.
@@ -692,12 +716,19 @@ async function indiceEquipos() {
 // prefiere la liga; si solo tiene copas (Bayern, PSG: solo los conocemos por la Champions), la
 // copa. Nunca se inventa una liga que no está en los datos. Con varias opciones gana el orden
 // del catálogo, para que el resultado no dependa del orden en que la base devuelva las filas.
-function competenciaParaSeguir(claves) {
+//
+// SELECCIONES: si el equipo no tiene ninguna competencia del catálogo pero sí de selecciones
+// (México: solo amistosos 4562), se devuelve la MISMA forma que arma el picker de selecciones
+// (frontend/src/components/SeleccionesPicker.jsx): sport "futbol" y la etiqueta de su casilla.
+async function competenciaParaSeguir(claves, teamName) {
   const orden = clavesDelCatalogo();
   const entradas = [...new Set(claves.map(String))]
     .map((c) => COMPETENCIAS_POR_CLAVE.get(c))
     .filter(Boolean)
     .sort((a, b) => orden.indexOf(a.clave) - orden.indexOf(b.clave));
+  if (entradas.length === 0 && claves.some((c) => CLAVES_DE_SELECCIONES.has(String(c)))) {
+    return competenciaParaSeguirSeleccion(teamName, claves);
+  }
   const ligas = entradas.filter((e) => e.tipo === "liga");
   if (ligas.length > 1) {
     console.warn(
@@ -708,6 +739,53 @@ function competenciaParaSeguir(claves) {
   // Sin sport en el catálogo NO se adivina: ese equipo no se ofrece.
   if (!elegida || !elegida.sport) return null;
   return { sport: elegida.sport, competitionName: elegida.nombrePublico };
+}
+
+// La etiqueta de una casilla, EXACTAMENTE como la arma el picker: etiqueta(c) = `${c.nombre} ${c.rama}`
+// en SeleccionesPicker.jsx ("Concacaf varonil", "Copa del Mundo femenil"...). Si allá cambia,
+// cambia aquí: las dos crean la misma suscripción.
+const etiquetaDeCasilla = (s) => `${s.nombre} ${s.rama}`;
+
+// Las casillas que el picker MUESTRA, en su orden. Las que no tienen competencias (OFC femenil)
+// el picker las esconde, así que tampoco pueden dar etiqueta aquí.
+const CASILLAS_VISIBLES = SUSCRIPCIONES_SELECCIONES.filter((s) => s.competencias.length > 0);
+
+// Las 14 listas de selecciones que arma GET /api/selecciones/:clave/equipos, leídas de su caché
+// (selecciones_equipos_cache). Son las MISMAS listas en las que el picker enseña a cada selección.
+// null si no hay caché o no se puede leer: quien llama no adivina.
+function listasDeSeleccionesGuardadas() {
+  return new Promise((resolve) => {
+    db.get(`SELECT data FROM selecciones_equipos_cache WHERE clave = ?`, ["listas"], (err, fila) => {
+      if (err || !fila) return resolve(null);
+      try {
+        const data = JSON.parse(fila.data);
+        resolve(data && data.grupos ? data.grupos : null);
+      } catch {
+        resolve(null);
+      }
+    });
+  });
+}
+
+// { sport: "futbol", competitionName: <etiqueta de casilla> } para seguir a una selección, o null.
+//
+// En el picker la etiqueta es la de la casilla desde la que se siguió, y una selección puede estar
+// en dos (México: "Concacaf varonil" y "Copa del Mundo varonil"). Aquí se toma la PRIMERA casilla,
+// en el orden en que el picker las enseña (las confederaciones antes que el Mundial), cuya lista
+// incluye al equipo. Si no hay caché de listas, la primera casilla que contiene alguna de sus
+// competencias. Si ninguna de las dos lo ubica, null: no se ofrece antes que inventar una etiqueta.
+// teamName es el nombre EXACTO de los partidos, igual que el `name` que guarda el picker.
+async function competenciaParaSeguirSeleccion(teamName, claves) {
+  const grupos = await listasDeSeleccionesGuardadas();
+  let casilla = grupos
+    ? CASILLAS_VISIBLES.find((s) => (grupos[s.clave] || []).some((e) => e && e.name === teamName))
+    : null;
+  if (!casilla) {
+    const suyas = new Set(claves.map(String));
+    casilla = CASILLAS_VISIBLES.find((s) => s.competencias.some((c) => suyas.has(String(c.clave))));
+  }
+  if (!casilla) return null;
+  return { sport: "futbol", competitionName: etiquetaDeCasilla(casilla) };
 }
 
 // El contexto que va en el botón de conectar. null si la página no tiene equipos que ofrecer.
@@ -745,13 +823,14 @@ async function equiposParaSeguir(contexto) {
     }
   }
 
-  return equipos
-    .map((equipo) => {
-      const competencia = competenciaParaSeguir(equipo.claves);
+  const ofrecidos = await Promise.all(
+    equipos.map(async (equipo) => {
+      const competencia = await competenciaParaSeguir(equipo.claves, equipo.base);
       if (!competencia) return null;
       return { teamName: equipo.base, apodo: equipo.nombre, ...competencia };
     })
-    .filter(Boolean);
+  );
+  return ofrecidos.filter(Boolean);
 }
 
 // GET /api/seguir?contexto=equipo:<slug> | partido:<id>. Solo lectura y solo datos públicos
@@ -825,6 +904,18 @@ function seccionDondeVerlo(vista, transmision, momento) {
     return `      <section class="tarjeta">
         <h2>${encabezado}</h2>
         <p>${esc(vista.dondeVerLocal)}</p>
+      </section>`;
+  }
+
+  // Selección mexicana: sus canales, por PARTICIPANTE. Igual que Liga MX: no se toca la caché por
+  // competencia ni su nota de modelo. TV abierta va como texto tal cual (ya dice "TV abierta,
+  // gratis"); el streaming va bajo su encabezado, sin afirmar si es plan gratuito o de paga.
+  if (vista.dondeVerSeleccion) {
+    const d = vista.dondeVerSeleccion;
+    const abierta = d.tvAbierta.map((t) => `
+        <p>${esc(t)}</p>`).join("");
+    return `      <section class="tarjeta">
+        <h2>${encabezado}</h2>${abierta}${listaCanales("Streaming", d.streaming)}
       </section>`;
   }
 
@@ -1251,8 +1342,11 @@ function renglonDePartido(match, nombreBaseDelEquipo) {
   const rival = esLocal ? vista.nombreVisita : vista.nombreLocal;
   const donde = esLocal ? "Local" : "Visitante";
 
-  // El canal es el del equipo LOCAL del partido, no el del equipo de esta página.
-  const canal = vista.dondeVerLocal ? ` · ${esc(vista.dondeVerLocal)}` : "";
+  // El canal es el del equipo LOCAL del partido, no el del equipo de esta página. En selecciones,
+  // el de su participante (la selección mexicana), con los mismos textos que la página del partido.
+  const textoCanal = vista.dondeVerLocal
+    || (vista.dondeVerSeleccion ? [...vista.dondeVerSeleccion.tvAbierta, ...vista.dondeVerSeleccion.streaming].join(" · ") : "");
+  const canal = textoCanal ? ` · ${esc(textoCanal)}` : "";
 
   const url = `/partido/${encodeURIComponent(match.providerMatchId)}${
     vista.slug ? `/${vista.slug}` : ""

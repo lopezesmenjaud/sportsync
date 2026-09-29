@@ -14,6 +14,7 @@
     "SUSCRIPCIONES POR CONFEDERACIÓN: la competitionKey es '<confederacion>-<rama>' ('concacaf-varonil', 'uefa-femenil', 'mundial-varonil'...). Son 14: seis confederaciones y el Mundial, cada una en sus dos ramas. Separadas por rama a propósito, como el Grand Slam en el tenis: quien sigue la Concacaf varonil no recibe los partidos femeniles si no los pidió. Un partido le llega si su clave está en la lista de ESA confederación y ESA rama. Los amistosos nunca entran por aquí. La OFC femenil existe como clave pero no tiene competencias: seguirla no trae nada.",
     "SUSCRIPCIONES POR SELECCIÓN: son suscripciones de equipo de siempre (teamName con el nombre EXACTO del proveedor, competitionKey null, sport 'futbol'). Empatan por nombre en cualquier competencia, amistosos incluidos. No usan esta tabla para empatar: la tabla solo arma la LISTA que se le enseña a la persona.",
     "equiposAMano completa esa lista: selecciones que el proveedor no deja acomodar solas porque su ficha no trae la competencia de membresía (Portugal no trae la eliminatoria UEFA; USA Women y Canada Women no traen la eliminatoria Concacaf; las femeniles de Oceanía solo juegan amistosos). Cada nombre se comprobó EXACTO contra searchteams.php el 28 sep 2026. TODA la tabla es revisable; las que tienen _revisar son las que dieron duda. Una selección que no se pudo ubicar con confianza se deja fuera: falla del lado seguro, se puede seguir igual si alguien la busca por nombre en el futuro.",
+    "dondeVerEnMexico dice por qué canales se ve en MÉXICO un partido en el que juega cierta selección. Es POR PARTICIPANTE, no por competencia: si colgara de la 4562, Brasil vs Argentina también diría Azteca 7, y es falso. Aplica solo si la competencia es de selecciones (esta tabla) y uno de los dos equipos se llama EXACTAMENTE como 'equipo' ('Mexico' no incluye 'Mexico Women' ni 'Mexico U17'). tvAbierta y streaming son los textos tal cual salen en pantalla; de VIX no se afirma si es plan gratuito o de paga.",
     "pistasDeNombre y noSonDeSelecciones solo deciden CUÁNDO avisar por una clave desconocida (si el nombre de la competencia 'suena' a selecciones). No deciden nada más: ningún partido se clasifica por nombre."
   ],
   "amistosos": {
@@ -154,6 +155,9 @@
     { "equipo": "Tahiti Women", "confederacion": "ofc", "rama": "femenil" },
     { "equipo": "Tonga Women", "confederacion": "ofc", "rama": "femenil" },
     { "equipo": "Vanuatu Women", "confederacion": "ofc", "rama": "femenil" }
+  ],
+  "dondeVerEnMexico": [
+    { "equipo": "Mexico", "tvAbierta": ["Azteca 7 y Canal 5 (TV abierta, gratis)"], "streaming": ["VIX"] }
   ],
   "pistasDeNombre": ["World Cup", "Nations League", "Nations Cup", "Cup of Nations", "Gold Cup", "Copa America", "European Championships", "Womens Euro", "Asian Cup", "Friendlies", "Qualifying", "Olympics"],
   "noSonDeSelecciones": ["Club", "Champions", "Libertadores", "Sudamericana", "Europa League", "Conference League"]

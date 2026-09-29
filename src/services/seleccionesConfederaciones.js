@@ -249,6 +249,28 @@ function competenciasParaListas() {
   return [...claves].map(([clave, base]) => ({ clave, base }));
 }
 
+// TODAS las claves de competencia de selecciones que conoce la tabla, como strings y sin repetir:
+// las de las confederaciones, los amistosos (4562 y 5400, que a propósito no son de ninguna
+// confederación) y otrasConocidas. Es la lista que suman las páginas públicas a su catálogo.
+function clavesDeSelecciones() {
+  return competenciasParaListas().map(c => c.clave);
+}
+
+// ── Dónde verlo en México, POR PARTICIPANTE ──
+//
+// { tvAbierta: [...], streaming: [...] } si el partido es de una competencia de selecciones y uno
+// de sus dos equipos se llama EXACTAMENTE como una entrada de dondeVerEnMexico; null si no. No
+// cuelga de la competencia a propósito: la 4562 la juegan todas las selecciones del mundo.
+const clavesDeSeleccionesSet = new Set(competenciasParaListas().map(c => c.clave));
+const dondeVerPorEquipo = new Map((tabla.dondeVerEnMexico || []).map(e => [e.equipo, e]));
+
+function dondeVerSeleccionEnMexico(match) {
+  if (!match || !clavesDeSeleccionesSet.has(limpiarClave(match.competitionKey))) return null;
+  const entrada = dondeVerPorEquipo.get(match.homeParticipantName) || dondeVerPorEquipo.get(match.awayParticipantName);
+  if (!entrada) return null;
+  return { tvAbierta: [...(entrada.tvAbierta || [])], streaming: [...(entrada.streaming || [])] };
+}
+
 /**
  * Función pura. equipos: fichas crudas del proveedor (strTeam, idTeam, idLeague..idLeague7, ...).
  * Devuelve { grupos: Map("concacaf-varonil" -> [{ id, name, badge, country, aMano }]), sinConfederacion: [nombres] }.
@@ -297,6 +319,8 @@ module.exports = {
   casaConSuscripcionDeSelecciones,
   competenciasDeSuscripcion,
   competenciasParaListas,
+  clavesDeSelecciones,
+  dondeVerSeleccionEnMexico,
   armarListasDeSelecciones,
   suscripciones,
   equiposAMano,
