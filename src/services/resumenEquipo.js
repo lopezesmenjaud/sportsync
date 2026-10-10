@@ -141,6 +141,7 @@ function armarPrompt(d) {
     "Escribe 2 o 3 párrafos sobre este equipo usando ÚNICAMENTE los datos de abajo.",
     "",
     "REGLA ABSOLUTA: no afirmes nada que no esté en los datos. No inventes récords, posiciones, marcadores, rachas, lesiones, jugadores, entrenadores, apodos ni historia del club. Si algo no viene en los datos, no lo menciones y no digas que falta: simplemente no hables de eso. El dato de los últimos cinco partidos es una cuenta, no un orden. Nunca digas 'viene de', 'arrastra', 'encadena' ni describas una secuencia; solo cuántos de cada resultado.",
+    "Nunca escribas una frase que sería igual de verdadera para cualquier otro equipo. Si una oración se puede copiar tal cual a la ficha de otro equipo sin cambiarle nada, bórrala.",
     "",
     "PROHIBIDO mencionar que falta un dato, o explicar de qué trata esta ficha. Nunca escribas cosas como 'no se cuenta con datos de', 'no hay información sobre' ni 'esta ficha se centra en'. Si no tienes posición ni récord, empieza directamente por las competencias y el calendario, como si nunca hubieras esperado otro dato.",
     "",
@@ -155,7 +156,7 @@ function armarPrompt(d) {
     "TONO",
     "Español de México, informativo y directo. Nada de lenguaje de porra: prohibido \"emocionante\", \"imperdible\", \"gran duelo\", \"no te lo pierdas\" y frases de relleno. Escribe como alguien que informa, no como quien vende.",
     "Sin títulos, sin viñetas, sin negritas. Solo párrafos.",
-    "Entre 110 y 160 palabras. Es mejor quedarse corto que rellenar. No cierres con frases sobre el ritmo del calendario si no agregan un dato nuevo.",
+    "Hasta 160 palabras. No hay mínimo: si solo tienes el calendario, el resumen va a salir corto y está bien. Prefiero cien palabras con datos que ciento sesenta con relleno. No cierres con frases sobre el ritmo del calendario si no agregan un dato nuevo.",
   ].join("\n");
 }
 
