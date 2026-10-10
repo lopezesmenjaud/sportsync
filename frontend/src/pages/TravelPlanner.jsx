@@ -6,6 +6,15 @@ import { getUserId } from '../auth'
 import { geocodeCity } from '../utils/geocoding'
 import { useAnuncios } from '../ads'
 
+// Alcance REAL de la búsqueda: /api/nearby solo trae los partidos de los próximos 30 días. Un viaje
+// más allá de eso salía siempre vacío y la pantalla lo presentaba como "no hay partidos". Por eso
+// el selector de fechas no deja pasar de aquí y la pantalla dice hasta cuándo llega.
+const DIAS_DE_ALCANCE = 30
+
+function fechaLegible(isoDia) {
+  return new Date(`${isoDia}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
 export default function TravelPlanner() {
   const [cityInput, setCityInput] = useState('')
   const [dateFrom, setDateFrom]   = useState('')
@@ -24,6 +33,7 @@ export default function TravelPlanner() {
     if (!cityInput.trim()) { setError('Escribe una ciudad destino.'); return }
     if (!dateFrom || !dateTo)  { setError('Selecciona las fechas de tu viaje.'); return }
     if (new Date(dateTo) < new Date(dateFrom)) { setError('La fecha de regreso debe ser después de la llegada.'); return }
+    if (dateFrom > maxStr || dateTo > maxStr) { setError(`Por ahora solo podemos buscar partidos hasta el ${fechaLegible(maxStr)}.`); return }
 
     setLoading(true)
     setError(null)
@@ -77,8 +87,9 @@ export default function TravelPlanner() {
 
   const grouped = groupByDate(matches)
 
-  // Fecha mínima = hoy
+  // Fecha mínima = hoy; máxima = el alcance real de la búsqueda.
   const todayStr = new Date().toISOString().slice(0, 10)
+  const maxStr   = new Date(Date.now() + DIAS_DE_ALCANCE * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui, sans-serif' }}>
@@ -116,6 +127,7 @@ export default function TravelPlanner() {
                 type="date"
                 value={dateFrom}
                 min={todayStr}
+                max={maxStr}
                 onChange={e => setDateFrom(e.target.value)}
                 style={{ width: '100%', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 14px', fontSize: 14, color: '#111827', outline: 'none', boxSizing: 'border-box' }}
               />
@@ -128,6 +140,7 @@ export default function TravelPlanner() {
                 type="date"
                 value={dateTo}
                 min={dateFrom || todayStr}
+                max={maxStr}
                 onChange={e => setDateTo(e.target.value)}
                 style={{ width: '100%', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 14px', fontSize: 14, color: '#111827', outline: 'none', boxSizing: 'border-box' }}
               />
@@ -141,6 +154,10 @@ export default function TravelPlanner() {
             >
               {loading ? 'Buscando...' : 'Buscar partidos'}
             </button>
+          </div>
+
+          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 12 }}>
+            Buscamos partidos de los próximos {DIAS_DE_ALCANCE} días: hasta el {fechaLegible(maxStr)}.
           </div>
 
           {error && (
@@ -176,8 +193,8 @@ export default function TravelPlanner() {
               <div style={{ background: '#ffffff', border: '1px dashed #d1d5db', borderRadius: 16, padding: '48px 28px', textAlign: 'center' }}>
                 <div style={{ fontSize: 32, marginBottom: 16 }}>🏟</div>
                 <h3 style={{ fontSize: 16, fontWeight: 500, color: '#111827', marginBottom: 8 }}>Sin partidos en esas fechas</h3>
-                <p style={{ fontSize: 13, color: '#6b7280' }}>No encontramos partidos en {location?.country} del {dateFrom} al {dateTo}.</p>
-                <p style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>Intenta con otras fechas o sincroniza más ligas desde Mis favoritos.</p>
+                <p style={{ fontSize: 13, color: '#6b7280' }}>No encontramos partidos de ligas de ese país en {location?.city} del {dateFrom} al {dateTo}.</p>
+                <p style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>Solo buscamos ligas del país del destino: las competencias internacionales no aparecen aquí.</p>
               </div>
             ) : (
               Object.entries(grouped).map(([date, dateMatches]) => (

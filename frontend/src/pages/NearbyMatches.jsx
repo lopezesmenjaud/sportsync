@@ -171,7 +171,7 @@ export default function NearbyMatches() {
               <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
                 {searching
                   ? 'Buscando partidos...'
-                  : `${matches.length} ${matches.length === 1 ? 'partido' : 'partidos'} en los próximos 30 días`}
+                  : `${matches.length} ${matches.length === 1 ? 'partido' : 'partidos'} en los próximos 30 días · solo ligas de ese país`}
               </div>
             </div>
             <button
@@ -191,10 +191,7 @@ export default function NearbyMatches() {
                 <div style={{ fontSize: 32, marginBottom: 16 }}>🏟️</div>
                 <h3 style={{ fontSize: 16, fontWeight: 500, color: '#111827', marginBottom: 8 }}>Sin partidos cercanos</h3>
                 <p style={{ fontSize: 13, color: '#6b7280' }}>
-                  No encontramos partidos en {location.country} en los próximos 30 días.
-                </p>
-                <p style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>
-                  Suscríbete a más ligas desde Mis favoritos para ver más partidos.
+                  No encontramos partidos de ligas de ese país en {location.city} en los próximos 30 días.
                 </p>
               </div>
             ) : (

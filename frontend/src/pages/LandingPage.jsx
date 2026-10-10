@@ -18,11 +18,10 @@ const TICKER_ITEMS = [
 
 const FEATURES = [
   { num: '01', title: 'Sincronización automática', desc: 'Tus partidos en Google Calendar sin hacer nada. Si el horario cambia, tu calendario se actualiza solo.' },
-  { num: '02', title: 'Dónde verlo', desc: 'Cada evento incluye en qué canal o plataforma de streaming puedes ver el partido en tu país.' },
-  { num: '03', title: 'Compra boletos', desc: 'Liga directa para comprar entradas desde el evento de tu calendario. Sin buscar en otros lados.' },
-  { num: '04', title: 'Eventos cerca de ti', desc: 'Comparte tu ubicación y descubre qué partidos hay cerca con boletos disponibles ahora mismo.' },
-  { num: '05', title: 'Planea tu viaje', desc: '¿Viajando? Ingresa fechas y destino para ver qué partidos hay durante tu estancia y comprar entradas.' },
-  { num: '06', title: 'Trending y análisis', desc: 'Lo más comentado en redes y videos de analistas, directo en el evento antes del partido.' },
+  { num: '02', title: 'La página del partido', desc: 'Cada evento de tu calendario trae el link a la página del partido. Ahí está su información: dónde verlo, un resumen y la búsqueda de boletos.' },
+  { num: '03', title: 'Busca boletos', desc: 'En cada partido te dejamos lista la búsqueda en Ticketmaster y StubHub para que encuentres entradas.' },
+  { num: '04', title: 'Eventos cerca de ti', desc: 'Comparte tu ubicación o escribe tu ciudad y descubre qué partidos de las ligas de tu país se juegan cerca en los próximos 30 días.' },
+  { num: '05', title: 'Planea tu viaje', desc: '¿Viajando? Ingresa fechas y destino para ver qué partidos de las ligas de ese país se juegan durante tu estancia, dentro de los próximos 30 días.' },
 ]
 
 const EVENTS = [

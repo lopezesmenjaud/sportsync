@@ -33,7 +33,7 @@ export default function EmailConsentModal({ onAccept, onDecline }) {
         </h2>
 
         <p style={{ fontSize: 14, color: '#6b7280', lineHeight: 1.6, marginBottom: 28 }}>
-          Envíanos tu autorización para mandarte novedades de FanSchedule y ofertas de nuestros socios (boletos, streaming, promociones deportivas). Puedes cambiar esto cuando quieras en tu perfil.
+          Envíanos tu autorización para mandarte novedades de FanSchedule y ofertas de nuestros socios (boletos, streaming, promociones deportivas).
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
