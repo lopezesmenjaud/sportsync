@@ -62,4 +62,30 @@ function filaDeEquipo(tabla, nombreBase) {
   return tabla.standings.find((r) => r && r.strTeam === nombreBase) || null;
 }
 
-module.exports = { obtenerTablaDePosiciones, filaDeEquipo, tieneTabla, LIGAS_CON_TABLA, VIGENCIA_TABLA_MS };
+// ── Qué se juega cada posición, en español ──
+//
+// strDescription llega en inglés. Se traduce SOLO con src/data/tablaPosiciones.json; si el valor no
+// está ahí, null y quien llama omite el renglón: nunca se pasa el inglés al modelo. Cada valor
+// desconocido se avisa UNA vez por proceso, para ir completando el archivo.
+const TRADUCCIONES = require("../data/tablaPosiciones.json").queEstaEnJuego || {};
+const yaAvisados = new Set();
+
+function queEstaEnJuegoEnEspanol(strDescription) {
+  const valor = String(strDescription || "").trim();
+  if (!valor) return null;
+  if (Object.prototype.hasOwnProperty.call(TRADUCCIONES, valor)) return TRADUCCIONES[valor];
+  if (!yaAvisados.has(valor)) {
+    yaAvisados.add(valor);
+    console.warn(`[tabla] strDescription sin traducción: "${valor}" — se omite. Agrégalo a src/data/tablaPosiciones.json`);
+  }
+  return null;
+}
+
+module.exports = {
+  obtenerTablaDePosiciones,
+  filaDeEquipo,
+  queEstaEnJuegoEnEspanol,
+  tieneTabla,
+  LIGAS_CON_TABLA,
+  VIGENCIA_TABLA_MS,
+};

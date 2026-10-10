@@ -1,0 +1,13 @@
+{
+  "_lee_esto_primero": [
+    "Traducciones al español de strDescription de la tabla de posiciones del proveedor (lookuptable.php). Ese campo dice qué se juega cada posición, en inglés.",
+    "El resumen con IA de las páginas de equipo recibe SOLO la versión en español. Si un valor NO está aquí, el renglón 'Qué está en juego esa posición' se OMITE por completo: nunca se le pasa el texto en inglés al modelo. Se prefiere que no diga nada a que lo traduzca mal (pasó: 'Promotion' lo escribió como 'ascenso', que en México es subir de división).",
+    "Cada valor desconocido sale UNA vez en el log del job como [tabla] strDescription sin traducción: \"...\". Para completarlo, copia ese texto EXACTO como llave y escribe al lado lo que significa en español de México.",
+    "La llave tiene que ser idéntica a la del proveedor (mayúsculas, guiones, paréntesis). Un espacio de más y no casa."
+  ],
+  "queEstaEnJuego": {
+    "Promotion - Liga MX (Apertura - Play Offs: Quarter-finals)": "Pase directo a los cuartos de final de la liguilla del Apertura",
+    "Promotion - Champions League (League phase)": "Clasificación a la fase de liga de la Champions League",
+    "Champions League league stage": "Clasificación a la fase de liga de la Champions League"
+  }
+}

@@ -24,12 +24,13 @@ const {
   canalDelPartido,
   firmaDePartidos,
 } = require("../routes/partidoPublico");
-const { obtenerTablaDePosiciones, filaDeEquipo, tieneTabla } = require("./tablaPosiciones");
+const { obtenerTablaDePosiciones, filaDeEquipo, queEstaEnJuegoEnEspanol, tieneTabla } = require("./tablaPosiciones");
 const { ANTHROPIC_MODEL, readAnthropicText } = require("../config/aiModel");
 const COMPETENCIAS = require("../data/competencias.json");
 
 const NOMBRE_PUBLICO = new Map(COMPETENCIAS.competencias.map((c) => [String(c.clave), c.nombrePublico]));
-const FORMA = { W: "victoria", D: "empate", L: "derrota" };
+// strForm: W = victoria, D = empate, L = derrota. Se usa como CUENTA, nunca como secuencia.
+const FORMA = { W: ["victoria", "victorias"], D: ["empate", "empates"], L: ["derrota", "derrotas"] };
 
 const conValor = (v) => v !== null && v !== undefined && String(v).trim() !== "";
 
@@ -90,12 +91,21 @@ async function reunirDatosDeEquipo(equipo, provider, contador, ahora = new Date(
   };
 }
 
-// "DLWWW" -> "empate, derrota, victoria, victoria, victoria". Si trae una letra que no es W, D o L,
-// null: no se traduce a medias.
-function formaEnTexto(strForm) {
-  const letras = String(strForm || "").trim().toUpperCase().split("");
+// "LDWWD" -> { partidos: 5, texto: "2 victorias, 2 empates, 1 derrota" }.
+//
+// Es una CUENTA a propósito: no sabemos en qué orden manda el proveedor las letras (si la más
+// reciente va primero o al final), y como secuencia el modelo la contaba como racha. La cuenta es
+// la misma en cualquier orden. Los resultados en cero no se mencionan. Si trae una letra que no es
+// W, D o L, null: no se cuenta a medias.
+function formaEnCuenta(strForm) {
+  const letras = String(strForm || "").trim().toUpperCase().split("").filter(Boolean);
   if (!letras.length || letras.some((l) => !FORMA[l])) return null;
-  return letras.map((l) => FORMA[l]).join(", ");
+  const partes = [];
+  for (const l of ["W", "D", "L"]) {
+    const n = letras.filter((x) => x === l).length;
+    if (n > 0) partes.push(`${n} ${n === 1 ? FORMA[l][0] : FORMA[l][1]}`);
+  }
+  return { partidos: letras.length, texto: partes.join(", ") };
 }
 
 // El prompt, TAL CUAL lo definió Julio, con el bloque DATOS armado solo con lo que existe.
@@ -108,9 +118,15 @@ function armarPrompt(d) {
     datos.push(`Récord: ${f.intWin} ganados, ${f.intDraw} empatados, ${f.intLoss} perdidos en ${f.intPlayed} jugados`);
   }
   if (f && conValor(f.intPoints)) datos.push(`Puntos: ${f.intPoints}`);
-  const forma = f ? formaEnTexto(f.strForm) : null;
-  if (forma) datos.push(`Últimos cinco: ${forma}`);
-  if (f && conValor(f.strDescription)) datos.push(`Qué está en juego esa posición: ${String(f.strDescription).trim()}`);
+  const forma = f ? formaEnCuenta(f.strForm) : null;
+  if (forma) {
+    // Casi siempre son cinco; a principio de temporada pueden ser menos, y entonces se dice cuántos.
+    const etiqueta = forma.partidos === 5 ? "Últimos cinco partidos" : `Últimos ${forma.partidos} partidos`;
+    datos.push(`${etiqueta}: ${forma.texto}`);
+  }
+  // SOLO en español (src/data/tablaPosiciones.json). Si no hay traducción, el renglón no va.
+  const enJuego = f ? queEstaEnJuegoEnEspanol(f.strDescription) : null;
+  if (enJuego) datos.push(`Qué está en juego esa posición: ${enJuego}`);
   if (d.proximos.length) {
     datos.push("Próximos partidos:");
     for (const p of d.proximos) {
@@ -124,7 +140,9 @@ function armarPrompt(d) {
     "",
     "Escribe 2 o 3 párrafos sobre este equipo usando ÚNICAMENTE los datos de abajo.",
     "",
-    "REGLA ABSOLUTA: no afirmes nada que no esté en los datos. No inventes récords, posiciones, marcadores, rachas, lesiones, jugadores, entrenadores, apodos ni historia del club. Si algo no viene en los datos, no lo menciones y no digas que falta: simplemente no hables de eso.",
+    "REGLA ABSOLUTA: no afirmes nada que no esté en los datos. No inventes récords, posiciones, marcadores, rachas, lesiones, jugadores, entrenadores, apodos ni historia del club. Si algo no viene en los datos, no lo menciones y no digas que falta: simplemente no hables de eso. El dato de los últimos cinco partidos es una cuenta, no un orden. Nunca digas 'viene de', 'arrastra', 'encadena' ni describas una secuencia; solo cuántos de cada resultado.",
+    "",
+    "PROHIBIDO mencionar que falta un dato, o explicar de qué trata esta ficha. Nunca escribas cosas como 'no se cuenta con datos de', 'no hay información sobre' ni 'esta ficha se centra en'. Si no tienes posición ni récord, empieza directamente por las competencias y el calendario, como si nunca hubieras esperado otro dato.",
     "",
     "DATOS",
     ...datos,
@@ -132,12 +150,12 @@ function armarPrompt(d) {
     "CÓMO ESCRIBIRLO",
     "Primer párrafo: cómo va el equipo según los datos que tienes. Si no hay posición ni récord, habla de en qué competencias está y cuántos partidos vienen.",
     "Segundo párrafo: qué viene, con el próximo rival y la fecha, y si juega en casa o fuera.",
-    "Tercer párrafo, solo si hay algo que decir: dónde verlo, o el ritmo del calendario que viene.",
+    "Tercer párrafo, solo si hay dónde verlo: en qué canales se transmite en México. Si no hay ese dato, no escribas tercer párrafo.",
     "",
     "TONO",
     "Español de México, informativo y directo. Nada de lenguaje de porra: prohibido \"emocionante\", \"imperdible\", \"gran duelo\", \"no te lo pierdas\" y frases de relleno. Escribe como alguien que informa, no como quien vende.",
     "Sin títulos, sin viñetas, sin negritas. Solo párrafos.",
-    "Entre 120 y 180 palabras.",
+    "Entre 110 y 160 palabras. Es mejor quedarse corto que rellenar. No cierres con frases sobre el ritmo del calendario si no agregan un dato nuevo.",
   ].join("\n");
 }
 
@@ -173,4 +191,4 @@ async function generarResumen(prompt) {
   return { texto, palabras: texto.split(/\s+/).filter(Boolean).length, motivo: null };
 }
 
-module.exports = { reunirDatosDeEquipo, armarPrompt, generarResumen, formaEnTexto };
+module.exports = { reunirDatosDeEquipo, armarPrompt, generarResumen, formaEnCuenta };
