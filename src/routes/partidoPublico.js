@@ -11,6 +11,7 @@
 // Este módulo NO llama a initializeDatabase(). Requerir ../db/database abre la conexión (el
 // `new Database(dbPath)` corre al importarse) pero no crea ni migra nada.
 const { matchRepository } = require("../repositories/matchRepositorySqlite");
+const { teamSummaryCacheRepository } = require("../repositories/teamSummaryCacheRepositorySqlite");
 const { db } = require("../db/database");
 
 // Catálogo ÚNICO de competencias. Decide DOS cosas y las dos salen solo de aquí: qué se indexa
@@ -1332,6 +1333,48 @@ function enlaceEquipo(nombreBase, nombreVisible) {
   return `<a href="/equipo/${esc(slug)}">${esc(nombreVisible)}</a>`;
 }
 
+// El canal de UN partido en texto corto, o "" si no se sabe. Es el del equipo LOCAL del partido
+// (Liga MX), no el del equipo de la página; en selecciones, el de su participante (la selección
+// mexicana), con los mismos textos que la página del partido. Lo usan el renglón de la página de
+// equipo y el resumen con IA (src/services/resumenEquipo.js): una sola regla para los dos.
+function canalDelPartido(vista) {
+  return vista.dondeVerLocal
+    || (vista.dondeVerSeleccion ? [...vista.dondeVerSeleccion.tvAbierta, ...vista.dondeVerSeleccion.streaming].join(" · ") : "");
+}
+
+// ── Resumen con IA de la página de equipo ──
+//
+// Lo escribe el job runGenerarResumenesEquipos y aquí SOLO se lee. Se muestra únicamente si sigue
+// vigente: generado hace 7 días o menos Y con los MISMOS próximos partidos que la página va a
+// listar. Si un partido se jugó, se movió o apareció uno nuevo, el resumen ya podría mencionar un
+// "próximo rival" que no lo es: no se muestra hasta que el job lo regenere.
+const VIGENCIA_RESUMEN_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Los próximos partidos con los que se escribió (o se va a escribir) un resumen: id y horario.
+function firmaDePartidos(partidos) {
+  return (partidos || []).map((m) => `${m.providerMatchId}@${m.currentStartUtc || m.scheduledStartUtc || ""}`).join("|");
+}
+
+function resumenVigente(guardado, firma, ahora = Date.now()) {
+  if (!guardado || !String(guardado.summary || "").trim()) return false;
+  const generado = Date.parse(guardado.generatedAt);
+  if (!Number.isFinite(generado) || ahora - generado > VIGENCIA_RESUMEN_MS) return false;
+  return guardado.firma === firma;
+}
+
+// Párrafos del resumen -> HTML. Separados por línea en blanco; todo pasa por esc().
+function seccionResumen(texto) {
+  const parrafos = String(texto || "")
+    .split(/\n\s*\n/)
+    .map((p) => p.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  if (!parrafos.length) return "";
+  return `      <section class="tarjeta">
+${parrafos.map((p) => `        <p>${esc(p)}</p>`).join("\n")}
+      </section>
+`;
+}
+
 // Un renglón de la lista de próximos partidos de un equipo.
 function renglonDePartido(match, nombreBaseDelEquipo) {
   const vista = vistaDelPartido(match);
@@ -1342,10 +1385,7 @@ function renglonDePartido(match, nombreBaseDelEquipo) {
   const rival = esLocal ? vista.nombreVisita : vista.nombreLocal;
   const donde = esLocal ? "Local" : "Visitante";
 
-  // El canal es el del equipo LOCAL del partido, no el del equipo de esta página. En selecciones,
-  // el de su participante (la selección mexicana), con los mismos textos que la página del partido.
-  const textoCanal = vista.dondeVerLocal
-    || (vista.dondeVerSeleccion ? [...vista.dondeVerSeleccion.tvAbierta, ...vista.dondeVerSeleccion.streaming].join(" · ") : "");
+  const textoCanal = canalDelPartido(vista);
   const canal = textoCanal ? ` · ${esc(textoCanal)}` : "";
 
   const url = `/partido/${encodeURIComponent(match.providerMatchId)}${
@@ -1365,7 +1405,7 @@ function renglonDePartido(match, nombreBaseDelEquipo) {
         </li>`;
 }
 
-function paginaEquipo(equipo, partidos) {
+function paginaEquipo(equipo, partidos, resumen = null) {
   const hay = partidos.length > 0;
 
   const frase = `${equipo.nombre}: próximos partidos, a qué hora juegan y dónde verlos`;
@@ -1433,7 +1473,7 @@ ${barra()}
         hay ? `Próximos ${partidos.length === 1 ? "partido" : "partidos"}` : "Sin partidos programados"
       }</p>
 ${lista}
-${cuadro}
+${resumen ? seccionResumen(resumen) : ""}${cuadro}
     </main>
 ${pie()}
     <script>${SCRIPT_CUADRO}
@@ -1456,9 +1496,19 @@ async function equipoPublicoHandler(req, res) {
 
     const partidos = await proximosDeEquipo(equipo.base, new Date().toISOString());
 
+    // El resumen NUNCA se genera aquí (la página va al CDN y tiene que contestar rápido): solo se
+    // lee lo que dejó el job. Si la tabla falla o el resumen no está vigente, la página sale sin él.
+    let resumen = null;
+    try {
+      const guardado = await teamSummaryCacheRepository.get(equipo.slug);
+      if (resumenVigente(guardado, firmaDePartidos(partidos))) resumen = guardado.summary;
+    } catch (error) {
+      console.log(`[equipo-publico] no se pudo leer el resumen de ${equipo.slug}: ${error.message}`);
+    }
+
     res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=3600");
     res.set("Content-Type", "text/html; charset=utf-8");
-    return res.send(paginaEquipo(equipo, partidos));
+    return res.send(paginaEquipo(equipo, partidos, resumen));
   } catch (error) {
     console.error("[equipo-publico] Error:", error.message);
     res.status(500);
@@ -1659,4 +1709,11 @@ module.exports = {
   indiceEquipos,
   proximosDeEquipo,
   identidadDeEquipo,
+  // Para el resumen con IA de la página de equipo (src/services/resumenEquipo.js).
+  instante,
+  fechaEnTexto,
+  canalDelPartido,
+  firmaDePartidos,
+  resumenVigente,
+  VIGENCIA_RESUMEN_MS,
 };

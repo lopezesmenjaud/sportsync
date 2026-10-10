@@ -149,6 +149,28 @@ class TheSportsDbProvider {
     return (response.data?.seasons || []).map(s => s && s.strSeason).filter(Boolean);
   }
 
+  // La ficha de una liga (lookupleague.php): de aquí sale strCurrentSeason. null si no existe.
+  async getLeague(leagueId) {
+    const url = `${this.baseUrl}/${this.apiKey}/lookupleague.php`;
+    const response = await axios.get(url, {
+      params: { id: leagueId },
+      timeout: 15000
+    });
+    return response.data?.leagues?.[0] || null;
+  }
+
+  // Tabla de posiciones (lookuptable.php) de una liga y temporada. [] si el proveedor no la tiene:
+  // comprobado en producción que solo existe para Liga MX (4350), La Liga (4335) y Premier (4328).
+  // Para NFL, NBA, MLB, Champions y F1 contesta vacío con cualquier temporada.
+  async getStandings(leagueId, season) {
+    const url = `${this.baseUrl}/${this.apiKey}/lookuptable.php`;
+    const response = await axios.get(url, {
+      params: { l: leagueId, s: season },
+      timeout: 15000
+    });
+    return Array.isArray(response.data?.table) ? response.data.table : [];
+  }
+
   async searchTeam(teamName) {
     const url = `${this.baseUrl}/${this.apiKey}/searchteams.php`;
     const response = await axios.get(url, {

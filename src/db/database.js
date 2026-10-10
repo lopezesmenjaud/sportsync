@@ -279,6 +279,34 @@ async function initializeDatabase() {
     `);
     console.log("✅ Selecciones equipos cache table ready");
 
+    // Tabla de posiciones por liga (lookuptable.php). Mismo patrón que league_seasons_cache: NO se
+    // borra al arrancar y nunca se escribe vacía (ver leagueStandingsCacheRepositorySqlite). La
+    // vigencia (12 h) la decide src/services/tablaPosiciones.js leyendo cachedAt.
+    await runAsync(`
+      CREATE TABLE IF NOT EXISTS league_standings_cache (
+        leagueId  TEXT PRIMARY KEY,
+        season    TEXT NOT NULL,
+        standings TEXT NOT NULL,
+        cachedAt  TEXT NOT NULL
+      )
+    `);
+    console.log("✅ League standings cache table ready");
+
+    // Resumen escrito con IA de cada página pública de equipo (/equipo/:slug). Lo genera un job
+    // aparte (runGenerarResumenesEquipos), nunca la página. firma = los próximos partidos con los
+    // que se escribió: si cambian, el resumen deja de mostrarse hasta regenerarlo. NO se borra al
+    // arrancar y nunca se escribe vacío (ver teamSummaryCacheRepositorySqlite).
+    await runAsync(`
+      CREATE TABLE IF NOT EXISTS team_summary_cache (
+        slug        TEXT PRIMARY KEY,
+        teamName    TEXT NOT NULL,
+        summary     TEXT NOT NULL,
+        firma       TEXT NOT NULL,
+        generatedAt TEXT NOT NULL
+      )
+    `);
+    console.log("✅ Team summary cache table ready");
+
     // Jugadores de tenis vistos en los barridos. Es la lista que sirve el picker.
     //
     // NO se llena con peticiones propias: los datos ya vienen dentro de la respuesta que el
