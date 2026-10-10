@@ -20,6 +20,11 @@
 // No llama a initializeDatabase(): usa la conexión de src/db/database.js, igual que los demás jobs
 // que escriben, y las tablas ya las creó el servidor al arrancar.
 //
+// Dos formas de correrlo:
+//   - A mano, desde la terminal (abajo). Solo en ese caso termina con process.exit.
+//   - Desde el scheduler, cada 6 horas con confirm: generarResumenesEquipos({ confirm: true }).
+//     Importar este archivo NO corre nada ni termina el proceso: solo expone la función.
+//
 // Uso (en Render):
 //   cd ~/project/src && SOLO=chivas,barcelona,dallas-cowboys node src/jobs/runGenerarResumenesEquipos.js
 //   cd ~/project/src && CONFIRM=1 MAX=5 node src/jobs/runGenerarResumenesEquipos.js
@@ -30,14 +35,16 @@ const { indiceEquipos, proximosDeEquipo, firmaDePartidos, resumenVigente } = req
 const { teamSummaryCacheRepository } = require("../repositories/teamSummaryCacheRepositorySqlite");
 const { reunirDatosDeEquipo, armarPrompt, generarResumen } = require("../services/resumenEquipo");
 
-const CONFIRM = process.env.CONFIRM === "1";
-const MAX = process.env.MAX ? Number(process.env.MAX) : Infinity;
-const SOLO = String(process.env.SOLO || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
-const PAUSA_MS = Number(process.env.PAUSA_MS || 1000);
-
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function main() {
+// confirm: guardar (CONFIRM=1). max: tope de guardados (MAX). solo: slugs a inspeccionar (SOLO);
+// con solo, siempre regenera e imprime, y sin confirm no guarda. Devuelve los conteos de la corrida.
+// Si algo truena (la base, por ejemplo), la promesa se rechaza: quien llama decide qué hacer.
+async function generarResumenesEquipos({ confirm = false, max = Infinity, solo = [], pausaMs = 1000 } = {}) {
+  const CONFIRM = confirm;
+  const MAX = max;
+  const SOLO = solo;
+  const PAUSA_MS = pausaMs;
   const ahora = new Date();
   const provider = new TheSportsDbProvider();
   const contador = { llamadas: 0 };
@@ -126,9 +133,21 @@ async function main() {
   console.log(` Llamadas al modelo: ${resumen.llamadasModelo} | a TheSportsDB (tablas): ${contador.llamadas}`);
   if (!CONFIRM) console.log(" Ensayo: no se escribió nada. Para guardar, CONFIRM=1 (y MAX=5 la primera vez).");
   console.log("========================================================");
+  return resumen;
 }
 
-main().then(() => process.exit(0)).catch((err) => {
-  console.error("❌ Error en el job:", err.message);
-  process.exit(1);
-});
+module.exports = { generarResumenesEquipos };
+
+// Solo si se corre a mano (node src/jobs/runGenerarResumenesEquipos.js). Importado desde el
+// scheduler no entra aquí: ni lee las variables de entorno ni termina el proceso.
+if (require.main === module) {
+  generarResumenesEquipos({
+    confirm: process.env.CONFIRM === "1",
+    max: process.env.MAX ? Number(process.env.MAX) : Infinity,
+    solo: String(process.env.SOLO || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean),
+    pausaMs: Number(process.env.PAUSA_MS || 1000),
+  }).then(() => process.exit(0)).catch((err) => {
+    console.error("❌ Error en el job:", err.message);
+    process.exit(1);
+  });
+}

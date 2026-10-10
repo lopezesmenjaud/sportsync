@@ -4,6 +4,7 @@ const { syncMatchToCalendars } = require("./calendarSyncService");
 const { googleAccountRepository } = require("../repositories/googleAccountRepositorySqlite");
 const { backfillUserEvents } = require("./userBackfillService");
 const { hasCalendarScope } = require("../config/googleScopes");
+const { generarResumenesEquipos } = require("../jobs/runGenerarResumenesEquipos");
 
 // ─────────────────────────────────────────────
 // Intervalos de sincronización por deporte
@@ -80,6 +81,38 @@ async function backfillMissingCalendarEvents(skipUserIds = new Set()) {
   return totalCreated;
 }
 
+// ─────────────────────────────────────────────
+// Resúmenes con IA de las páginas públicas de equipo
+//
+// Cada 6 horas, a los :30 (00:30, 06:30, 12:30 y 18:30 UTC): media hora después de los syncs que
+// corren a la hora en punto, para trabajar con los partidos recién actualizados. El job solo
+// regenera lo que cambió (un partido que empezó, uno nuevo que entró, o uno de más de 7 días), así
+// que el costo en llamadas al modelo lo manda el calendario, no cuántas veces corra.
+//
+// NO corre al arrancar el servidor: cada deploy gastaría llamadas al modelo.
+// Candado en memoria: si una corrida sigue viva cuando toca la siguiente, la siguiente se salta. No
+// hay candado entre instancias (aceptado): la segunda encuentra todo vigente y no regenera nada.
+// Todo va en try/catch: en Node 20 una promesa rechazada sin atrapar tumba el proceso entero.
+// ─────────────────────────────────────────────
+let resumenesEnCurso = false;
+
+async function correrResumenesProgramados() {
+  if (resumenesEnCurso) {
+    console.log("[scheduler] Resúmenes de equipo: la corrida anterior sigue en curso, se salta esta.");
+    return null;
+  }
+  resumenesEnCurso = true;
+  try {
+    console.log("[scheduler] Resúmenes de equipo: arranca la corrida programada (confirm).");
+    return await generarResumenesEquipos({ confirm: true });
+  } catch (e) {
+    console.error(`[scheduler] Resúmenes de equipo: la corrida falló y se reintenta en la siguiente (${e.message})`);
+    return null;
+  } finally {
+    resumenesEnCurso = false;
+  }
+}
+
 function startScheduler() {
   console.log("[scheduler] Starting automatic sync scheduler...");
 
@@ -132,7 +165,10 @@ function startScheduler() {
     console.log(`[scheduler] Scheduled ${schedule.name} — ${schedule.label}`);
   }
 
+  cron.schedule("30 */6 * * *", correrResumenesProgramados);
+  console.log("[scheduler] Scheduled Resúmenes de equipo — cada 6 horas, a los :30");
+
   console.log("[scheduler] All jobs scheduled. Sync running automatically.");
 }
 
-module.exports = { startScheduler, shouldSkipUser };
+module.exports = { startScheduler, shouldSkipUser, correrResumenesProgramados };

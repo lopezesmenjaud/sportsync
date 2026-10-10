@@ -8,6 +8,11 @@
   "queEstaEnJuego": {
     "Promotion - Liga MX (Apertura - Play Offs: Quarter-finals)": "Pase directo a los cuartos de final de la liguilla del Apertura",
     "Promotion - Champions League (League phase)": "Clasificación a la fase de liga de la Champions League",
-    "Champions League league stage": "Clasificación a la fase de liga de la Champions League"
+    "Champions League league stage": "Clasificación a la fase de liga de la Champions League",
+    "Relegation": "Descenso",
+    "Relegation - Championship": "Descenso a la Championship",
+    "Promotion - Europa League (League phase)": "Clasificación a la fase de liga de la Europa League",
+    "Europa League league stage": "Clasificación a la fase de liga de la Europa League",
+    "ECL Playoffs": "Play-off de la Conference League"
   }
 }
