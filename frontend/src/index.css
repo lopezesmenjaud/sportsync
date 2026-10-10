@@ -52,6 +52,10 @@
 
 body {
   margin: 0;
+  /* Respaldo: el azul oscuro del sitio (navegación, hero y pie). Si una sección de la landing deja
+     un hueco, sale oscuro y no blanco. Las pantallas de la app no lo ven: cada una pinta su
+     propio fondo claro en su contenedor de altura completa. */
+  background: #1C2430;
 }
 
 #root {

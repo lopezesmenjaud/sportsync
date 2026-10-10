@@ -126,17 +126,22 @@ export default function LandingPage() {
       </div>
 
       {/* Features */}
-      <div style={{ background: '#0F1A2E', padding: '80px 28px', maxWidth: 960, margin: '0 auto' }}>
-        <div style={{ fontSize: 12, fontWeight: 500, color: '#10B1C7', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 12 }}>Por qué FanSchedule</div>
-        <h2 style={{ fontSize: 36, fontWeight: 500, color: '#FFFFFF', marginBottom: 48, lineHeight: 1.25 }}>Más que un calendario.<br />Tu guía deportiva completa.</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-          {FEATURES.map((f, i) => (
-            <div key={i} style={{ background: '#142238', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: '28px 24px' }}>
-              <div style={{ fontSize: 11, fontWeight: 500, color: '#10B1C7', marginBottom: 16, letterSpacing: 1 }}>{f.num}</div>
-              <h3 style={{ fontSize: 16, fontWeight: 500, color: '#FFFFFF', marginBottom: 10 }}>{f.title}</h3>
-              <p style={{ fontSize: 13, color: '#8899AA', lineHeight: 1.65 }}>{f.desc}</p>
-            </div>
-          ))}
+      {/* Mismo patrón que "Cómo funciona": el color va en la caja exterior a todo lo ancho, y el
+          maxWidth en la de adentro. Con los dos en la misma caja, el color se quedaba en 960 px y
+          en pantallas anchas salían franjas a los lados. */}
+      <div style={{ background: '#0F1A2E', padding: '80px 28px' }}>
+        <div style={{ maxWidth: 960, margin: '0 auto' }}>
+          <div style={{ fontSize: 12, fontWeight: 500, color: '#10B1C7', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 12 }}>Por qué FanSchedule</div>
+          <h2 style={{ fontSize: 36, fontWeight: 500, color: '#FFFFFF', marginBottom: 48, lineHeight: 1.25 }}>Más que un calendario.<br />Tu guía deportiva completa.</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
+            {FEATURES.map((f, i) => (
+              <div key={i} style={{ background: '#142238', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: '28px 24px' }}>
+                <div style={{ fontSize: 11, fontWeight: 500, color: '#10B1C7', marginBottom: 16, letterSpacing: 1 }}>{f.num}</div>
+                <h3 style={{ fontSize: 16, fontWeight: 500, color: '#FFFFFF', marginBottom: 10 }}>{f.title}</h3>
+                <p style={{ fontSize: 13, color: '#8899AA', lineHeight: 1.65 }}>{f.desc}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
