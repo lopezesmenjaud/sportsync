@@ -1838,6 +1838,8 @@ module.exports = {
   grupoDelEquipo,
   listasDeSeleccionesGuardadas,
   DEPORTES_DIRECTORIO,
+  // Para el barrido del catálogo (src/jobs/runBarridoCatalogo.js): las claves de CLAVES_PUBLICAS.
+  clavesDelCatalogo,
   // Para inspeccionar y probar el índice sin pasar por HTTP.
   indiceEquipos,
   proximosDeEquipo,

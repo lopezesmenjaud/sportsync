@@ -192,24 +192,17 @@ function getSyncDateRange() {
   };
 }
 
-// Sincroniza los partidos de una liga específica.
+// La parte de LECTURA de syncLeague: los partidos de una liga en la ventana hoy→+30d, tal como
+// llegan del proveedor. No escribe nada (ni partidos ni la caché de temporadas): la lista de
+// temporadas la consigue quien llama. Aparte para que el barrido del catálogo
+// (src/jobs/runBarridoCatalogo.js) use EXACTAMENTE el mismo camino sin escribir.
 //
-// contador es OPCIONAL (lo pasan syncMatches y syncSport para el total de la corrida); el sync
-// inmediato de server.js no lo pasa y funciona igual.
-async function syncLeague(leagueId, sport, contador = nuevoContador()) {
-  const provider        = getProvider("the_sports_db");
-  const normalizedSport = normalizeSport(sport);
+// ── Estrategia PRIMARIA: eventsseason.php, con las temporadas que decide reglaTemporadas ──
+// Devuelve la temporada completa y se recorta a la ventana hoy→+30d dentro del
+// provider. Evita el tope por cantidad (~15-20 eventos) de eventsnextleague, que
+// dejaba cortas a las ligas densas (p.ej. MLB cubría solo ~2 días).
+async function traerEventosDeLiga(provider, leagueId, normalizedSport, lista, contador) {
   const { fromDate, toDate } = getSyncDateRange();
-  const llamadasAntes   = contador.llamadas;
-
-  // ── Estrategia PRIMARIA: eventsseason.php, con las temporadas que decide reglaTemporadas ──
-  // Devuelve la temporada completa y se recorta a la ventana hoy→+30d dentro del
-  // provider. Evita el tope por cantidad (~15-20 eventos) de eventsnextleague, que
-  // dejaba cortas a las ligas densas (p.ej. MLB cubría solo ~2 días).
-  //
-  // La lista de temporadas del proveedor evita pedir las que no existen y deja encontrar las
-  // que no se adivinan ("2027"). Sin lista (falló o vino vacía) se adivina EXACTAMENTE como antes.
-  const { lista, origen } = await obtenerListaDeTemporadas(provider, leagueId, contador);
   const busqueda = await buscarPorTemporadas({
     variantes:  getSeasonVariants(normalizedSport),
     lista,
@@ -242,6 +235,24 @@ async function syncLeague(leagueId, sport, contador = nuevoContador()) {
       console.log(`[sync] League ${leagueId} eventsnextleague failed: ${error.message}`);
     }
   }
+
+  return { rawMatches, busqueda, delRespaldo, fromDate, toDate };
+}
+
+// Sincroniza los partidos de una liga específica.
+//
+// contador es OPCIONAL (lo pasan syncMatches y syncSport para el total de la corrida); el sync
+// inmediato de server.js no lo pasa y funciona igual.
+async function syncLeague(leagueId, sport, contador = nuevoContador()) {
+  const provider        = getProvider("the_sports_db");
+  const normalizedSport = normalizeSport(sport);
+  const llamadasAntes   = contador.llamadas;
+
+  // La lista de temporadas del proveedor evita pedir las que no existen y deja encontrar las
+  // que no se adivinan ("2027"). Sin lista (falló o vino vacía) se adivina EXACTAMENTE como antes.
+  const { lista, origen } = await obtenerListaDeTemporadas(provider, leagueId, contador);
+  const { rawMatches, busqueda, delRespaldo, fromDate, toDate } =
+    await traerEventosDeLiga(provider, leagueId, normalizedSport, lista, contador);
 
   // Un renglón por liga: por dónde llegaron los partidos, de dónde salió la lista y cuánto costó.
   const detalle = `lista: ${lista ? `${origen}, ${lista.length} temporadas` : `${origen} → se adivina como antes`} | ` +
@@ -466,4 +477,4 @@ async function syncSport(sport) {
   return allResults;
 }
 
-module.exports = { syncMatches, syncSport, syncLeague, syncTeam, normalizeSport, getSyncDateRange, nuevoContador };
+module.exports = { syncMatches, syncSport, syncLeague, syncTeam, normalizeSport, getSyncDateRange, nuevoContador, traerEventosDeLiga };
