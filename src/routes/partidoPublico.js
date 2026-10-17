@@ -420,7 +420,26 @@ const ESTILOS = `
       max-width: 680px;
       margin: 0 auto;
       padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
     }
+    .barra-enlace {
+      color: var(--azul);
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .barra-enlace:hover, .barra-enlace:focus { color: var(--naranja); }
+    /* Migas de la página de equipo: de dónde cuelga en el directorio. */
+    .migas {
+      margin: 0 0 8px;
+      color: var(--gris);
+      font-size: 14px;
+    }
+    .migas a { color: var(--gris); text-decoration: none; }
+    .migas a:hover, .migas a:focus { color: var(--naranja); text-decoration: underline; }
     .logo {
       display: inline-block;
       font-size: 20px;
@@ -594,6 +613,7 @@ function barra() {
   return `    <header class="barra">
       <div class="barra-interior">
         <a class="logo" href="/"><span class="logo-fan">Fan</span><span class="logo-schedule">Schedule</span></a>
+        <a class="barra-enlace" href="/equipos">Equipos</a>
       </div>
     </header>`;
 }
@@ -602,6 +622,7 @@ function pie() {
   return `    <footer class="pie">
       <nav class="pie-enlaces">
         <a href="/">Inicio</a>
+        <a href="/equipos">Equipos</a>
         <a href="/acerca">Acerca de</a>
         <a href="/contacto">Contacto</a>
         <a href="/privacy">Privacidad</a>
@@ -723,25 +744,34 @@ async function indiceEquipos() {
 // SELECCIONES: si el equipo no tiene ninguna competencia del catálogo pero sí de selecciones
 // (México: solo amistosos 4562), se devuelve la MISMA forma que arma el picker de selecciones
 // (frontend/src/components/SeleccionesPicker.jsx): sport "futbol" y la etiqueta de su casilla.
+//
+// La regla de cuál competencia "manda" vive en competenciaPrincipal(), que también usa el
+// directorio /equipos para decidir en qué liga va cada equipo. Una sola regla para las dos cosas.
 async function competenciaParaSeguir(claves, teamName) {
-  const orden = clavesDelCatalogo();
-  const entradas = [...new Set(claves.map(String))]
-    .map((c) => COMPETENCIAS_POR_CLAVE.get(c))
-    .filter(Boolean)
-    .sort((a, b) => orden.indexOf(a.clave) - orden.indexOf(b.clave));
+  const { entradas, ligas, elegida } = competenciaPrincipal(claves);
   if (entradas.length === 0 && claves.some((c) => CLAVES_DE_SELECCIONES.has(String(c)))) {
     return competenciaParaSeguirSeleccion(teamName, claves);
   }
-  const ligas = entradas.filter((e) => e.tipo === "liga");
   if (ligas.length > 1) {
     console.warn(
       `[seguir] un equipo con varias ligas del catálogo (${ligas.map((e) => e.clave).join(", ")}): se etiqueta con ${ligas[0].nombrePublico}`
     );
   }
-  const elegida = (ligas.length ? ligas : entradas)[0];
   // Sin sport en el catálogo NO se adivina: ese equipo no se ofrece.
   if (!elegida || !elegida.sport) return null;
   return { sport: elegida.sport, competitionName: elegida.nombrePublico };
+}
+
+// Entre las competencias del catálogo de un equipo, la que manda: la liga antes que la copa y,
+// con varias, la primera en el orden del catálogo. elegida es undefined si no tiene ninguna.
+function competenciaPrincipal(claves) {
+  const orden = clavesDelCatalogo();
+  const entradas = [...new Set(claves.map(String))]
+    .map((c) => COMPETENCIAS_POR_CLAVE.get(c))
+    .filter(Boolean)
+    .sort((a, b) => orden.indexOf(a.clave) - orden.indexOf(b.clave));
+  const ligas = entradas.filter((e) => e.tipo === "liga");
+  return { entradas, ligas, elegida: (ligas.length ? ligas : entradas)[0] };
 }
 
 // La etiqueta de una casilla, EXACTAMENTE como la arma el picker: etiqueta(c) = `${c.nombre} ${c.rama}`
@@ -779,7 +809,14 @@ function listasDeSeleccionesGuardadas() {
 // competencias. Si ninguna de las dos lo ubica, null: no se ofrece antes que inventar una etiqueta.
 // teamName es el nombre EXACTO de los partidos, igual que el `name` que guarda el picker.
 async function competenciaParaSeguirSeleccion(teamName, claves) {
-  const grupos = await listasDeSeleccionesGuardadas();
+  const casilla = casillaDeSeleccion(teamName, claves, await listasDeSeleccionesGuardadas());
+  if (!casilla) return null;
+  return { sport: "futbol", competitionName: etiquetaDeCasilla(casilla) };
+}
+
+// La casilla del picker en la que va una selección, con las listas ya leídas (grupos puede ser
+// null). Aparte para que el directorio lea las listas UNA vez y no una por selección.
+function casillaDeSeleccion(teamName, claves, grupos) {
   let casilla = grupos
     ? CASILLAS_VISIBLES.find((s) => (grupos[s.clave] || []).some((e) => e && e.name === teamName))
     : null;
@@ -787,8 +824,65 @@ async function competenciaParaSeguirSeleccion(teamName, claves) {
     const suyas = new Set(claves.map(String));
     casilla = CASILLAS_VISIBLES.find((s) => s.competencias.some((c) => suyas.has(String(c.clave))));
   }
-  if (!casilla) return null;
-  return { sport: "futbol", competitionName: etiquetaDeCasilla(casilla) };
+  return casilla || null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// En qué sección del directorio /equipos va un equipo
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Deportes del directorio, en el orden en que salen, y su nombre: el mismo que usa la app.
+// Las selecciones van como deporte aparte, justo después del fútbol de clubes.
+const DEPORTES_DIRECTORIO = [
+  { clave: "futbol", nombre: "Fútbol" },
+  { clave: "selecciones", nombre: "Fútbol de selecciones" },
+  { clave: "futbol_americano", nombre: "Fútbol americano" },
+  { clave: "basketball", nombre: "Basketball" },
+  { clave: "baseball", nombre: "Baseball" },
+  { clave: "automovilismo", nombre: "Automovilismo" },
+];
+
+// { deporte, competencia, ancla, orden } o null. ancla es el id de la sección en /equipos, para
+// que la página del equipo enlace directo a su liga. orden acomoda las secciones dentro de su
+// deporte: las ligas antes que las copas, y cada grupo en el orden del catálogo.
+//
+// La competencia sale de competenciaPrincipal(), la MISMA regla con que se etiqueta la
+// suscripción: el Real Madrid va en La Liga aunque también juegue la Champions, y no se repite.
+// Una selección va en la casilla del picker donde aparece (Concacaf varonil, UEFA femenil...).
+// gruposSelecciones: las listas de listasDeSeleccionesGuardadas(), o null.
+function grupoDelEquipo(equipo, gruposSelecciones) {
+  const { elegida } = competenciaPrincipal(equipo.claves);
+  if (elegida) {
+    return {
+      deporte: elegida.sport || "otros",
+      competencia: elegida.nombrePublico,
+      ancla: aSlug(elegida.nombrePublico),
+      orden: (elegida.tipo === "liga" ? 0 : 100) + clavesDelCatalogo().indexOf(elegida.clave),
+    };
+  }
+  if (equipo.claves.some((c) => CLAVES_DE_SELECCIONES.has(String(c)))) {
+    const casilla = casillaDeSeleccion(equipo.base, equipo.claves, gruposSelecciones);
+    if (casilla) {
+      return {
+        deporte: "selecciones",
+        competencia: etiquetaDeCasilla(casilla),
+        ancla: `selecciones-${casilla.clave}`,
+        orden: CASILLAS_VISIBLES.indexOf(casilla),
+      };
+    }
+    // Una selección que no se ubica en ninguna casilla (solo amistosos y sin caché de listas):
+    // se lista igual, en una sección propia, antes que esconderla o inventarle confederación.
+    return { deporte: "selecciones", competencia: "Otras selecciones", ancla: "selecciones-otras", orden: 999 };
+  }
+  return null;
+}
+
+// Para la página de un equipo: su sección del directorio. Las listas de selecciones solo se leen
+// si el equipo es una selección, que es lo único que las usa.
+async function grupoDeUnEquipo(equipo) {
+  const esSeleccion = !competenciaPrincipal(equipo.claves).elegida &&
+    equipo.claves.some((c) => CLAVES_DE_SELECCIONES.has(String(c)));
+  return grupoDelEquipo(equipo, esSeleccion ? await listasDeSeleccionesGuardadas() : null);
 }
 
 // El contexto que va en el botón de conectar. null si la página no tiene equipos que ofrecer.
@@ -1407,7 +1501,16 @@ function renglonDePartido(match, nombreBaseDelEquipo) {
         </li>`;
 }
 
-function paginaEquipo(equipo, partidos, resumen = null) {
+// Migas arriba del nombre: la liga de regreso al directorio, a la sección de su liga si se sabe
+// cuál es. Así el directorio y las páginas de equipo se enlazan en los dos sentidos.
+function migasDeEquipo(grupo) {
+  const liga = grupo
+    ? ` › <a href="/equipos#${esc(grupo.ancla)}">${esc(grupo.competencia)}</a>`
+    : "";
+  return `      <nav class="migas" aria-label="Ruta"><a href="/equipos">Equipos</a>${liga}</nav>`;
+}
+
+function paginaEquipo(equipo, partidos, resumen = null, grupo = null) {
   const hay = partidos.length > 0;
 
   const frase = `${equipo.nombre}: próximos partidos, a qué hora juegan y dónde verlos`;
@@ -1470,6 +1573,7 @@ ${partidos.map((m) => renglonDePartido(m, equipo.base)).join("\n")}
   <body>
 ${barra()}
     <main class="contenido">
+${migasDeEquipo(grupo)}
       <h1>${esc(equipo.nombre)}</h1>
       <p class="dato">${
         hay ? `Próximos ${partidos.length === 1 ? "partido" : "partidos"}` : "Sin partidos programados"
@@ -1508,9 +1612,13 @@ async function equipoPublicoHandler(req, res) {
       console.log(`[equipo-publico] no se pudo leer el resumen de ${equipo.slug}: ${error.message}`);
     }
 
+    // Su sección del directorio, para la liga de regreso. No lee nada que pueda fallar (las listas
+    // de selecciones resuelven null si no están): en el peor caso la liga va a /equipos a secas.
+    const grupo = await grupoDeUnEquipo(equipo);
+
     res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=3600");
     res.set("Content-Type", "text/html; charset=utf-8");
-    return res.send(paginaEquipo(equipo, partidos, resumen));
+    return res.send(paginaEquipo(equipo, partidos, resumen, grupo));
   } catch (error) {
     console.error("[equipo-publico] Error:", error.message);
     res.status(500);
@@ -1572,6 +1680,26 @@ function partidosFuturos(desde, limite = TOPE_SITEMAP) {
   });
 }
 
+// Equipos: los que tienen al menos un partido futuro, como Map slug -> nombre base. Salen de los
+// partidos de partidosFuturos(), que es justo la condición que hace que su página NO lleve
+// noindex. Declarar un equipo sin partidos sería mandar a Google a una puerta cerrada.
+//
+// La usan el sitemap Y el directorio /equipos: los dos listan exactamente los mismos equipos.
+// Los equipos cuentan aunque el partido concreto no se indexe: la página del equipo sí existe y
+// sí tiene contenido. Una práctica de F1 no aporta equipos porque no los tiene.
+function equiposConProximos(partidos) {
+  const equipos = new Map();
+  for (const match of partidos) {
+    for (const base of [match.homeParticipantName, match.awayParticipantName]) {
+      const limpio = String(base || "").trim();
+      if (!limpio) continue;
+      const { slug } = identidadDeEquipo(limpio);
+      if (slug && !equipos.has(slug)) equipos.set(slug, limpio);
+    }
+  }
+  return equipos;
+}
+
 // Arma la lista de direcciones. Se genera EN EL MOMENTO, nunca se escribe a disco: el día que
 // entre el Gran Premio de México o una jornada nueva, su dirección aparece sola en la siguiente
 // petición, sin que nadie se acuerde de actualizar una lista.
@@ -1582,26 +1710,14 @@ async function direccionesDelSitemap(ahora = Date.now()) {
   // Las páginas informativas salen de su propio módulo (src/routes/paginasInfo.js). Se pide aquí
   // adentro y no arriba porque ese módulo importa éste: arriba sería un require circular.
   const { RUTAS_INFO } = require("./paginasInfo");
-  const urls = [`${SITIO}/`, ...RUTAS_INFO.map((ruta) => `${SITIO}${ruta}`)];
+  const urls = [`${SITIO}/`, `${SITIO}/equipos`, ...RUTAS_INFO.map((ruta) => `${SITIO}${ruta}`)];
   const fijas = urls.length;
 
-  // Equipos: los que tienen al menos un partido futuro. Salen de estos mismos partidos, que es
-  // justo la condición que hace que su página NO lleve noindex. Declarar un equipo sin partidos
-  // sería mandar a Google a una puerta cerrada.
-  const equipos = new Map();
+  const equipos = equiposConProximos(partidos);
 
   let partidosDeclarados = 0;
   for (const match of partidos) {
     const vista = vistaDelPartido(match);
-
-    // Los equipos cuentan aunque el partido concreto no se indexe: la página del equipo sí
-    // existe y sí tiene contenido. Una práctica de F1 no aporta equipos porque no los tiene.
-    for (const base of [match.homeParticipantName, match.awayParticipantName]) {
-      const limpio = String(base || "").trim();
-      if (!limpio) continue;
-      const { slug } = identidadDeEquipo(limpio);
-      if (slug && !equipos.has(slug)) equipos.set(slug, limpio);
-    }
 
     // La MISMA regla que decide el noindex de la página. No hay una segunda versión.
     if (!seIndexaPartido(match, vista, instante(match), ahora)) continue;
@@ -1715,6 +1831,13 @@ module.exports = {
   barra,
   pie,
   SITIO,
+  // Para el directorio /equipos (src/routes/directorioEquipos.js): los mismos equipos que el
+  // sitemap y la misma regla de liga que la suscripción.
+  partidosFuturos,
+  equiposConProximos,
+  grupoDelEquipo,
+  listasDeSeleccionesGuardadas,
+  DEPORTES_DIRECTORIO,
   // Para inspeccionar y probar el índice sin pasar por HTTP.
   indiceEquipos,
   proximosDeEquipo,

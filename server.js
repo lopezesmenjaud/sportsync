@@ -23,6 +23,7 @@ const { withRateLimitRetry, sleep, backfillUserEvents } = require("./src/service
 const { esClaveDeCategoria, categorias: categoriasTenis, esClaveDeCircuito, dondeVerTenis } = require("./src/services/tenisCategorias");
 const { partidoPublicoHandler, equipoPublicoHandler, sitemapHandler, seguirHandler } = require("./src/routes/partidoPublico");
 const { acercaHandler, contactoHandler, privacyHandler, termsHandler } = require("./src/routes/paginasInfo");
+const { directorioEquiposHandler } = require("./src/routes/directorioEquipos");
 const {
   esClaveDeSuscripcionSelecciones,
   competenciasDeSuscripcion,
@@ -1210,6 +1211,11 @@ app.get("/partido/:id{/:slug}", partidoPublicoHandler);
 // de enlaces internos que conecta las de partido entre sí: sin ellas cada partido es una
 // página huérfana a la que no apunta nada.
 app.get("/equipo/:slug", equipoPublicoHandler);
+
+// ── Directorio PÚBLICO de equipos ──
+// La puerta a las páginas de equipo: sin él no había ningún enlace desde el sitio hacia ellas y
+// Google las tenía como "descubiertas, sin indexar". Lista los mismos equipos que el sitemap.
+app.get("/equipos", directorioEquiposHandler);
 
 // ── Páginas informativas PÚBLICAS ──
 // Antes eran componentes de React y un buscador sin JavaScript recibía cero palabras. Texto fijo,
