@@ -16,6 +16,14 @@
       "destination": "https://sportsync-awqq.onrender.com/equipo/:path*" },
     { "source": "/sitemap.xml",
       "destination": "https://sportsync-awqq.onrender.com/sitemap.xml" },
+    { "source": "/acerca",
+      "destination": "https://sportsync-awqq.onrender.com/acerca" },
+    { "source": "/contacto",
+      "destination": "https://sportsync-awqq.onrender.com/contacto" },
+    { "source": "/privacy",
+      "destination": "https://sportsync-awqq.onrender.com/privacy" },
+    { "source": "/terms",
+      "destination": "https://sportsync-awqq.onrender.com/terms" },
     { "source": "/(.*)", "destination": "/" }
   ]
 }

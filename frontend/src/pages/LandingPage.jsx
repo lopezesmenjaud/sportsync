@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { API_BASE } from '../config'
 import { consumirSesionExpirada } from '../api'
 import { invalidarEstadoGoogle } from '../googleStatus'
@@ -181,13 +180,23 @@ export default function LandingPage() {
       <div style={{ background: '#1C2430', padding: '24px 28px', textAlign: 'center', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 13, color: '#8899AA' }}>FanSchedule</span>
         <span style={{ fontSize: 13, color: '#8899AA' }}>·</span>
-        <Link to="/privacy" style={{ fontSize: 13, color: '#8899AA', textDecoration: 'none' }}>
-          Política de privacidad
-        </Link>
+        {/* <a> y no <Link>: estas páginas las sirve el backend, no la app. Con <Link> React Router
+            las buscaría entre sus rutas y no las encontraría. */}
+        <a href="/acerca" style={{ fontSize: 13, color: '#8899AA', textDecoration: 'none' }}>
+          Acerca de
+        </a>
         <span style={{ fontSize: 13, color: '#8899AA' }}>·</span>
-        <Link to="/terms" style={{ fontSize: 13, color: '#8899AA', textDecoration: 'none' }}>
+        <a href="/contacto" style={{ fontSize: 13, color: '#8899AA', textDecoration: 'none' }}>
+          Contacto
+        </a>
+        <span style={{ fontSize: 13, color: '#8899AA' }}>·</span>
+        <a href="/privacy" style={{ fontSize: 13, color: '#8899AA', textDecoration: 'none' }}>
+          Política de privacidad
+        </a>
+        <span style={{ fontSize: 13, color: '#8899AA' }}>·</span>
+        <a href="/terms" style={{ fontSize: 13, color: '#8899AA', textDecoration: 'none' }}>
           Términos del Servicio
-        </Link>
+        </a>
       </div>
 
       <style>{`

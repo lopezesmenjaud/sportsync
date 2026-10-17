@@ -14,8 +14,8 @@
 // evaluación deja bindings en undefined. Solo strings.
 export const PUBLIC_PATHS = [
   '/',                  // landing (o rebote al dashboard si hay sesión)
-  '/privacy',
-  '/terms',
+  // /acerca, /contacto, /privacy y /terms NO van aquí: las sirve el backend (Express) y Vercel las
+  // reenvía antes de llegar a la app. Desde la app se enlazan con <a href>, nunca con <Link>.
   '/match/:matchId',    // se abre desde links compartidos y desde el evento de Google Calendar
 ]
 

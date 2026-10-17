@@ -23,8 +23,6 @@ import TravelPlanner from './pages/TravelPlanner'
 import MatchDetail from './pages/MatchDetail'
 import Profile from './pages/Profile'
 import Admin from './pages/Admin'
-import PrivacyPolicy from './pages/PrivacyPolicy'
-import TermsOfService from './pages/TermsOfService'
 
 // Guarda el user del OAuth callback ANTES del primer render de rutas protegidas
 function saveUserFromUrl() {
@@ -139,8 +137,8 @@ function CalendarConnectGate() {
   const [dismissed, setDismissed] = useState(() => sessionStorage.getItem('fanschedule_calendar_gate_dismissed') === 'true')
 
   // En ruta pública NI SE PREGUNTA — el hook no dispara petición con activo=false. Este componente
-  // vive fuera de <Routes>, así que corre en todas las pantallas, incluidas /match/:matchId,
-  // /privacy y /terms; y /auth/google/status exige sesión, así que preguntar ahí con un token
+  // vive fuera de <Routes>, así que corre en todas las pantallas, incluida /match/:matchId;
+  // y /auth/google/status exige sesión, así que preguntar ahí con un token
   // vencido daba 401 y disparaba la redirección global.
   const { estado, cargando } = useEstadoGoogle(!enRutaPublica && isLoggedIn())
 
@@ -190,8 +188,6 @@ function CalendarConnectGate() {
 // que es la lista que también consulta api.js — aquí no se puede agregar una ruta pública nueva.
 const ELEMENTOS_PUBLICOS = {
   '/': <RootRoute />,
-  '/privacy': <PrivacyPolicy />,
-  '/terms': <TermsOfService />,
   '/match/:matchId': <MatchDetail />,
 }
 
