@@ -22,6 +22,7 @@ const { requireUser, optionalUser, isLegacyAllowed } = require("./src/middleware
 const { withRateLimitRetry, sleep, backfillUserEvents } = require("./src/services/userBackfillService");
 const { esClaveDeCategoria, categorias: categoriasTenis, esClaveDeCircuito, dondeVerTenis } = require("./src/services/tenisCategorias");
 const { partidoPublicoHandler, equipoPublicoHandler, sitemapHandler, seguirHandler } = require("./src/routes/partidoPublico");
+const { acercaHandler, contactoHandler, privacyHandler, termsHandler } = require("./src/routes/paginasInfo");
 const {
   esClaveDeSuscripcionSelecciones,
   competenciasDeSuscripcion,
@@ -1209,6 +1210,14 @@ app.get("/partido/:id{/:slug}", partidoPublicoHandler);
 // de enlaces internos que conecta las de partido entre sí: sin ellas cada partido es una
 // página huérfana a la que no apunta nada.
 app.get("/equipo/:slug", equipoPublicoHandler);
+
+// ── Páginas informativas PÚBLICAS ──
+// Antes eran componentes de React y un buscador sin JavaScript recibía cero palabras. Texto fijo,
+// sin auth. Vercel las reenvía aquí (frontend/vercel.json), antes del catch-all de la app.
+app.get("/acerca", acercaHandler);
+app.get("/contacto", contactoHandler);
+app.get("/privacy", privacyHandler);
+app.get("/terms", termsHandler);
 
 // ── Qué equipos ofrecer al volver del registro ──
 // La página pública manda "&seguir=equipo:<slug>" o "partido:<id>"; la app lo guarda y al volver

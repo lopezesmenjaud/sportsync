@@ -602,6 +602,8 @@ function pie() {
   return `    <footer class="pie">
       <nav class="pie-enlaces">
         <a href="/">Inicio</a>
+        <a href="/acerca">Acerca de</a>
+        <a href="/contacto">Contacto</a>
         <a href="/privacy">Privacidad</a>
         <a href="/terms">Términos</a>
       </nav>
@@ -1577,7 +1579,10 @@ async function direccionesDelSitemap(ahora = Date.now()) {
   const desde = new Date(ahora).toISOString();
   const partidos = await partidosFuturos(desde);
 
-  const urls = [`${SITIO}/`, `${SITIO}/privacy`, `${SITIO}/terms`];
+  // Las páginas informativas salen de su propio módulo (src/routes/paginasInfo.js). Se pide aquí
+  // adentro y no arriba porque ese módulo importa éste: arriba sería un require circular.
+  const { RUTAS_INFO } = require("./paginasInfo");
+  const urls = [`${SITIO}/`, ...RUTAS_INFO.map((ruta) => `${SITIO}${ruta}`)];
   const fijas = urls.length;
 
   // Equipos: los que tienen al menos un partido futuro. Salen de estos mismos partidos, que es
@@ -1705,6 +1710,11 @@ module.exports = {
   MOMENTO,
   esIndexable,
   esc,
+  // Para las páginas informativas (src/routes/paginasInfo.js): mismo estilo, barra y pie.
+  ESTILOS,
+  barra,
+  pie,
+  SITIO,
   // Para inspeccionar y probar el índice sin pasar por HTTP.
   indiceEquipos,
   proximosDeEquipo,
