@@ -14,6 +14,8 @@
       "destination": "https://sportsync-awqq.onrender.com/partido/:path*" },
     { "source": "/equipo/:path*",
       "destination": "https://sportsync-awqq.onrender.com/equipo/:path*" },
+    { "source": "/equipos",
+      "destination": "https://sportsync-awqq.onrender.com/equipos" },
     { "source": "/sitemap.xml",
       "destination": "https://sportsync-awqq.onrender.com/sitemap.xml" },
     { "source": "/acerca",

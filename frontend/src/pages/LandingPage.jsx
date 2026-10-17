@@ -182,6 +182,10 @@ export default function LandingPage() {
         <span style={{ fontSize: 13, color: '#8899AA' }}>·</span>
         {/* <a> y no <Link>: estas páginas las sirve el backend, no la app. Con <Link> React Router
             las buscaría entre sus rutas y no las encontraría. */}
+        <a href="/equipos" style={{ fontSize: 13, color: '#8899AA', textDecoration: 'none' }}>
+          Equipos
+        </a>
+        <span style={{ fontSize: 13, color: '#8899AA' }}>·</span>
         <a href="/acerca" style={{ fontSize: 13, color: '#8899AA', textDecoration: 'none' }}>
           Acerca de
         </a>
