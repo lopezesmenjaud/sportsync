@@ -5,9 +5,10 @@
 // entrega ni una liga. Este directorio es la puerta: se enlaza desde la barra y el pie de todas
 // las páginas públicas y desde el pie de la portada.
 //
-// Lista EXACTAMENTE los equipos del sitemap: los que tienen al menos un partido próximo
-// (equiposConProximos, la misma función). Los demás llevan noindex y mandar ahí al visitante
-// sería mandarlo a una página vacía.
+// Lista EXACTAMENTE los equipos del sitemap (equiposConProximos, la misma función): los que
+// tienen partidos próximos y pasan el piso de publicación (uno del catálogo, o dos o más si solo
+// juega competencias de selecciones; ver pasaElPisoDePublicacion). Los demás llevan noindex y
+// mandar ahí al visitante sería mandarlo a una página casi vacía.
 //
 // Agrupa por deporte y, dentro, por liga. Cada equipo va UNA vez, en la competencia que manda
 // según la misma regla con que se etiqueta su suscripción (grupoDelEquipo).
@@ -232,11 +233,13 @@ ${c.equipos.map((e) => renglonDeEquipo(e, c.competencia)).join("\n")}
 ${barra()}
     <main class="contenido">
       <h1>Equipos</h1>
-      <p class="intro">Aquí están los equipos con página propia en FanSchedule que tienen al menos
-      un partido programado. La página de cada uno muestra sus próximos partidos con
-      la hora del centro de México, la competencia, si juega de local o de visitante y, cuando se
-      sabe, por dónde se transmite. La lista se actualiza sola: un equipo aparece cuando tiene un
-      partido programado y sale cuando ya no le queda ninguno.</p>
+      <p class="intro">Aquí están los equipos con partidos programados en FanSchedule. La página de
+      cada uno muestra sus próximos partidos con la hora del centro de México, la competencia, si
+      juega de local o de visitante y, cuando se sabe, por dónde se transmite. La lista se
+      actualiza sola. Los clubes de la Liga MX, La Liga, la Premier League, la Champions League,
+      la NFL, la NBA y la MLB aparecen en cuanto tienen un partido programado; las selecciones
+      nacionales, cuando tienen por lo menos dos. Cada equipo sale de la lista cuando deja de
+      cumplirlo.</p>
       <p class="dato">${totalEquipos} ${totalEquipos === 1 ? "equipo" : "equipos"} en ${
         competencias.length
       } ${competencias.length === 1 ? "competencia" : "competencias"}.</p>

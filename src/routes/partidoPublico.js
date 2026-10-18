@@ -1523,8 +1523,12 @@ function paginaEquipo(equipo, partidos, resumen = null, grupo = null) {
   const urlCanonica = `${SITIO}/equipo/${equipo.slug}`;
 
   // Un equipo sin partidos próximos no aporta nada a quien busca: fuera del índice. Es lo que
-  // evita treinta páginas vacías el día que una liga termina su temporada.
-  const noindex = hay ? "" : `\n    <meta name="robots" content="noindex" />`;
+  // evita treinta páginas vacías el día que una liga termina su temporada. Tampoco se indexa el
+  // que no pasa el piso de publicación (una selección con un solo partido): la página abre igual,
+  // pero queda fuera del índice, del sitemap y del directorio, con la MISMA regla.
+  // partidos trae como mucho 10 (proximosDeEquipo): no cambia la decisión, porque con 10 el piso
+  // ya se cumple de cualquier forma (o hay uno del catálogo, o hay dos o más de selecciones).
+  const noindex = hay && pasaElPisoDePublicacion(partidos) ? "" : `\n    <meta name="robots" content="noindex" />`;
 
   const lista = hay
     ? `      <ul class="lista">
@@ -1680,22 +1684,50 @@ function partidosFuturos(desde, limite = TOPE_SITEMAP) {
   });
 }
 
-// Equipos: los que tienen al menos un partido futuro, como Map slug -> nombre base. Salen de los
-// partidos de partidosFuturos(), que es justo la condición que hace que su página NO lleve
-// noindex. Declarar un equipo sin partidos sería mandar a Google a una puerta cerrada.
+// PISO DE PUBLICACIÓN de un equipo, con sus próximos partidos. Una sola regla para el sitemap, el
+// directorio /equipos y el noindex de la página del equipo:
+//   - Al menos UN partido próximo en una competencia del catálogo (competencias.json: Liga MX,
+//     La Liga, Premier, Champions, NFL, NBA, MLB, F1) -> se publica.
+//   - Si todos sus próximos son de competencias de selecciones, se publica solo con DOS o más.
+// No es un piso parejo a propósito: un equipo de MLB con dos partidos en plena postemporada se
+// caería del sitemap al jugar uno, justo en la Serie Mundial. Una selección con un solo partido,
+// en cambio, deja una página casi vacía.
+// Catálogo = COMPETENCIAS_POR_CLAVE (competencias.json); selecciones = CLAVES_DE_SELECCIONES. NO
+// clavesDelCatalogo(): a pesar del nombre son las dos juntas.
+function pasaElPisoDePublicacion(partidos) {
+  let delCatalogo = 0;
+  let deSelecciones = 0;
+  for (const m of partidos) {
+    const clave = String(m.competitionKey || "");
+    if (COMPETENCIAS_POR_CLAVE.has(clave)) delCatalogo += 1;
+    else if (CLAVES_DE_SELECCIONES.has(clave)) deSelecciones += 1;
+  }
+  return delCatalogo >= 1 || deSelecciones >= 2;
+}
+
+// Equipos publicables, como Map slug -> nombre base: los que tienen partidos futuros (en los
+// partidos de partidosFuturos()) Y pasan el piso de publicación. Es la misma condición que hace
+// que su página NO lleve noindex. Declarar un equipo que no la cumple sería mandar a Google a una
+// página que le pide no indexarla.
 //
 // La usan el sitemap Y el directorio /equipos: los dos listan exactamente los mismos equipos.
 // Los equipos cuentan aunque el partido concreto no se indexe: la página del equipo sí existe y
 // sí tiene contenido. Una práctica de F1 no aporta equipos porque no los tiene.
 function equiposConProximos(partidos) {
-  const equipos = new Map();
+  const porSlug = new Map(); // slug -> { base, partidos }
   for (const match of partidos) {
     for (const base of [match.homeParticipantName, match.awayParticipantName]) {
       const limpio = String(base || "").trim();
       if (!limpio) continue;
       const { slug } = identidadDeEquipo(limpio);
-      if (slug && !equipos.has(slug)) equipos.set(slug, limpio);
+      if (!slug) continue;
+      if (!porSlug.has(slug)) porSlug.set(slug, { base: limpio, partidos: [] });
+      porSlug.get(slug).partidos.push(match);
     }
+  }
+  const equipos = new Map();
+  for (const [slug, { base, partidos: suyos }] of porSlug) {
+    if (pasaElPisoDePublicacion(suyos)) equipos.set(slug, base);
   }
   return equipos;
 }
@@ -1835,6 +1867,7 @@ module.exports = {
   // sitemap y la misma regla de liga que la suscripción.
   partidosFuturos,
   equiposConProximos,
+  pasaElPisoDePublicacion,
   grupoDelEquipo,
   listasDeSeleccionesGuardadas,
   DEPORTES_DIRECTORIO,
