@@ -9,6 +9,11 @@
     {"clave":"4335","base":"Spanish La Liga","nombrePublico":"La Liga","sport":"futbol","tipo":"liga"},
     {"clave":"4328","base":"English Premier League","nombrePublico":"Premier League","sport":"futbol","tipo":"liga"},
     {"clave":"4370","base":"Formula 1","nombrePublico":"Fórmula 1","sport":"automovilismo","tipo":"copa"},
-    {"clave":"4424","base":"MLB","nombrePublico":"MLB","sport":"baseball","tipo":"liga"}
+    {"clave":"4424","base":"MLB","nombrePublico":"MLB","sport":"baseball","tipo":"liga"},
+    {"clave":"4331","base":"German Bundesliga","nombrePublico":"Bundesliga","sport":"futbol","tipo":"liga"},
+    {"clave":"4332","base":"Italian Serie A","nombrePublico":"Serie A","sport":"futbol","tipo":"liga"},
+    {"clave":"4334","base":"French Ligue 1","nombrePublico":"Ligue 1","sport":"futbol","tipo":"liga"},
+    {"clave":"4337","base":"Dutch Eredivisie","nombrePublico":"Eredivisie","sport":"futbol","tipo":"liga"},
+    {"clave":"4344","base":"Portuguese Primeira Liga","nombrePublico":"Primeira Liga","sport":"futbol","tipo":"liga"}
   ]
 }

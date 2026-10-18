@@ -1686,8 +1686,8 @@ function partidosFuturos(desde, limite = TOPE_SITEMAP) {
 
 // PISO DE PUBLICACIÓN de un equipo, con sus próximos partidos. Una sola regla para el sitemap, el
 // directorio /equipos y el noindex de la página del equipo:
-//   - Al menos UN partido próximo en una competencia del catálogo (competencias.json: Liga MX,
-//     La Liga, Premier, Champions, NFL, NBA, MLB, F1) -> se publica.
+//   - Al menos UN partido próximo en una competencia del catálogo (las de competencias.json:
+//     las ligas, la Champions, NFL, NBA, MLB y F1) -> se publica.
 //   - Si todos sus próximos son de competencias de selecciones, se publica solo con DOS o más.
 // No es un piso parejo a propósito: un equipo de MLB con dos partidos en plena postemporada se
 // caería del sitemap al jugar uno, justo en la Serie Mundial. Una selección con un solo partido,

@@ -9,7 +9,7 @@
 // prohíbe salirse de ellos. Si un dato no existe, su renglón NO va en el prompt.
 //
 // Datos:
-//   - la tabla de posiciones del proveedor, solo Liga MX, La Liga y Premier (tablaPosiciones.js);
+//   - la tabla de posiciones del proveedor, solo de las ligas de LIGAS_CON_TABLA (tablaPosiciones.js);
 //   - los próximos partidos que la página ya muestra (proximosDeEquipo), con la misma fecha en
 //     texto, el mismo rival y la misma competencia que ve la persona;
 //   - el "dónde verlo" de la página (canalDelPartido), solo si es el MISMO en todos sus próximos

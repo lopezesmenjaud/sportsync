@@ -159,9 +159,11 @@ class TheSportsDbProvider {
     return response.data?.leagues?.[0] || null;
   }
 
-  // Tabla de posiciones (lookuptable.php) de una liga y temporada. [] si el proveedor no la tiene:
-  // comprobado en producción que solo existe para Liga MX (4350), La Liga (4335) y Premier (4328).
-  // Para NFL, NBA, MLB, Champions y F1 contesta vacío con cualquier temporada.
+  // Tabla de posiciones (lookuptable.php) de una liga y temporada. [] si el proveedor no la tiene.
+  // Comprobado que existe para Liga MX (4350), La Liga (4335), Premier (4328), Bundesliga (4331),
+  // Serie A (4332), Ligue 1 (4334), Eredivisie (4337) y Primeira Liga (4344); qué ligas se le piden
+  // lo decide LIGAS_CON_TABLA en src/services/tablaPosiciones.js. Para NFL, NBA, MLB, Champions y
+  // F1 contesta vacío con cualquier temporada.
   async getStandings(leagueId, season) {
     const url = `${this.baseUrl}/${this.apiKey}/lookuptable.php`;
     const response = await axios.get(url, {

@@ -44,6 +44,7 @@ const LEAGUES_BY_SPORT = {
         { id: '4334', name: 'Ligue 1',           apiName: 'French Ligue 1',           country: 'Francia',    type: 'league' },
         { id: '4401', name: 'Ligue 2',           apiName: 'French Ligue 2',  country: 'Francia',    type: 'league' },
         { id: '4484', name: 'Coupe de France',   apiName: 'French Coupe de France',   country: 'Francia',    type: 'cup'    },
+        { id: '4337', name: 'Eredivisie',        apiName: 'Dutch Eredivisie',         country: 'Países Bajos', type: 'league' },
         { id: '4344', name: 'Primeira Liga',     apiName: 'Portuguese Primeira Liga', country: 'Portugal',   type: 'league' },
         { id: '4662', name: 'Liga Portugal 2',   apiName: 'Portuguese LigaPro',  country: 'Portugal',   type: 'league' },
         { id: '4510', name: 'Taça de Portugal',  apiName: 'Portuguese Taca de Portugal', country: 'Portugal',   type: 'cup'    },

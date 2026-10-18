@@ -236,10 +236,9 @@ ${barra()}
       <p class="intro">Aquí están los equipos con partidos programados en FanSchedule. La página de
       cada uno muestra sus próximos partidos con la hora del centro de México, la competencia, si
       juega de local o de visitante y, cuando se sabe, por dónde se transmite. La lista se
-      actualiza sola. Los clubes de la Liga MX, La Liga, la Premier League, la Champions League,
-      la NFL, la NBA y la MLB aparecen en cuanto tienen un partido programado; las selecciones
-      nacionales, cuando tienen por lo menos dos. Cada equipo sale de la lista cuando deja de
-      cumplirlo.</p>
+      actualiza sola: los clubes aparecen en cuanto tienen un partido programado en alguna de las
+      competencias de abajo, y las selecciones nacionales, cuando tienen por lo menos dos. Cada
+      equipo sale de la lista cuando deja de cumplirlo.</p>
       <p class="dato">${totalEquipos} ${totalEquipos === 1 ? "equipo" : "equipos"} en ${
         competencias.length
       } ${competencias.length === 1 ? "competencia" : "competencias"}.</p>

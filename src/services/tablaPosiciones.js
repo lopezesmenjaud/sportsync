@@ -5,15 +5,18 @@
 //
 // SOLO para las ligas donde el proveedor SÍ tiene tabla. Comprobado en producción (oct 2026): Liga MX
 // (4350, 18 filas), La Liga (4335, 20) y Premier (4328, 20), con los nombres cruzando EXACTO contra
-// homeParticipantName. Para NFL, NBA, MLB, Champions y F1 el proveedor devuelve VACÍO con cualquier
-// temporada: no se le pregunta, para no gastar llamadas en algo que ya se sabe que no existe.
+// homeParticipantName. El 18 oct 2026 se comprobó también la tabla de temporada 2026-2027 de
+// Bundesliga (4331, 18), Serie A (4332, 20), Ligue 1 (4334, 18), Eredivisie (4337, 18) y Primeira
+// Liga (4344, 18). Sus descripciones de posición que no estén en tablaPosiciones.json se omiten.
+// Para NFL, NBA, MLB, Champions y F1 el proveedor devuelve VACÍO con cualquier temporada: no se le
+// pregunta, para no gastar llamadas en algo que ya se sabe que no existe.
 //
 // Falla del lado seguro: si la caché no sirve y el proveedor falla o contesta vacío, regresa null y
 // el resumen se escribe sin posición ni récord. Nunca se guarda una tabla vacía.
 
 const { leagueStandingsCacheRepository } = require("../repositories/leagueStandingsCacheRepositorySqlite");
 
-const LIGAS_CON_TABLA = new Set(["4350", "4335", "4328"]);
+const LIGAS_CON_TABLA = new Set(["4350", "4335", "4328", "4331", "4332", "4334", "4337", "4344"]);
 const VIGENCIA_TABLA_MS = 12 * 60 * 60 * 1000;
 
 function tieneTabla(leagueId) {
