@@ -3,16 +3,36 @@
     "Traducciones al español de strDescription de la tabla de posiciones del proveedor (lookuptable.php). Ese campo dice qué se juega cada posición, en inglés.",
     "El resumen con IA de las páginas de equipo recibe SOLO la versión en español. Si un valor NO está aquí, el renglón 'Qué está en juego esa posición' se OMITE por completo: nunca se le pasa el texto en inglés al modelo. Se prefiere que no diga nada a que lo traduzca mal (pasó: 'Promotion' lo escribió como 'ascenso', que en México es subir de división).",
     "Cada valor desconocido sale UNA vez en el log del job como [tabla] strDescription sin traducción: \"...\". Para completarlo, copia ese texto EXACTO como llave y escribe al lado lo que significa en español de México.",
-    "La llave tiene que ser idéntica a la del proveedor (mayúsculas, guiones, paréntesis). Un espacio de más y no casa."
+    "La llave tiene que ser idéntica a la del proveedor (mayúsculas, guiones, paréntesis). Los espacios al principio y al final no cuentan: el código los quita antes de buscar (la Ligue 1 manda ' Qualifying' y casa con 'Qualifying').",
+    "Lo que se juega en la tabla es SIEMPRE de la PRÓXIMA temporada: un lugar de Champions en la tabla de hoy es para jugar la Champions del año que entra. Por eso las traducciones lo dicen: el equipo puede estar jugando la Champions de esta temporada al mismo tiempo, y sin esa aclaración el resumen se contradice.",
+    "Una llave es la MISMA para todas las ligas. Si el proveedor usa la misma palabra para cosas distintas según la liga, la traducción tiene que ser cierta en todas: 'Qualifying' es la ronda previa de la Conference en la Bundesliga (6.º) y de la Champions en la Ligue 1 (4.º), así que se traduce sin nombrar el torneo. Antes de agregar una liga a LIGAS_CON_TABLA, revisa que sus descripciones no le cambien el sentido a una llave que ya existe."
   ],
   "queEstaEnJuego": {
     "Promotion - Liga MX (Apertura - Play Offs: Quarter-finals)": "Pase directo a los cuartos de final de la liguilla del Apertura",
-    "Promotion - Champions League (League phase)": "Clasificación a la fase de liga de la Champions League",
-    "Champions League league stage": "Clasificación a la fase de liga de la Champions League",
+
+    "Promotion - Champions League (League phase)": "Clasificación a la fase de liga de la Champions League de la próxima temporada",
+    "Champions League league stage": "Clasificación a la fase de liga de la Champions League de la próxima temporada",
+    "Promotion - Champions League (Qualification)": "Clasificación a la ronda previa de la Champions League de la próxima temporada",
+
+    "Promotion - Europa League (League phase)": "Clasificación a la fase de liga de la Europa League de la próxima temporada",
+    "Europa League league stage": "Clasificación a la fase de liga de la Europa League de la próxima temporada",
+    "Promotion - Europa League (Qualification)": "Clasificación a la ronda previa de la Europa League de la próxima temporada",
+
+    "Promotion - Conference League (Qualification)": "Clasificación a la ronda previa de la Conference League de la próxima temporada",
+    "ECL Playoffs": "Clasificación al play-off de la Conference League de la próxima temporada",
+    "Promotion - Eredivisie (Conference League - Play Offs)": "Eliminatoria entre equipos de la Eredivisie por un lugar en la Conference League de la próxima temporada",
+
+    "Qualifying": "Clasificación a una ronda previa de los torneos europeos de la próxima temporada",
+    "Play-offs": "Clasificación a una ronda previa de los torneos europeos de la próxima temporada",
+
     "Relegation": "Descenso",
-    "Relegation - Championship": "Descenso a la Championship",
-    "Promotion - Europa League (League phase)": "Clasificación a la fase de liga de la Europa League",
-    "Europa League league stage": "Clasificación a la fase de liga de la Europa League",
-    "ECL Playoffs": "Play-off de la Conference League"
+    "Relegation - Championship": "Descenso a la Championship, la segunda división de Inglaterra",
+    "Relegation - LaLiga2": "Descenso a la Segunda División de España",
+    "Relegation - Eerste Divisie": "Descenso a la Eerste Divisie, la segunda división de Países Bajos",
+    "Relegation - Liga Portugal 2": "Descenso a la Liga Portugal 2, la segunda división de Portugal",
+
+    "Relegation Playoffs": "Repechaje contra un equipo de segunda división para no descender",
+    "Eredivisie (Relegation)": "Repechaje contra equipos de segunda división para no descender",
+    "Liga Portugal (Relegation)": "Repechaje contra un equipo de segunda división para no descender"
   }
 }
