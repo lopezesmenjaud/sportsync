@@ -1051,6 +1051,15 @@ function seccionDondeVerlo(vista, transmision, momento) {
     cuerpo += listaCanales("TV de paga", transmision.paidTV);
     cuerpo += listaCanales("Streaming", transmision.streaming);
     if (transmision.note) cuerpo += `\n        <p>${esc(transmision.note)}</p>`;
+    // Todo lo de broadcasting_cache lo escribió un modelo (su único escritor es /api/broadcasting
+    // en server.js) y nadie lo verificó: se dice en la misma caja. Las tablas hechas a mano
+    // (Liga MX, selecciones, tenis) regresan arriba y no llevan esta línea.
+    if (cuerpo) {
+      cuerpo +=
+        momento === MOMENTO.YA_PASO
+          ? `\n        <p class="dato">Esta lista es una sugerencia automática hecha con inteligencia artificial y puede equivocarse.</p>`
+          : `\n        <p class="dato">Esta lista es una sugerencia automática hecha con inteligencia artificial y puede equivocarse. Confírmala con tu proveedor de TV o streaming.</p>`;
+    }
   }
 
   if (!cuerpo) {
