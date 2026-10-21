@@ -11,6 +11,15 @@
 // React (PrivacyPolicy.jsx y TermsOfService.jsx, ya borrados) y se comprobó contra lo que esos
 // componentes renderizaban. Cualquier cambio al texto es un cambio a la política: se actualiza
 // también la fecha de "Última actualización".
+//
+// 20 oct 2026: se corrigieron las frases de las dos páginas que daban por hecho que el sitio ya
+// muestra anuncios (todavía no los muestra). Ahora dicen que FanSchedule usa Google AdSense, que
+// es cierto hoy: el script de AdSense se carga en seis pantallas de la app. Las cookies NO se
+// condicionan a que haya anuncios, porque no sabemos si el script las deja aunque no se vean.
+// También se corrigió de dónde salen los anuncios: frontend/src/ads.js solo carga el script
+// estándar con el ID de editor y no le pasa nada del usuario (ni suscripciones ni país), así que
+// la política dice que los elige Google. Si algún día se le mandan etiquetas (Ad Manager), esto se
+// vuelve a cambiar ANTES de mandarlas.
 
 const { ESTILOS, barra, pie, esc, SITIO } = require("./partidoPublico");
 
@@ -115,7 +124,7 @@ const PAGINAS = {
     descripcion:
       "Qué datos recopila FanSchedule, cómo los usa, con quién los comparte y cómo puedes eliminarlos. Los datos de tu Google Calendar no se usan para publicidad.",
     cuerpo: `      <h1>Política de privacidad</h1>
-      <p class="dato">Última actualización: 9 de agosto de 2026</p>
+      <p class="dato">Última actualización: 20 de octubre de 2026</p>
       <p>
       En FanSchedule respetamos tu privacidad. Esta página explica qué información recopilamos,
       cómo la usamos y qué control tienes sobre ella.
@@ -135,7 +144,7 @@ const PAGINAS = {
       <li>Para <strong>sincronizar los partidos</strong> de tus ligas y equipos en tu Google Calendar.</li>
       <li>Para <strong>enviarte novedades del producto</strong> y comunicaciones de partners, únicamente si diste tu consentimiento.</li>
       <li>Para mostrarte <strong>información relevante de deportes</strong> (próximos partidos, eventos cercanos, planificador de viajes).</li>
-      <li>Para mostrarte <strong>publicidad relacionada con los deportes, ligas y equipos que sigues</strong> dentro de FanSchedule, y con tu país o región. Esa selección la hiciste tú en la app o se deduce de tu conexión, y no proviene de tu Google Calendar.</li>
+      <li><strong>No le mandamos tus datos a Google para la publicidad.</strong> Los anuncios de Google AdSense los elige Google, no FanSchedule, y no le pasamos tus deportes, ligas ni equipos, ni tu país o región (ver sección 7).</li>
       </ul>
       </section>
       <section>
@@ -148,7 +157,7 @@ const PAGINAS = {
       <li><strong>OpenStreetMap / Nominatim</strong>: en las funciones "Cerca de mí" y "Planear viaje", tu navegador envía tu ubicación (coordenadas) o el nombre de una ciudad a este servicio para determinar a qué ciudad corresponde.</li>
       <li><strong>Anthropic (Claude)</strong>: enviamos datos de los partidos (equipos, estadios) y la ciudad que consultas, para generar la información de "dónde ver", "eventos cercanos" y resúmenes de partidos. No enviamos tu nombre ni tu correo.</li>
       <li><strong>ip-api.com</strong>: cuando abres la app, enviamos tu dirección IP a este servicio para detectar tu país automáticamente. No almacenamos tu IP.</li>
-      <li><strong>Google AdSense</strong>: mostramos publicidad en el sitio a través de Google AdSense. Google y sus socios pueden usar cookies o identificadores similares en tu navegador para mostrar y medir anuncios.</li>
+      <li><strong>Google AdSense</strong>: FanSchedule usa Google AdSense, el servicio de publicidad de Google. Google y sus socios pueden usar cookies o identificadores similares en tu navegador para mostrar y medir anuncios.</li>
       </ul>
       <p>
       También obtenemos información de las siguientes fuentes, a las que no les enviamos tus datos personales — solo consultas sobre partidos y eventos:
@@ -176,11 +185,12 @@ const PAGINAS = {
       <li>no son leídos por ninguna persona, salvo que tú lo autorices expresamente o sea requerido por ley.</li>
       </ul>
       <p>
-      Esto sigue siendo cierto ahora que el sitio muestra publicidad: no compartimos los datos
-      de tu Google Calendar con Google AdSense, con anunciantes ni con ningún tercero con fines
-      publicitarios, y no los usamos para elegir ni segmentar los anuncios que ves. La publicidad
-      se selecciona con el contenido de la página y con los deportes, ligas y equipos que tú
-      elegiste seguir dentro de FanSchedule — nunca con información de tu calendario.
+      Esto también vale para la publicidad de Google AdSense que usa FanSchedule: no compartimos
+      los datos de tu Google Calendar con Google AdSense, con anunciantes ni con ningún tercero con
+      fines publicitarios, y no los usamos para elegir ni segmentar los anuncios que veas. Los
+      anuncios los elige Google, con el contenido de la página y con la información que Google ya
+      tenga de ti; FanSchedule no le manda tus suscripciones ni tus datos, y nunca información de tu
+      calendario.
       </p>
       </section>
       <section>
@@ -194,7 +204,7 @@ const PAGINAS = {
       <li><strong>Cifrado de credenciales en reposo</strong>: los tokens de acceso y actualización de Google que autorizan la sincronización con tu calendario se almacenan cifrados con AES-256-GCM, un algoritmo de cifrado autenticado. Las claves de cifrado se gestionan mediante variables de entorno del servidor y nunca se incluyen en el código fuente ni en el repositorio.</li>
       <li><strong>Sin registro de credenciales</strong>: los tokens de acceso no se escriben en registros (logs), ni completos ni parciales, y no se exponen en ninguna respuesta de la aplicación ni en su interfaz.</li>
       <li><strong>Sin acceso humano a tu calendario</strong>: la creación y actualización de eventos es un proceso totalmente automatizado. Ninguna persona de FanSchedule lee, revisa ni accede al contenido de tu Google Calendar.</li>
-      <li><strong>Minimización de datos</strong>: solicitamos únicamente los permisos necesarios para el funcionamiento del servicio y almacenamos solo los datos indispensables para operarlo. No almacenamos tu ubicación precisa ni datos de pago. Para mostrarte información y publicidad relevantes podemos registrar tu país o región aproximada, deducidos de tu dirección IP, que no guardamos. Las coordenadas que usa "Cerca de mí" se envían en el momento y no se almacenan.</li>
+      <li><strong>Minimización de datos</strong>: solicitamos únicamente los permisos necesarios para el funcionamiento del servicio y almacenamos solo los datos indispensables para operarlo. No almacenamos tu ubicación precisa ni datos de pago. Para mostrarte información relevante podemos registrar tu país o región aproximada, deducidos de tu dirección IP, que no guardamos. Las coordenadas que usa "Cerca de mí" se envían en el momento y no se almacenan.</li>
       <li><strong>Acceso restringido</strong>: las funciones administrativas del servicio están limitadas y las operaciones sensibles solo pueden ejecutarse desde el propio servidor, no de forma remota.</li>
       <li><strong>Revocación en cualquier momento</strong>: puedes retirar el acceso de FanSchedule a tu cuenta de Google cuando quieras desde la configuración de seguridad de tu cuenta de Google, sin necesidad de contactarnos.</li>
       </ul>
@@ -215,10 +225,12 @@ const PAGINAS = {
       iniciada y recordar tus preferencias (deportes, equipos, consentimiento de email).
       </p>
       <p>
-      FanSchedule se sostiene con publicidad, que mostramos a través de Google AdSense. Para eso,
-      Google —como proveedor externo— y sus socios pueden usar cookies o identificadores similares
+      FanSchedule usa Google AdSense, el servicio de publicidad de Google. Google —como proveedor
+      externo— y sus socios pueden usar cookies o identificadores similares
       en tu navegador para mostrar y medir anuncios, incluidos anuncios basados en tus visitas
-      anteriores a este o a otros sitios.
+      anteriores a este o a otros sitios. El script de Google se carga dentro de nuestras páginas y
+      puede ver el contenido de la pantalla en la que está; en algunas pantallas, ese contenido
+      incluye los partidos de los equipos que sigues.
       </p>
       <p>
       Puedes desactivar la publicidad personalizada cuando quieras desde la Configuración de
@@ -230,7 +242,7 @@ const PAGINAS = {
       usar FanSchedule.
       </p>
       <p>
-      Los anuncios que ves <strong>NO</strong> se eligen con información de tu Google Calendar
+      Los anuncios que veas en FanSchedule <strong>NO</strong> se eligen con información de tu Google Calendar
       (ver sección 4).
       </p>
       </section>
@@ -263,7 +275,7 @@ const PAGINAS = {
     descripcion:
       "Las condiciones de uso de FanSchedule: tu cuenta, uso aceptable, datos deportivos de terceros, la integración con Google Calendar, el plan gratuito y la publicidad.",
     cuerpo: `      <h1>Términos del Servicio</h1>
-      <p class="dato">Última actualización: 9 de agosto de 2026</p>
+      <p class="dato">Última actualización: 20 de octubre de 2026</p>
       <p>
       Bienvenido a FanSchedule. Estos Términos del Servicio ("Términos") regulan el uso de la
       aplicación y el sitio web fanschedule.com ("el Servicio"). Al usar FanSchedule, aceptas
@@ -326,8 +338,8 @@ const PAGINAS = {
       con independencia de que existan opciones de pago.
       </p>
       <p>
-      FanSchedule es gratuito y se sostiene con publicidad. Al usar el servicio aceptas que se
-      muestren anuncios de terceros dentro del sitio. La forma en que esos anuncios usan cookies
+      FanSchedule es gratuito y usa Google AdSense, el servicio de publicidad de Google. Al usar el
+      servicio aceptas que se muestren anuncios de terceros dentro del sitio. La forma en que esos anuncios usan cookies
       y datos se explica en nuestra
       <a href="/privacy">Política de Privacidad</a>.
       </p>
