@@ -1,18 +1,20 @@
 const { db } = require("../db/database");
 
 class MatchRepositorySqlite {
+  // NO lee ai_summary ni summary_generated_at. Esos textos los escribió el resumen de partido viejo
+  // (getSmartSummary, con cuatro campos), o sea que inventan. La app no los pintaba, pero como este
+  // objeto sale tal cual en GET /api/match/:matchId, se estaban entregando en el JSON. No servir
+  // texto inventado no es lo mismo que no pintarlo. El resumen de hoy vive en match_summary_cache.
+  // Las columnas se quedan con lo viejo (no se tocan datos), pero ya nadie las sirve.
   getByProviderMatchId(providerMatchId) {
     return new Promise((resolve, reject) => {
       db.get(
-        `SELECT data, ai_summary, summary_generated_at FROM matches WHERE providerMatchId = ?`,
+        `SELECT data FROM matches WHERE providerMatchId = ?`,
         [providerMatchId],
         (err, row) => {
           if (err) return reject(err);
           if (!row) return resolve(null);
-          const match = JSON.parse(row.data);
-          match.ai_summary = row.ai_summary || null;
-          match.summary_generated_at = row.summary_generated_at || null;
-          resolve(match);
+          resolve(JSON.parse(row.data));
         }
       );
     });
