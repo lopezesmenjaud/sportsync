@@ -156,6 +156,7 @@ export default function MatchDetail() {
             📺 Dónde verlo
           </div>
           <WatchPanel
+            matchId={match.providerMatchId}
             sport={match.sport}
             competitionKey={match.competitionKey}
             competitionName={match.competitionName}

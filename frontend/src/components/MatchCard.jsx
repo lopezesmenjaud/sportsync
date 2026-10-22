@@ -108,6 +108,7 @@ export default function MatchCard({ match, showDate = true }) {
 
       {/* Panel: Donde verlo */}
       <WatchPanel
+        matchId={match.providerMatchId}
         sport={match.sport}
         competitionKey={match.competitionKey}
         competitionName={match.competitionName}

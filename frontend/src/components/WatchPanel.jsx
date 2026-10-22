@@ -2,11 +2,24 @@ import { useState, useEffect } from 'react'
 import { AVAILABLE_COUNTRIES } from '../data/broadcasters'
 import { apiFetch } from '../api'
 
-export default function WatchPanel({ sport, competitionKey, competitionName, isOpen }) {
+// Fuentes que NO llevan la aclaración de sugerencia automática: las que salen de tablas hechas a
+// mano (tenis por clave; Liga MX y selección por partido, ver dondeVerVerificado en el backend).
+// Es una lista de las CONFIABLES, no de las dudosas: cualquier otro valor —"cache", "generated",
+// uno nuevo que alguien agregue mañana o ninguno— se trata como sugerencia y se aclara. Si se
+// equivoca, que se equivoque del lado de avisar de más, nunca de callar.
+const FUENTES_VERIFICADAS = new Set(['tenis', 'verificado'])
+
+// El MISMO texto que la página pública /partido/ (seccionDondeVerlo en partidoPublico.js).
+const ACLARACION_IA = 'Esta lista es una sugerencia automática hecha con inteligencia artificial y puede equivocarse. Confírmala con tu proveedor de TV o streaming.'
+
+// matchId (opcional): con él, el backend usa las tablas hechas a mano de ESE partido (Liga MX por
+// equipo local, selección mexicana) antes que la caché o la IA. Sin él, todo sigue como antes.
+export default function WatchPanel({ sport, competitionKey, competitionName, isOpen, matchId }) {
   const [country, setCountry]                     = useState(null)
   const [loading, setLoading]                     = useState(false)
   const [changingCountry, setChangingCountry]     = useState(false)
   const [broadcasts, setBroadcasts]               = useState(null)
+  const [source, setSource]                       = useState(null)
   const [fetched, setFetched]                     = useState(false)
 
   // Detectar país al abrir por primera vez
@@ -33,10 +46,11 @@ export default function WatchPanel({ sport, competitionKey, competitionName, isO
     setLoading(true)
     setFetched(true)
     const name = encodeURIComponent(competitionName || competitionKey)
-    apiFetch(`/api/broadcasting/${competitionKey}/${encodeURIComponent(country)}?competitionName=${name}`)
+    const delPartido = matchId ? `&matchId=${encodeURIComponent(matchId)}` : ''
+    apiFetch(`/api/broadcasting/${competitionKey}/${encodeURIComponent(country)}?competitionName=${name}${delPartido}`)
       .then(res => res.json())
       .then(data => {
-        if (data.ok) setBroadcasts(data.data)
+        if (data.ok) { setBroadcasts(data.data); setSource(data.source || null) }
       })
       .catch(() => setBroadcasts(null))
       .finally(() => setLoading(false))
@@ -47,16 +61,19 @@ export default function WatchPanel({ sport, competitionKey, competitionName, isO
     localStorage.setItem('fanschedule_country', newCountry)
     setChangingCountry(false)
     setBroadcasts(null)
+    setSource(null)
     setFetched(false)
   }
 
   if (!isOpen) return null
 
   const hasAny = broadcasts && (
+    broadcasts.texto?.length > 0 ||
     broadcasts.freeTV?.length > 0 ||
     broadcasts.paidTV?.length > 0 ||
     broadcasts.streaming?.length > 0
   )
+  const esVerificado = FUENTES_VERIFICADAS.has(source)
 
   return (
     <div style={{ borderTop: '1px solid #e8e8e8', padding: '16px 20px', background: '#f9fafb' }}>
@@ -116,6 +133,16 @@ export default function WatchPanel({ sport, competitionKey, competitionName, isO
       {!loading && hasAny && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
+          {/* Renglones de una tabla hecha a mano, tal cual (Liga MX: "Canal 5, TUDN o ViX Premium").
+              Sin clasificarlos en abierta o de paga: la tabla no lo dice. */}
+          {broadcasts.texto?.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {broadcasts.texto.map(t => (
+                <div key={t} style={{ fontSize: 13, color: '#1C2430', fontWeight: 500 }}>{t}</div>
+              ))}
+            </div>
+          )}
+
           {broadcasts.freeTV?.length > 0 && (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -152,10 +179,18 @@ export default function WatchPanel({ sport, competitionKey, competitionName, isO
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                 <span style={{ fontSize: 11, fontWeight: 500, color: '#666666', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Streaming</span>
-                <span style={{ fontSize: 10, background: 'rgba(16,177,199,0.1)', color: '#10B1C7', padding: '1px 7px', borderRadius: 10, fontWeight: 500 }}>Contratable online</span>
+                {/* "Contratable online" es una clasificación que las tablas hechas a mano no hacen
+                    (VIX tiene plan gratuito): en lo verificado por partido no se afirma. */}
+                {source !== 'verificado' && (
+                  <span style={{ fontSize: 10, background: 'rgba(16,177,199,0.1)', color: '#10B1C7', padding: '1px 7px', borderRadius: 10, fontWeight: 500 }}>Contratable online</span>
+                )}
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {broadcasts.streaming.map(s => (
+                {broadcasts.streaming.map(s => !s.url ? (
+                  <span key={s.name} style={{ background: 'rgba(16,177,199,0.06)', border: '1px solid rgba(16,177,199,0.25)', borderRadius: 20, padding: '5px 14px', fontSize: 12, color: '#10B1C7', fontWeight: 500 }}>
+                    ▶ {s.name}
+                  </span>
+                ) : (
                   <a
                     key={s.name}
                     href={s.url}
@@ -167,6 +202,12 @@ export default function WatchPanel({ sport, competitionKey, competitionName, isO
                   </a>
                 ))}
               </div>
+            </div>
+          )}
+
+          {!esVerificado && (
+            <div style={{ fontSize: 12, color: '#666666', lineHeight: 1.5 }}>
+              {ACLARACION_IA}
             </div>
           )}
 
