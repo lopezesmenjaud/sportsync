@@ -102,7 +102,7 @@ export default function MatchDetail() {
           <div style={{ padding: '20px 24px', borderBottom: '0.5px solid #e8e8e8', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 500, color: '#F18006', background: 'rgba(241,128,6,0.15)', border: '0.5px solid rgba(241,128,6,0.3)', padding: '4px 12px', borderRadius: 20 }}>
-                ⚽ {match.competitionName}
+                ⚽ {match.nombreCompetencia || match.competitionName}
               </span>
               {match.userSide === 'home' && (
                 <span style={{ fontSize: 12, fontWeight: 600, color: '#16a34a', background: '#dcfce7', padding: '4px 12px', borderRadius: 20 }}>🏠 Local</span>
@@ -136,7 +136,7 @@ export default function MatchDetail() {
           ) : (
             <div style={{ padding: '32px 24px', textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 500, color: '#1C2430', lineHeight: 1.4 }}>
-                {match.eventName || match.competitionName}
+                {match.eventName || match.nombreCompetencia || match.competitionName}
               </div>
             </div>
           )}
@@ -160,6 +160,7 @@ export default function MatchDetail() {
             sport={match.sport}
             competitionKey={match.competitionKey}
             competitionName={match.competitionName}
+            nombreVisible={match.nombreCompetencia}
             isOpen={true}
           />
         </div>

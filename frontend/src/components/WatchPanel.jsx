@@ -14,7 +14,11 @@ const ACLARACION_IA = 'Esta lista es una sugerencia automática hecha con inteli
 
 // matchId (opcional): con él, el backend usa las tablas hechas a mano de ESE partido (Liga MX por
 // equipo local, selección mexicana) antes que la caché o la IA. Sin él, todo sigue como antes.
-export default function WatchPanel({ sport, competitionKey, competitionName, isOpen, matchId }) {
+//
+// nombreVisible (opcional): el nombre público de la competencia ("Liga MX"), SOLO para los mensajes
+// de la pantalla. A /api/broadcasting se le sigue mandando competitionName tal cual: entra al prompt
+// de la IA y se guarda en la columna competitionName de broadcasting_cache, y eso no se cambia aquí.
+export default function WatchPanel({ sport, competitionKey, competitionName, nombreVisible, isOpen, matchId }) {
   const [country, setCountry]                     = useState(null)
   const [loading, setLoading]                     = useState(false)
   const [changingCountry, setChangingCountry]     = useState(false)
@@ -112,14 +116,14 @@ export default function WatchPanel({ sport, competitionKey, competitionName, isO
       {/* Cargando */}
       {loading && (
         <div style={{ fontSize: 13, color: '#666666', padding: '4px 0' }}>
-          Buscando opciones para {competitionName} en {country}...
+          Buscando opciones para {nombreVisible || competitionName} en {country}...
         </div>
       )}
 
       {/* Sin datos */}
       {!loading && fetched && !hasAny && country && (
         <div style={{ fontSize: 12, color: '#666666', lineHeight: 1.6 }}>
-          No encontramos información de transmisión para {competitionName} en {country}.{' '}
+          No encontramos información de transmisión para {nombreVisible || competitionName} en {country}.{' '}
           <button
             onClick={() => setChangingCountry(true)}
             style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#10B1C7', padding: 0 }}

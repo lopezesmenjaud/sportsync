@@ -60,7 +60,7 @@ export default function MatchCard({ match, showDate = true }) {
       <div style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e5e7eb' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 11, fontWeight: 500, color: '#F18006', background: '#FEF3E2', padding: '3px 10px', borderRadius: 20 }}>
-            ⚽ {match.competitionName}
+            ⚽ {match.nombreCompetencia || match.competitionName}
           </span>
           {match.userSide === 'home' && (
             <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', background: '#dcfce7', padding: '3px 10px', borderRadius: 20 }}>🏠 Local</span>
@@ -94,7 +94,7 @@ export default function MatchCard({ match, showDate = true }) {
       ) : (
         <div style={{ padding: '24px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 16, fontWeight: 500, color: '#111827', lineHeight: 1.4 }}>
-            {match.eventName || match.competitionName}
+            {match.eventName || match.nombreCompetencia || match.competitionName}
           </div>
         </div>
       )}
@@ -112,6 +112,7 @@ export default function MatchCard({ match, showDate = true }) {
         sport={match.sport}
         competitionKey={match.competitionKey}
         competitionName={match.competitionName}
+        nombreVisible={match.nombreCompetencia}
         isOpen={watchOpen}
       />
 
