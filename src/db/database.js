@@ -358,15 +358,23 @@ async function initializeDatabase() {
     console.log("✅ Tennis players table ready");
 
     // Consentimiento de correos. Lo escribe SOLO POST /api/consent; lo lee GET /api/consent (cada
-    // persona su fila) y el panel de admin.
+    // persona su fila) y el panel de admin. La lógica vive en src/services/consentimiento.js, que
+    // también tiene escrita la REGLA de qué permiso vale para mandar correos.
     //   - Sin fila = la persona nunca contestó. NO es lo mismo que "no".
     //   - consentDate: la fecha de la PRIMERA respuesta, NO la de la aceptación vigente (el nombre
     //     engaña). Si alguien dijo que no en marzo y que sí en agosto, consentDate dice marzo. Para
-    //     saber cuándo quedó como está hoy, mira updatedAt.
-    //   - textVersion: qué versión del texto del modal aceptó la persona. NULL = el modal VIEJO, el
-    //     de los dos permisos amarrados en un solo botón ("Sí, quiero recibir novedades" aceptaba
-    //     novedades Y socios). Las filas de antes de esta columna se quedan en NULL a propósito: no
-    //     se les escribe nada, NULL ya es la marca.
+    //     saber cuándo quedó como está hoy, mira updatedAt (de la fila) o la fecha de cada permiso.
+    //   - versionNovedades / versionSocios: qué versión del texto vio la persona al elegir ESE
+    //     permiso (el texto exacto está en src/data/textosConsentimiento.json). NULL = el modal
+    //     VIEJO, el de los dos permisos amarrados en un solo botón ("Sí, quiero recibir novedades"
+    //     aceptaba novedades Y socios). Las filas de antes se quedan en NULL a propósito: NULL ya es
+    //     la marca. Una por permiso porque el perfil guarda un permiso a la vez.
+    //   - fechaNovedades / fechaSocios: cuándo eligió la persona ESE permiso. Son registro (no se
+    //     muestran): con versión y fecha se puede decir qué aceptó y cuándo, permiso por permiso.
+    //   - textVersion: NUNCA se usó. Se agregó el 20 oct 2026 y se reemplazó antes de escribirse por
+    //     versionNovedades y versionSocios, porque una sola versión por fila se rompía al guardar un
+    //     permiso a la vez. Se deja vacía a propósito: quitarla era un cambio destructivo en el
+    //     arranque por una columna sin datos. No la uses.
     await runAsync(`
       CREATE TABLE IF NOT EXISTS email_consent (
         userId TEXT PRIMARY KEY,
@@ -374,17 +382,23 @@ async function initializeDatabase() {
         emailPartners INTEGER DEFAULT 0,
         consentDate TEXT,
         updatedAt TEXT,
-        textVersion TEXT
+        textVersion TEXT,
+        versionNovedades TEXT,
+        versionSocios TEXT,
+        fechaNovedades TEXT,
+        fechaSocios TEXT
       )
     `);
-    // La tabla ya existía en producción sin textVersion: el CREATE de arriba no la toca, así que se
-    // agrega aquí. Es seguro en cada arranque: si ya está, no hace nada; ADD COLUMN con NULL no
+    // La tabla ya existía en producción sin estas columnas: el CREATE de arriba no la toca, así que
+    // se agregan aquí. Es seguro en cada arranque: si ya están, no hace nada; ADD COLUMN con NULL no
     // reescribe filas; y si dos procesos lo intentan a la vez, el segundo recibe "duplicate column"
-    // y lo ignora con la columna ya creada. El único caso malo es que el ALTER falle (base ocupada)
-    // y addColumnIfNotExists se lo trague en silencio: por eso se verifica después, a gritos.
-    await addColumnIfNotExists("email_consent", "textVersion", "TEXT");
-    if (!columnaExiste("email_consent", "textVersion")) {
-      console.error("❌ email_consent.textVersion NO existe: el ALTER falló. GET /api/consent contestará textVersion: null hasta el siguiente arranque.");
+    // y lo ignora con la columna ya creada. El único caso malo es que un ALTER falle (base ocupada)
+    // y addColumnIfNotExists se lo trague en silencio: por eso se verifica cada una después, a gritos.
+    for (const columna of ["versionNovedades", "versionSocios", "fechaNovedades", "fechaSocios"]) {
+      await addColumnIfNotExists("email_consent", columna, "TEXT");
+      if (!columnaExiste("email_consent", columna)) {
+        console.error(`❌ email_consent.${columna} NO existe: el ALTER falló. POST /api/consent contestará 503 y GET devolverá versiones y fechas en null hasta el siguiente arranque.`);
+      }
     }
     console.log("✅ Email consent table ready");
 

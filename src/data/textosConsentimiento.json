@@ -1,0 +1,54 @@
+{
+  "_lee_esto_primero": [
+    "El texto EXACTO de cada versión del consentimiento de correos. Sirve para responder un reclamo: la columna versionNovedades o versionSocios de email_consent dice qué versión vio la persona al elegir ese permiso, y aquí está lo que leyó.",
+    "Una versión NO se edita después de usarse. Si cambia el texto, se crea una versión nueva con otra llave; la vieja se queda tal cual, porque hay personas que la aceptaron.",
+    "aprobada: false mientras Julio no apruebe el texto. POST /api/consent RECHAZA (400) cualquier versión no aprobada, así que no se puede guardar un consentimiento con un texto sin aprobar.",
+    "permisos: para qué permisos sirve la versión. La de reconfirmación solo aplica a socios.",
+    "Versión NULL en la base (sin versión) = el modal VIEJO, anterior a este archivo: un solo botón, 'Sí, quiero recibir novedades', que aceptaba novedades Y ofertas de socios. Su texto completo está en _version_null."
+  ],
+  "_version_null": {
+    "descripcion": "Modal viejo (hasta oct 2026). Un solo botón aceptaba los dos permisos; otro los rechazaba los dos.",
+    "titulo": "¿Quieres estar al tanto?",
+    "explicacion": "Envíanos tu autorización para mandarte novedades de FanSchedule y ofertas de nuestros socios (boletos, streaming, promociones deportivas).",
+    "aceptar": "Sí, quiero recibir novedades",
+    "rechazar": "No por ahora"
+  },
+  "versiones": {
+    "2026-10-dos-permisos": {
+      "aprobada": false,
+      "descripcion": "Dos permisos separados. Mismas etiquetas en el modal y en el perfil.",
+      "permisos": ["novedades", "socios"],
+      "etiquetas": {
+        "novedades": "Novedades de FanSchedule: funciones nuevas y cambios importantes de la app.",
+        "socios": "Ofertas de nuestros socios: promociones de boletos, streaming y marcas deportivas. Te las manda FanSchedule; el socio no recibe tu dirección de correo."
+      },
+      "pantallas": {
+        "modal": {
+          "titulo": "¿Te escribimos por correo?",
+          "explicacion": "Hoy FanSchedule no manda correos. Si algún día lo hacemos, solo te escribiremos con tu permiso. Elige cada cosa por separado.",
+          "nota": "Si dejas las dos sin marcar y guardas, no te mandaremos ningún correo. Puedes cambiarlo en tu perfil.",
+          "guardar": "Guardar mis preferencias",
+          "posponer": "Ahora no"
+        },
+        "perfil": {
+          "titulo": "Correos",
+          "sinElegir": "Todavía no nos has dicho si quieres correos. Mientras no elijas, no te escribimos."
+        }
+      }
+    },
+    "2026-10-dos-permisos-reconfirmacion": {
+      "aprobada": false,
+      "descripcion": "El enlace del perfil para seguir recibiendo ofertas de socios, para quien las aceptó con el modal viejo.",
+      "permisos": ["socios"],
+      "etiquetas": {
+        "socios": "Ofertas de nuestros socios: promociones de boletos, streaming y marcas deportivas. Te las manda FanSchedule; el socio no recibe tu dirección de correo."
+      },
+      "pantallas": {
+        "perfil": {
+          "aviso": "Lo aceptaste con un aviso anterior que juntaba novedades y ofertas en un solo botón. Revísalo: puedes dejarlo prendido o apagarlo.",
+          "enlace": "Sí, quiero seguir recibiéndolas"
+        }
+      }
+    }
+  }
+}
