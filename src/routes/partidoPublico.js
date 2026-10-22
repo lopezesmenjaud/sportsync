@@ -1895,6 +1895,8 @@ module.exports = {
   vistaDelPartido,
   // Para /api/broadcasting (server.js): la app usa las mismas tablas hechas a mano que esta página.
   dondeVerVerificado,
+  // Para los partidos que manda el servidor a la app (nombreCompetencia): el mismo nombre público.
+  nombreDeCompetencia,
   momentoDelPartido,
   MOMENTO,
   esIndexable,

@@ -21,7 +21,7 @@ const { sessionRepository } = require("./src/repositories/sessionRepositorySqlit
 const { requireUser, optionalUser, isLegacyAllowed } = require("./src/middleware/auth");
 const { withRateLimitRetry, sleep, backfillUserEvents } = require("./src/services/userBackfillService");
 const { esClaveDeCategoria, categorias: categoriasTenis, esClaveDeCircuito, dondeVerTenis } = require("./src/services/tenisCategorias");
-const { partidoPublicoHandler, equipoPublicoHandler, sitemapHandler, seguirHandler, dondeVerVerificado } = require("./src/routes/partidoPublico");
+const { partidoPublicoHandler, equipoPublicoHandler, sitemapHandler, seguirHandler, dondeVerVerificado, nombreDeCompetencia } = require("./src/routes/partidoPublico");
 const { acercaHandler, contactoHandler, privacyHandler, termsHandler } = require("./src/routes/paginasInfo");
 const { directorioEquiposHandler } = require("./src/routes/directorioEquipos");
 const {
@@ -1261,6 +1261,10 @@ app.get("/api/match/:matchId", optionalUser(), async (req, res) => {
     } else {
       match.userSide = null;
     }
+    // nombreCompetencia: el nombre público ("Liga MX") de competencias.json, el mismo de las
+    // páginas de Express; si la competencia no está en el catálogo, el que trae el partido.
+    // competitionName se queda tal cual (crudo del proveedor) para todo lo que ya lo usa.
+    match.nombreCompetencia = nombreDeCompetencia(match);
     res.json({ ok: true, match });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
@@ -1685,6 +1689,8 @@ app.post("/api/nearby", optionalUser(), async (req, res) => {
         sport: normalizeSportName(e.strSport),
         competitionKey: e.idLeague || "unknown",
         competitionName: e.strLeague || "Unknown",
+        // Nombre público de la competencia (ver /api/match/:matchId), por la clave del proveedor.
+        nombreCompetencia: nombreDeCompetencia({ competitionKey: e.idLeague, competitionName: e.strLeague || "Unknown" }),
         eventName: e.strEvent || null,
         homeParticipantName: e.strHomeTeam || null,
         awayParticipantName: e.strAwayTeam || null,
@@ -2524,6 +2530,8 @@ app.get("/matches/:userId", requireUser(), async (req, res) => {
       })
       .map(m => ({
         ...m,
+        // Nombre público de la competencia (ver /api/match/:matchId). competitionName sigue crudo.
+        nombreCompetencia: nombreDeCompetencia(m),
         userSide: getUserSide(m, subscriptions),
         // inclusionReasonIds = CUÁLES favoritos son la razón por la que este partido se muestra.
         // MISMO predicado que la visibilidad de arriba → todo partido mostrado trae al menos un
