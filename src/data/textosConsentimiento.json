@@ -15,7 +15,7 @@
   },
   "versiones": {
     "2026-10-dos-permisos": {
-      "aprobada": false,
+      "aprobada": true,
       "descripcion": "Dos permisos separados. Mismas etiquetas en el modal y en el perfil.",
       "permisos": ["novedades", "socios"],
       "etiquetas": {
@@ -37,7 +37,7 @@
       }
     },
     "2026-10-dos-permisos-reconfirmacion": {
-      "aprobada": false,
+      "aprobada": true,
       "descripcion": "El enlace del perfil para seguir recibiendo ofertas de socios, para quien las aceptó con el modal viejo.",
       "permisos": ["socios"],
       "etiquetas": {
