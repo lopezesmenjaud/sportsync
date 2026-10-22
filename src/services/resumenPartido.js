@@ -35,8 +35,11 @@ const COMPETENCIAS = require("../data/competencias.json").competencias;
 const POR_CLAVE = new Map(COMPETENCIAS.map((c) => [String(c.clave), c]));
 const conValor = (v) => v !== null && v !== undefined && String(v).trim() !== "";
 
-// Cuántos partidos siguientes de cada equipo se le pasan (después de éste).
-const PROXIMOS_POR_EQUIPO = 2;
+// Cuántos partidos siguientes de cada equipo se le pasan (después de éste). UNO y no dos: con dos,
+// siete de siete partidos de fútbol de la primera muestra pasaron de 140 palabras (151 a 177), y
+// no era relleno: el último párrafo metía cuatro fixtures. Es además lo menos útil en un resumen de
+// ESTE partido, y el calendario completo de cada equipo ya está en su página.
+const PROXIMOS_POR_EQUIPO = 1;
 
 // Lo que pide el prompt, y a partir de cuánto se avisa en el log. Pasarse NO tira el texto (tirar
 // uno bueno cuesta una llamada y uno largo puede estar denso, no relleno): solo se avisa, para ver
