@@ -14,6 +14,7 @@ const { invalidate: invalidateRoundLabel } = require("./src/services/roundLabelS
 const { syncMatches, syncLeague, syncTeam, normalizeSport, nuevoContador } = require("./src/services/syncService");
 const { getUserSide, isInclusionReason } = require("./src/services/subscriptionMatchService");
 const { matchRepository } = require("./src/repositories/matchRepositorySqlite");
+const { matchSummaryCacheRepository } = require("./src/repositories/matchSummaryCacheRepositorySqlite");
 const { startScheduler, shouldSkipUser } = require("./src/services/scheduler");
 const { calendarEventRepository } = require("./src/repositories/calendarEventRepositorySqlite");
 const googleCalendarProvider = require("./src/services/googleCalendarProvider");
@@ -220,115 +221,6 @@ async function safeFetchJson(url, { timeoutMs = FETCH_TIMEOUT_MS, signal: presup
   }
 }
 
-
-// ─────────────────────────────────────────────
-// Helpers resumen IA con caché
-// ─────────────────────────────────────────────
-function saveSummaryToDb(providerMatchId, summary) {
-  return new Promise((resolve, reject) => {
-    const now = new Date().toISOString();
-    db.run(
-      `UPDATE matches SET ai_summary = ?, summary_generated_at = ? WHERE providerMatchId = ?`,
-      [summary, now, providerMatchId],
-      (err) => { if (err) reject(err); else resolve(); }
-    );
-  });
-}
-
-function getSummaryFromDb(providerMatchId) {
-  return new Promise((resolve, reject) => {
-    db.get(
-      `SELECT ai_summary, summary_generated_at, currentStartUtc FROM matches WHERE providerMatchId = ?`,
-      [providerMatchId],
-      (err, row) => { if (err) reject(err); else resolve(row); }
-    );
-  });
-}
-
-async function getSmartSummary(match) {
-  const now            = new Date();
-  const matchDate      = new Date(match.currentStartUtc);
-  const daysUntilMatch = (matchDate - now) / (1000 * 60 * 60 * 24);
-
-  if (daysUntilMatch > 7) {
-    return { summary: null, source: "too_far", reason: "El partido es en más de 7 días." };
-  }
-
-  // Dos participantes confirmados (equipo vs equipo) vs. evento/sesión individual (F1, motorsport…).
-  const isTeamVsTeam = match.homeParticipantName && match.awayParticipantName &&
-    match.homeParticipantName !== "TBD" && match.awayParticipantName !== "TBD";
-  const isSingleEvent = !isTeamVsTeam && !!match.eventName;
-
-  // Sin dos participantes NI nombre de evento → no hay con qué generar.
-  if (!isTeamVsTeam && !isSingleEvent) {
-    return { summary: null, source: "tbd", reason: "Los rivales aún no están confirmados." };
-  }
-
-  const label = isTeamVsTeam
-    ? `${match.homeParticipantName} vs ${match.awayParticipantName}`
-    : match.eventName;
-
-  const stored = await getSummaryFromDb(match.providerMatchId);
-  if (stored?.ai_summary && stored?.summary_generated_at) {
-    const generatedAt  = new Date(stored.summary_generated_at);
-    const todayStr     = now.toISOString().slice(0, 10);
-    const generatedStr = generatedAt.toISOString().slice(0, 10);
-    if (generatedStr === todayStr) {
-      const minutesDiff = Math.abs(new Date(match.currentStartUtc) - new Date(stored.currentStartUtc || match.currentStartUtc)) / (1000 * 60);
-      if (minutesDiff < 60) {
-        console.log(`[summary] Using cached summary for ${match.providerMatchId}`);
-        return { summary: stored.ai_summary, source: "cache" };
-      }
-    }
-  }
-
-  console.log(`[summary] Generating new summary for ${label}...`);
-
-  const prompt = isTeamVsTeam
-    ? `Genera un resumen pre-partido breve y emocionante (máximo 3 oraciones) para este partido de ${match.sport}:
-${match.homeParticipantName} vs ${match.awayParticipantName}
-Competición: ${match.competitionName}
-Fecha: ${match.currentStartUtc}
-Responde solo con el resumen, sin títulos ni formato extra.`
-    : `Genera un resumen breve y emocionante (máximo 3 oraciones) para este evento de ${match.sport}:
-${match.eventName}
-Competición: ${match.competitionName}
-Fecha: ${match.currentStartUtc}
-Es un evento o sesión individual (no un partido entre dos equipos). Enfócate en el contexto de la competición y qué esperar de esta sesión o carrera.
-Responde solo con el resumen, sin títulos ni formato extra.`;
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01"
-    },
-    body: JSON.stringify({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 1000,
-      messages: [{ role: "user", content: prompt }]
-    })
-  });
-
-  // Error de la API: NO cachear. Loguear status + cuerpo real. El fallback se muestra solo en el momento.
-  if (!response.ok) {
-    const errBody = await response.text().catch(() => "");
-    console.error(`[summary] Anthropic API ${response.status} para ${match.providerMatchId}: ${errBody.slice(0, 300)}`);
-    return { summary: "Resumen no disponible.", source: "error" };
-  }
-
-  const data = await response.json();
-  const { text, blockTypes } = readAnthropicText(data, "summary");
-  if (!text) {
-    console.error(`[summary] Anthropic sin bloque text para ${match.providerMatchId} (bloques: ${JSON.stringify(blockTypes)})`);
-    return { summary: "Resumen no disponible.", source: "error" };
-  }
-
-  await saveSummaryToDb(match.providerMatchId, text);
-  console.log(`[summary] Saved new summary for ${match.providerMatchId}`);
-  return { summary: text, source: "generated" };
-}
 
 // ─────────────────────────────────────────────
 // Helpers broadcasting IA con caché
@@ -2556,18 +2448,20 @@ app.get("/matches/:userId", requireUser(), async (req, res) => {
   }
 });
 
-// ── Resumen IA con caché ──
+// ── Resumen del partido: SOLO LECTURA ──
+// El resumen lo escribe el job runGenerarResumenesPartidos en match_summary_cache, con datos reales;
+// este endpoint NO genera nunca. Antes generaba en cada petición, y como no pide sesión, cualquiera
+// podía dispararle llamadas pagadas al modelo con solo llamarlo con cualquier id. Ahora el costo lo
+// manda el calendario (el job), no el tráfico.
+// Sin resumen guardado (partido a más de 7 días, sin datos suficientes o rechazado por el
+// validador): ok:false con message, que la app pinta en el lugar del resumen sin romperse.
 app.post("/summary/:matchId", async (req, res) => {
   try {
-    const match = await matchRepository.getByProviderMatchId(req.params.matchId);
-    if (!match) return res.status(404).json({ error: "Match not found" });
-    const result = await getSmartSummary(match);
-    if (result.source === "too_far" || result.source === "tbd") {
-      return res.json({ ok: false, reason: result.source, message: result.reason });
-    }
-    res.json({ ok: true, summary: result.summary, source: result.source });
+    const guardado = await matchSummaryCacheRepository.get(req.params.matchId);
+    if (guardado) return res.json({ ok: true, summary: guardado.summary, source: "cache" });
+    return res.json({ ok: false, reason: "sin_resumen", message: "Todavía no hay resumen para este partido." });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ ok: false, error: error.message });
   }
 });
 

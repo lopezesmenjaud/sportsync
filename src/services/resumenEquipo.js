@@ -3,10 +3,11 @@
 // Resumen escrito con IA de una página pública de equipo (/equipo/:slug). Lo usa SOLO el job
 // runGenerarResumenesEquipos; la página nunca genera, solo lee team_summary_cache.
 //
-// Misma infraestructura que el resumen de partidos (getSmartSummary en server.js): la API de
-// Anthropic, ANTHROPIC_MODEL, readAnthropicText y process.env.ANTHROPIC_API_KEY. Pero NO su diseño
-// de datos: aquel recibe cuatro campos y por eso inventa. Éste recibe datos reales y el prompt le
-// prohíbe salirse de ellos. Si un dato no existe, su renglón NO va en el prompt.
+// Usa la API de Anthropic, ANTHROPIC_MODEL, readAnthropicText y process.env.ANTHROPIC_API_KEY. El
+// resumen de partidos viejo (getSmartSummary, quitado de server.js en oct 2026) usaba lo mismo
+// pero recibía cuatro campos y por eso inventaba; el de partidos de hoy es resumenPartido.js.
+// Éste recibe datos reales y el prompt le prohíbe salirse de ellos. Si un dato no existe, su
+// renglón NO va en el prompt.
 //
 // Datos:
 //   - la tabla de posiciones del proveedor, solo de las ligas de LIGAS_CON_TABLA (tablaPosiciones.js);

@@ -3,7 +3,7 @@
 // Resumen escrito con IA de la pantalla de partido de la app (/match/:matchId). Lo usa SOLO el job
 // runGenerarResumenesPartidos; el endpoint nunca genera, solo lee lo que dejó el job.
 //
-// Reemplaza el diseño de getSmartSummary (server.js), que recibía cuatro campos —equipos,
+// Reemplaza a getSmartSummary (quitado de server.js en oct 2026), que recibía cuatro campos —equipos,
 // competencia cruda, deporte en inglés y la fecha en UTC— y por eso inventaba. Éste recibe datos
 // reales y el prompt le prohíbe salirse de ellos. Si un dato no existe, su renglón NO va en el
 // prompt. Misma infraestructura y mismo modelo que los resúmenes de equipo (generarResumen).
