@@ -59,7 +59,7 @@ const LIGA_MX_POR_BASE = new Map(LIGA_MX.equipos.map((e) => [e.base, e]));
 // Fórmula 1: el proveedor manda los eventos en inglés ("Azerbaijan Grand Prix Qualifying") y
 // nadie en México busca así. Esta tabla los traduce.
 const F1 = require("../data/f1.json");
-const { dondeVerTenis } = require("../services/tenisCategorias");
+const { dondeVerTenis, esPaisMexico } = require("../services/tenisCategorias");
 
 // Los grandes premios, ORDENADOS DE MÁS LARGO A MÁS CORTO. El nombre del evento se reconoce por
 // prefijo, así que el orden es lo que hace que gane el más específico: sin él,
@@ -278,6 +278,36 @@ function vistaDelPartido(match) {
     // va fijo. null = no aplica.
     dondeVerSeleccion: dondeVerSeleccionEnMexico(match),
   };
+}
+
+// "Dónde verlo" para la APP (/api/broadcasting, que pinta WatchPanel), desde las MISMAS tablas
+// hechas a mano que usa esta página: Liga MX (canal por equipo LOCAL) y selección mexicana (por
+// participante). Así la app y /partido/ dicen lo mismo. El tenis no pasa por aquí: el endpoint ya
+// lo resuelve por clave antes de llegar.
+//
+// Devuelve la respuesta en la forma que entiende WatchPanel, o null si no hay tabla para este
+// partido (y entonces el endpoint sigue con la caché o la IA, como siempre):
+//   - texto: renglones tal cual los dice la tabla ("Canal 5, TUDN o ViX Premium"). No se les
+//     inventa clasificación de abierta o de paga que la tabla no hace.
+//   - streaming de la selección como { name, url: null }: la tabla no trae enlace.
+// Solo para México: las tablas dicen dónde ver EN MÉXICO. Y solo si el partido es de la misma
+// competencia que pidió la app, para que un matchId equivocado no cambie la respuesta.
+function dondeVerVerificado(match, competitionKey, country) {
+  if (!match || !esPaisMexico(country)) return null;
+  if (String(match.competitionKey || "") !== String(competitionKey || "")) return null;
+  const vista = vistaDelPartido(match);
+  if (vista.dondeVerLocal) {
+    return { freeTV: [], paidTV: [], streaming: [], texto: [vista.dondeVerLocal] };
+  }
+  if (vista.dondeVerSeleccion) {
+    const d = vista.dondeVerSeleccion;
+    return {
+      freeTV: [], paidTV: [],
+      streaming: d.streaming.map((name) => ({ name, url: null })),
+      texto: [...d.tvAbierta],
+    };
+  }
+  return null;
 }
 
 // El slug canónico de un partido. Envoltorio de vistaDelPartido para quien solo quiere el slug.
@@ -1863,6 +1893,8 @@ module.exports = {
   aSlug,
   slugCanonico,
   vistaDelPartido,
+  // Para /api/broadcasting (server.js): la app usa las mismas tablas hechas a mano que esta página.
+  dondeVerVerificado,
   momentoDelPartido,
   MOMENTO,
   esIndexable,

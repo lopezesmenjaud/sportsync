@@ -21,7 +21,7 @@ const { sessionRepository } = require("./src/repositories/sessionRepositorySqlit
 const { requireUser, optionalUser, isLegacyAllowed } = require("./src/middleware/auth");
 const { withRateLimitRetry, sleep, backfillUserEvents } = require("./src/services/userBackfillService");
 const { esClaveDeCategoria, categorias: categoriasTenis, esClaveDeCircuito, dondeVerTenis } = require("./src/services/tenisCategorias");
-const { partidoPublicoHandler, equipoPublicoHandler, sitemapHandler, seguirHandler } = require("./src/routes/partidoPublico");
+const { partidoPublicoHandler, equipoPublicoHandler, sitemapHandler, seguirHandler, dondeVerVerificado } = require("./src/routes/partidoPublico");
 const { acercaHandler, contactoHandler, privacyHandler, termsHandler } = require("./src/routes/paginasInfo");
 const { directorioEquiposHandler } = require("./src/routes/directorioEquipos");
 const {
@@ -511,6 +511,16 @@ app.get("/api/broadcasting/:competitionKey/:country", async (req, res) => {
         streaming: tenis ? [{ name: tenis.texto, url: tenis.url }] : [],
       };
       return res.json({ ok: true, data, source: "tenis" });
+    }
+
+    // PARTIDO CON TABLA HECHA A MANO (Liga MX, selección mexicana): la MISMA prioridad que la
+    // página pública /partido/ — tabla primero, IA solo si no hay. Como el tenis, sale ANTES de la
+    // caché: broadcasting_cache ni se lee ni se escribe en este camino. ?matchId= es opcional: sin
+    // él (la app de antes), todo sigue igual. La regla vive en dondeVerVerificado (partidoPublico.js).
+    const matchId = String(req.query.matchId || "").trim();
+    if (matchId) {
+      const verificado = dondeVerVerificado(await matchRepository.getByProviderMatchId(matchId), competitionKey, country);
+      if (verificado) return res.json({ ok: true, data: verificado, source: "verificado" });
     }
 
     const cached = await getBroadcastingFromDb(competitionKey, country);

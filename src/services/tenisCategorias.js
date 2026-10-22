@@ -156,6 +156,13 @@ function esClaveDeCircuito(clave) {
 
 const clavesDesconocidasAvisadas = new Set();
 
+// ¿Este país es México? Las tablas hechas a mano de "dónde verlo" (tenis, Liga MX, selección)
+// dicen dónde ver EN MÉXICO; con cualquier otro país no aplican. Una sola lista de cómo puede
+// llegar escrito: la usan este módulo y dondeVerVerificado (src/routes/partidoPublico.js).
+function esPaisMexico(pais) {
+  return PAISES_MEXICO.has(normalizar(pais));
+}
+
 // Devuelve { texto, url } o null. pais: el nombre que manda el cliente ("Mexico").
 function dondeVerTenis(competitionKey, pais) {
   const clave = competitionKey == null ? "" : String(competitionKey).trim();
@@ -163,7 +170,7 @@ function dondeVerTenis(competitionKey, pais) {
     clavesDesconocidasAvisadas.add(clave);
     console.warn(`[tenisCategorias] Dónde verlo: partido de tenis con clave desconocida "${clave}"`);
   }
-  if (!esClaveDeCircuito(clave) || !PAISES_MEXICO.has(normalizar(pais))) return null;
+  if (!esClaveDeCircuito(clave) || !esPaisMexico(pais)) return null;
   if (!tabla.dondeVerPorDefecto) return null;
   return { texto: tabla.dondeVerPorDefecto, url: tabla.dondeVerPorDefectoUrl || null };
 }
@@ -172,6 +179,7 @@ module.exports = {
   clasificarTorneoTenis,
   esClaveDeCircuito,
   dondeVerTenis,
+  esPaisMexico,
   esClaveDeCategoria,
   categoriasDelCircuito,
   planDeConversion,
