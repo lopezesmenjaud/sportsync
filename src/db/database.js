@@ -307,6 +307,20 @@ async function initializeDatabase() {
     `);
     console.log("✅ Team summary cache table ready");
 
+    // Resúmenes con IA de la pantalla de partido de la app. Los escribe SOLO el job
+    // runGenerarResumenesPartidos; POST /summary/:matchId solo lee. Igual que team_summary_cache:
+    // NO se vacía al arrancar (cada resumen cuesta una llamada al modelo) y se regenera solo
+    // cuando cambia su firma.
+    await runAsync(`
+      CREATE TABLE IF NOT EXISTS match_summary_cache (
+        providerMatchId TEXT PRIMARY KEY,
+        summary         TEXT NOT NULL,
+        firma           TEXT NOT NULL,
+        generatedAt     TEXT NOT NULL
+      )
+    `);
+    console.log("✅ Match summary cache table ready");
+
     // Jugadores de tenis vistos en los barridos. Es la lista que sirve el picker.
     //
     // NO se llena con peticiones propias: los datos ya vienen dentro de la respuesta que el

@@ -113,6 +113,8 @@ function armarPrompt(d) {
   const datos = [`Equipo: ${d.equipo}`];
   if (d.competencias.length) datos.push(`Competencia: ${d.competencias.join(" y ")}`);
   const f = d.fila;
+  // Ojo: el resumen de PARTIDO (resumenPartido.js) nombra este dato distinto ("Lugar en la tabla de
+  // Liga MX: primero de 18") y es a propósito: aquí la etiqueta funciona bien y no se toca. Ver allá.
   if (f && conValor(f.intRank) && d.totalTabla) datos.push(`Posición: ${f.intRank} de ${d.totalTabla} equipos`);
   if (f && [f.intWin, f.intDraw, f.intLoss, f.intPlayed].every(conValor)) {
     datos.push(`Récord: ${f.intWin} ganados, ${f.intDraw} empatados, ${f.intLoss} perdidos en ${f.intPlayed} jugados`);
