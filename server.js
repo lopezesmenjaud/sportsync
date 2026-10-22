@@ -5,7 +5,7 @@ const cors = require("cors");
 const { oauth2Client } = require("./src/config/googleClient");
 const { CALENDAR_SCOPE_APP_CREATED, hasCalendarScope } = require("./src/config/googleScopes");
 const { ANTHROPIC_MODEL, readAnthropicText } = require("./src/config/aiModel");
-const { initializeDatabase, db } = require("./src/db/database");
+const { initializeDatabase, db, columnaExiste } = require("./src/db/database");
 const { subscriptionRepository } = require("./src/repositories/subscriptionRepositorySqlite");
 const { tennisPlayerRepository } = require("./src/repositories/tennisPlayerRepositorySqlite");
 const { googleAccountRepository } = require("./src/repositories/googleAccountRepositorySqlite");
@@ -1985,15 +1985,95 @@ app.post("/api/admin/resync-user", localhostOnly, async (req, res) => {
   }
 });
 
+// ── Consentimiento de correos ──
+// Dos permisos: emailFanschedule (novedades de FanSchedule) y emailPartners (ofertas de socios).
+// Cada persona solo lee y escribe SU fila: el userId sale de la sesión, nunca del cuerpo.
+// Ver el comentario de la tabla email_consent (src/db/database.js): sin fila = nunca contestó;
+// consentDate es la PRIMERA respuesta, no la vigente (para esa, updatedAt); textVersion NULL = el
+// modal viejo de los dos permisos amarrados.
+
+// textVersion se agregó con ALTER en initializeDatabase. Si ese ALTER fallara, pedirle a SQLite la
+// columna daría "no such column" y el GET tronaría. Así que antes de pedirla se revisa que exista.
+// Solo se guarda el SÍ: el servidor escucha antes de que termine initializeDatabase, así que una
+// petición temprana podría ver la columna todavía sin crear; mientras no aparezca se vuelve a
+// revisar (es una lectura de PRAGMA, barata). Nada se traga: si falta, se avisa en el log.
+let consentTieneTextVersion = false;
+let consentAvisoTextVersion = false;
+function textVersionDisponible() {
+  if (!consentTieneTextVersion) consentTieneTextVersion = columnaExiste("email_consent", "textVersion");
+  if (!consentTieneTextVersion && !consentAvisoTextVersion) {
+    consentAvisoTextVersion = true;
+    console.error("❌ [consent] email_consent.textVersion no existe: GET /api/consent contesta textVersion: null");
+  }
+  return consentTieneTextVersion;
+}
+
+// GET: el consentimiento de QUIEN LLAMA. Tres estados, sin adivinar:
+//   respondio: false  -> nunca contestó (no hay fila); los dos permisos van en null.
+//   respondio: true   -> cada permiso es true o false.
+app.get("/api/consent", requireUser(), async (req, res) => {
+  try {
+    const conVersion = textVersionDisponible();
+    const fila = await new Promise((resolve, reject) => {
+      db.get(
+        `SELECT emailFanschedule, emailPartners, consentDate, updatedAt${conVersion ? ", textVersion" : ""}
+           FROM email_consent WHERE userId = ?`,
+        [req.auth.userId],
+        (err, row) => (err ? reject(err) : resolve(row))
+      );
+    });
+    if (!fila) {
+      return res.json({ ok: true, respondio: false, emailFanschedule: null, emailPartners: null, consentDate: null, updatedAt: null, textVersion: null });
+    }
+    res.json({
+      ok: true,
+      respondio: true,
+      emailFanschedule: fila.emailFanschedule === 1,
+      emailPartners: fila.emailPartners === 1,
+      consentDate: fila.consentDate || null,
+      updatedAt: fila.updatedAt || null,
+      textVersion: conVersion ? (fila.textVersion || null) : null,
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// POST: actualiza ÚNICAMENTE los permisos que vengan en la petición; lo que no venga se queda como
+// está. Antes era INSERT OR REPLACE y lo que no se mandaba se guardaba como "no". Si la fila no
+// existe, se crea con los que vinieron y el otro en 0.
+//   - Cada permiso: true/false (o 1/0). Otro valor -> 400. Si no viene ninguno -> 400.
+//   - consentDate solo se escribe al crear la fila: es la PRIMERA respuesta y no cambia después.
+//   - textVersion todavía no se escribe aquí: se decide con el modal nuevo.
+const PERMISOS_CONSENT = ["emailFanschedule", "emailPartners"];
+function valorDePermiso(v) {
+  if (v === true || v === 1) return 1;
+  if (v === false || v === 0) return 0;
+  return null;
+}
 app.post("/api/consent", requireUser(), async (req, res) => {
   try {
-    const { emailFanschedule, emailPartners } = req.body;
+    const body = req.body || {};
+    const vienen = {};
+    for (const permiso of PERMISOS_CONSENT) {
+      if (!Object.prototype.hasOwnProperty.call(body, permiso) || body[permiso] === undefined) continue;
+      const valor = valorDePermiso(body[permiso]);
+      if (valor === null) return res.status(400).json({ ok: false, error: `${permiso} tiene que ser true o false` });
+      vienen[permiso] = valor;
+    }
+    const campos = Object.keys(vienen);
+    if (!campos.length) return res.status(400).json({ ok: false, error: "No vino ningún permiso" });
+
     const userId = req.auth.userId;
     const now = new Date().toISOString();
+    // Los nombres de columna salen de PERMISOS_CONSENT (lista fija), nunca de la petición.
+    const actualizar = campos.map((c) => `${c} = excluded.${c}`).join(", ");
     await new Promise((resolve, reject) => {
       db.run(
-        `INSERT OR REPLACE INTO email_consent (userId, emailFanschedule, emailPartners, consentDate, updatedAt) VALUES (?, ?, ?, COALESCE((SELECT consentDate FROM email_consent WHERE userId = ?), ?), ?)`,
-        [userId, emailFanschedule ? 1 : 0, emailPartners ? 1 : 0, userId, now, now],
+        `INSERT INTO email_consent (userId, emailFanschedule, emailPartners, consentDate, updatedAt)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(userId) DO UPDATE SET ${actualizar}, updatedAt = excluded.updatedAt`,
+        [userId, vienen.emailFanschedule ?? 0, vienen.emailPartners ?? 0, now, now],
         (err) => { if (err) reject(err); else resolve(); }
       );
     });

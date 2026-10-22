@@ -72,6 +72,13 @@ async function addColumnIfNotExists(table, column, definition) {
   }
 }
 
+// ¿La tabla tiene esta columna? Solo lee PRAGMA table_info; si falla, el error SUBE (no se ignora,
+// a diferencia de addColumnIfNotExists). Sirve para verificar después de un ALTER y para que el
+// código que depende de una columna nueva no le pida a SQLite una que no existe.
+function columnaExiste(tabla, columna) {
+  return betterDb.prepare(`PRAGMA table_info(${tabla})`).all().some((r) => r.name === columna);
+}
+
 let initializationPromise = null;
 
 async function initializeDatabase() {
@@ -350,15 +357,35 @@ async function initializeDatabase() {
     await runAsync(`CREATE INDEX IF NOT EXISTS idx_tennis_players_tour_ranking ON tennis_players (tour, ranking)`);
     console.log("✅ Tennis players table ready");
 
+    // Consentimiento de correos. Lo escribe SOLO POST /api/consent; lo lee GET /api/consent (cada
+    // persona su fila) y el panel de admin.
+    //   - Sin fila = la persona nunca contestó. NO es lo mismo que "no".
+    //   - consentDate: la fecha de la PRIMERA respuesta, NO la de la aceptación vigente (el nombre
+    //     engaña). Si alguien dijo que no en marzo y que sí en agosto, consentDate dice marzo. Para
+    //     saber cuándo quedó como está hoy, mira updatedAt.
+    //   - textVersion: qué versión del texto del modal aceptó la persona. NULL = el modal VIEJO, el
+    //     de los dos permisos amarrados en un solo botón ("Sí, quiero recibir novedades" aceptaba
+    //     novedades Y socios). Las filas de antes de esta columna se quedan en NULL a propósito: no
+    //     se les escribe nada, NULL ya es la marca.
     await runAsync(`
       CREATE TABLE IF NOT EXISTS email_consent (
         userId TEXT PRIMARY KEY,
         emailFanschedule INTEGER DEFAULT 0,
         emailPartners INTEGER DEFAULT 0,
         consentDate TEXT,
-        updatedAt TEXT
+        updatedAt TEXT,
+        textVersion TEXT
       )
     `);
+    // La tabla ya existía en producción sin textVersion: el CREATE de arriba no la toca, así que se
+    // agrega aquí. Es seguro en cada arranque: si ya está, no hace nada; ADD COLUMN con NULL no
+    // reescribe filas; y si dos procesos lo intentan a la vez, el segundo recibe "duplicate column"
+    // y lo ignora con la columna ya creada. El único caso malo es que el ALTER falle (base ocupada)
+    // y addColumnIfNotExists se lo trague en silencio: por eso se verifica después, a gritos.
+    await addColumnIfNotExists("email_consent", "textVersion", "TEXT");
+    if (!columnaExiste("email_consent", "textVersion")) {
+      console.error("❌ email_consent.textVersion NO existe: el ALTER falló. GET /api/consent contestará textVersion: null hasta el siguiente arranque.");
+    }
     console.log("✅ Email consent table ready");
 
     await runAsync(`
@@ -473,4 +500,4 @@ async function initializeDatabase() {
 // betterDb es la instancia CRUDA de better-sqlite3. Se exporta para los pocos casos que necesitan
 // `.prepare()` en vez de la capa de compatibilidad con callbacks — hoy userEventsService, que hace
 // una consulta acotada con JOIN. Para todo lo demás, usar `db`.
-module.exports = { db, betterDb, initializeDatabase };
+module.exports = { db, betterDb, initializeDatabase, columnaExiste };
