@@ -5,6 +5,7 @@ const { googleAccountRepository } = require("../repositories/googleAccountReposi
 const { backfillUserEvents } = require("./userBackfillService");
 const { hasCalendarScope } = require("../config/googleScopes");
 const { generarResumenesEquipos } = require("../jobs/runGenerarResumenesEquipos");
+const { respaldarBase } = require("../jobs/runRespaldoBase");
 
 // ─────────────────────────────────────────────
 // Intervalos de sincronización por deporte
@@ -113,6 +114,38 @@ async function correrResumenesProgramados() {
   }
 }
 
+// ─────────────────────────────────────────────
+// Respaldo diario de la base (src/jobs/runRespaldoBase.js)
+//
+// 10:15 UTC = 4:15 en Ciudad de México. Lejos de todo lo demás: el sync de tenis de las 9:00 y el
+// de las 12:00, y los resúmenes de las 6:30 y 12:30. Va aquí y no en un Cron Job de Render porque
+// el disco persistente (/var/data) solo está montado en este servicio.
+//
+// Variables propias y no CONFIRM/RETENER: el Shell de Render hereda las variables del servicio, y
+// un CONFIRM=1 global haría que CUALQUIER job corrido a mano escribiera sin ensayo.
+//   RESPALDO_CONFIRM  default "1"; cualquier otro valor = ensayo (y se avisa en el log)
+//   RESPALDO_RETENER  default 7
+//
+// Marcas para buscar en el log: [RESPALDO-OK], [RESPALDO-FALLO], [RESPALDO-ENSAYO].
+// Si falla, no tumba el servidor: queda en el log y se reintenta al día siguiente.
+// ─────────────────────────────────────────────
+function correrRespaldoProgramado() {
+  const confirm = (process.env.RESPALDO_CONFIRM ?? "1") === "1";
+  try {
+    console.log("[scheduler] Respaldo de la base: arranca la corrida programada.");
+    const r = respaldarBase({ confirm, retener: process.env.RESPALDO_RETENER });
+    if (r) {
+      console.log(`[scheduler] [RESPALDO-OK] ${r.destino} (quedan ${r.quedan} copias)`);
+    } else {
+      console.warn(`[scheduler] [RESPALDO-ENSAYO] NO se escribió respaldo: RESPALDO_CONFIRM="${process.env.RESPALDO_CONFIRM}"`);
+    }
+    return r;
+  } catch (e) {
+    console.error(`[scheduler] [RESPALDO-FALLO] ${e.message} Se reintenta mañana a la misma hora.`);
+    return null;
+  }
+}
+
 function startScheduler() {
   console.log("[scheduler] Starting automatic sync scheduler...");
 
@@ -168,7 +201,10 @@ function startScheduler() {
   cron.schedule("30 */6 * * *", correrResumenesProgramados);
   console.log("[scheduler] Scheduled Resúmenes de equipo — cada 6 horas, a los :30");
 
+  cron.schedule("15 10 * * *", correrRespaldoProgramado);
+  console.log("[scheduler] Scheduled Respaldo de la base — diario, 10:15 (hora del servidor)");
+
   console.log("[scheduler] All jobs scheduled. Sync running automatically.");
 }
 
-module.exports = { startScheduler, shouldSkipUser, correrResumenesProgramados };
+module.exports = { startScheduler, shouldSkipUser, correrResumenesProgramados, correrRespaldoProgramado };

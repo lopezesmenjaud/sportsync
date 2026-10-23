@@ -24,6 +24,10 @@
 // Uso:
 //   Render (ensayo): cd ~/project/src && NODE_ENV=production node src/jobs/runRespaldoBase.js
 //   Render (real):   cd ~/project/src && NODE_ENV=production CONFIRM=1 node src/jobs/runRespaldoBase.js
+//
+// También lo llama el scheduler una vez al día (src/services/scheduler.js) con respaldarBase().
+// Todo es síncrono (better-sqlite3): mientras corre, bloquea el event loop del servidor. Por eso
+// imprime cuánto tardó, para ver cuándo empieza a estorbar.
 
 const fs = require("fs");
 const path = require("path");
@@ -33,7 +37,6 @@ const dbPath = process.env.NODE_ENV === "production"
   ? "/var/data/sportsync.db"
   : path.resolve(__dirname, "../../sportsync.db");
 
-const CONFIRM = process.env.CONFIRM === "1";
 const COPIAS_DE_MARGEN = 3;
 
 const dirBase = path.dirname(dbPath);
@@ -65,8 +68,7 @@ function sello(fecha) {
   return fecha.toISOString().slice(0, 16).replace(":", "") + "Z";
 }
 
-function leerRetener() {
-  const crudo = process.env.RETENER;
+function leerRetener(crudo) {
   if (crudo === undefined || crudo === "") return 7;
   const n = Number(crudo);
   if (!Number.isInteger(n) || n < 1) {
@@ -103,9 +105,18 @@ function borrarSiExiste(ruta) {
   }
 }
 
-function main() {
-  const RETENER = leerRetener();
+// confirm: false = ensayo. retener: el valor crudo (string o undefined); undefined o "" = 7.
+// Devuelve { destino, quedan } si escribió, null si fue ensayo. Si algo falla, lanza el error.
+function respaldarBase({ confirm = false, retener } = {}) {
+  const inicio = Date.now();
+  try {
+    return correr(confirm, leerRetener(retener));
+  } finally {
+    console.log(`Duración          : ${Date.now() - inicio} ms`);
+  }
+}
 
+function correr(CONFIRM, RETENER) {
   console.log("========================================================");
   console.log(` RESPALDO DE LA BASE  (${CONFIRM ? "REAL" : "ENSAYO, no escribe nada"})`);
   console.log(` Base: ${dbPath}`);
@@ -155,7 +166,7 @@ function main() {
       for (const n of aBorrar) console.log(`  - ${path.join(dirRespaldos, n)}`);
     }
     console.log("\nENSAYO: no se escribió ni se borró nada. Para hacerlo de verdad: CONFIRM=1");
-    return;
+    return null;
   }
 
   // ── 2. Escribir la copia ──
@@ -235,6 +246,7 @@ function main() {
     console.log(`Borrados retención: ${borrados.length === 0 ? "ninguno" : borrados.join(", ")}`);
     console.log(`Copias que quedan : ${quedan} (RETENER=${RETENER})`);
     console.log(`Espacio libre     : ${espacioLibre(dirBase)} bytes (${mb(espacioLibre(dirBase))})`);
+    return { destino, quedan };
   } catch (err) {
     if (copia) copia.close();
     if (original) original.close();
@@ -243,9 +255,15 @@ function main() {
   }
 }
 
-try {
-  main();
-} catch (err) {
-  console.error(`\n❌ ${err.message}`);
-  process.exitCode = 1;
+module.exports = { respaldarBase };
+
+// Solo si se corre a mano (node src/jobs/runRespaldoBase.js). Importado desde el scheduler no
+// entra aquí: ni lee CONFIRM/RETENER ni toca el código de salida del proceso.
+if (require.main === module) {
+  try {
+    respaldarBase({ confirm: process.env.CONFIRM === "1", retener: process.env.RETENER });
+  } catch (err) {
+    console.error(`\n❌ ${err.message}`);
+    process.exitCode = 1;
+  }
 }
