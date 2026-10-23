@@ -5,6 +5,7 @@ token.json
 sportsync.db
 sportsync.db-shm
 sportsync.db-wal
+respaldos/
 .claude/
 frontend/dist/
 
