@@ -124,7 +124,7 @@ const PAGINAS = {
     descripcion:
       "Qué datos recopila FanSchedule, cómo los usa, con quién los comparte y cómo puedes eliminarlos. Los datos de tu Google Calendar no se usan para publicidad.",
     cuerpo: `      <h1>Política de privacidad</h1>
-      <p class="dato">Última actualización: 20 de octubre de 2026</p>
+      <p class="dato">Última actualización: 22 de octubre de 2026</p>
       <p>
       En FanSchedule respetamos tu privacidad. Esta página explica qué información recopilamos,
       cómo la usamos y qué control tienes sobre ella.
@@ -221,8 +221,19 @@ const PAGINAS = {
       <section>
       <h2>7. Cookies, almacenamiento y publicidad</h2>
       <p>
-      Usamos <code>localStorage</code> del navegador para mantener tu sesión
-      iniciada y recordar tus preferencias (deportes, equipos, consentimiento de email).
+      Usamos el almacenamiento de tu navegador (<code>localStorage</code>) para pocas cosas:
+      </p>
+      <ul>
+      <li>mantener tu sesión iniciada: tu identificador, tu nombre, tu correo y la credencial de la sesión;</li>
+      <li>recordar el país que usas para ver dónde transmiten los partidos;</li>
+      <li>recordar de qué enlace llegaste y qué equipo o partido te interesó, para ofrecértelo al terminar de registrarte;</li>
+      <li>la fecha en que elegiste "Ahora no" cuando te preguntamos por correos, para no volver a preguntarte en 7 días. Esa fecha no es un permiso: solo recuerda cuándo lo pospusiste.</li>
+      </ul>
+      <p>
+      Tus permisos de correo (si quieres recibir novedades y ofertas) se guardan en nuestro servidor,
+      con la fecha y la versión del texto que elegiste, no en tu navegador. Lo mismo tus deportes y
+      equipos. También usamos <code>sessionStorage</code>, que se borra al cerrar la pestaña, para
+      cosas de la visita en curso, como la página a la que ibas antes de iniciar sesión.
       </p>
       <p>
       FanSchedule usa Google AdSense, el servicio de publicidad de Google. Google —como proveedor
