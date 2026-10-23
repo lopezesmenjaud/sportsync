@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Sidebar from '../components/Sidebar'
 import CalendarConnectModal from '../components/CalendarConnectModal'
+import SeccionCorreos from '../components/SeccionCorreos'
 import { API_BASE } from '../config'
 import { apiFetch } from '../api'
 import { useEstadoGoogle, invalidarEstadoGoogle } from '../googleStatus'
@@ -198,6 +199,9 @@ export default function Profile() {
             </div>
           )}
         </div>
+
+        {/* CORREOS: los dos permisos de correo, por separado (ver SeccionCorreos) */}
+        <SeccionCorreos sectionStyle={sectionStyle} labelStyle={labelStyle} />
 
         {/* CONFIGURACIÓN */}
         <div style={sectionStyle}>
