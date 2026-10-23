@@ -3,7 +3,7 @@ import { Analytics } from '@vercel/analytics/react'
 import { useState, useEffect } from 'react'
 import { setUser, setToken, isLoggedIn, getUserId } from './auth'
 import { API_BASE } from './config'
-import { consumirDestino } from './api'
+import { consumirDestino, apiFetch } from './api'
 import { useEstadoGoogle, invalidarEstadoGoogle } from './googleStatus'
 import { PUBLIC_PATHS, isPublicPath } from './publicRoutes'
 import { capturarOrigenDeUrl, enviarOrigenSiHace } from './origen'
@@ -103,30 +103,81 @@ function RootRoute() {
   return <LandingPage />
 }
 
+// Marcas del modal de correos VIEJO en localStorage. Ya no deciden nada: quién contestó lo dice el
+// servidor (GET /api/consent). Se borran una vez al cargar la app para que no confundan a nadie.
+// try/catch porque el navegador puede bloquear el almacenamiento.
+const MARCAS_VIEJAS_DE_CORREOS = ['fanschedule_email_consent_shown', 'fanschedule_email_notif', 'fanschedule_partner_notif']
+function borrarMarcasViejasDeCorreos() {
+  for (const clave of MARCAS_VIEJAS_DE_CORREOS) {
+    try { localStorage.removeItem(clave) } catch { /* almacenamiento bloqueado: no hay nada que borrar */ }
+  }
+}
+
+// "Ahora no" pospone el modal 7 días, POR CUENTA. Esto NO es consentimiento, es cortesía para no
+// insistir: el estado de verdad sigue en el servidor, y quien pospone sigue en "nunca contestó".
+// Si se pierde (otro navegador, datos borrados, almacenamiento bloqueado), lo peor que pasa es que
+// se le pregunte una vez más.
+const DIAS_PARA_VOLVER_A_PREGUNTAR = 7
+const clavePospuesto = (userId) => `fanschedule_correos_pospuesto_${userId}`
+function pospusoHacePoco(userId) {
+  try {
+    const fecha = Date.parse(localStorage.getItem(clavePospuesto(userId)) || '')
+    return Number.isFinite(fecha) && Date.now() - fecha < DIAS_PARA_VOLVER_A_PREGUNTAR * 24 * 60 * 60 * 1000
+  } catch {
+    return false
+  }
+}
+function recordarQuePospuso(userId) {
+  try { localStorage.setItem(clavePospuesto(userId), new Date().toISOString()) } catch { /* sin almacenamiento: se le volverá a preguntar */ }
+}
+
+// Gate del consentimiento de correos. A quién se le muestra lo decide el SERVIDOR, no localStorage:
+//   - a quien no tiene fila (nunca contestó), y
+//   - a quien tiene las dos versiones en NULL (solo contestó el modal viejo amarrado).
+//   Si ya tocó al menos un permiso en el perfil, ya vio las opciones separadas: no se le muestra.
+// Mientras el GET carga, el modal cuenta como "por decidirse" (modalesEnCurso): así la pantalla de
+// seguir equipos no se adelanta y luego queda debajo. Si el GET falla, no se muestra en esta visita
+// y se deja de marcar: no se adivina. En ruta pública no se pregunta (el GET exige sesión).
 function EmailConsentGate() {
-  const [show, setShow] = useState(() => {
-    return isLoggedIn() && !localStorage.getItem('fanschedule_email_consent_shown')
-  })
-  // Solo avisa si está abierto, para que la pantalla de seguir equipos salga después.
-  useMarcarModal('correos', show)
+  const { pathname } = useLocation()
+  const userId = getUserId()
+  const activo = !isPublicPath(pathname) && isLoggedIn() && Boolean(userId)
+  const pospuesto = activo && pospusoHacePoco(userId)
+  // null mientras no hay respuesta; luego { mostrar, textos } o { mostrar: false } si falló.
+  const [respuesta, setRespuesta] = useState(null)
+  const [cerrado, setCerrado] = useState(false)
 
-  if (!show) return null
+  useEffect(() => { borrarMarcasViejasDeCorreos() }, [])
 
-  const handleAccept = () => {
-    localStorage.setItem('fanschedule_email_consent_shown', 'true')
-    localStorage.setItem('fanschedule_email_notif', 'true')
-    localStorage.setItem('fanschedule_partner_notif', 'true')
-    setShow(false)
-  }
+  useEffect(() => {
+    if (!activo || pospuesto || respuesta !== null) return
+    let vigente = true
+    apiFetch('/api/consent')
+      .then(res => res.json())
+      .then(data => {
+        if (!vigente) return
+        if (!data || !data.ok || !data.textos) return setRespuesta({ mostrar: false })
+        const nuncaEligioPorSeparado = !data.respondio || (data.versionNovedades === null && data.versionSocios === null)
+        setRespuesta({ mostrar: nuncaEligioPorSeparado, textos: data.textos })
+      })
+      .catch(() => { if (vigente) setRespuesta({ mostrar: false }) })
+    return () => { vigente = false }
+  }, [activo, pospuesto, respuesta])
 
-  const handleDecline = () => {
-    localStorage.setItem('fanschedule_email_consent_shown', 'true')
-    localStorage.setItem('fanschedule_email_notif', 'false')
-    localStorage.setItem('fanschedule_partner_notif', 'false')
-    setShow(false)
-  }
+  const porDecidirse = activo && !pospuesto && !cerrado && respuesta === null
+  const abierto = activo && !pospuesto && !cerrado && Boolean(respuesta && respuesta.mostrar)
+  // Abierto o todavía por decidirse: la pantalla de seguir equipos espera.
+  useMarcarModal('correos', porDecidirse || abierto)
 
-  return <EmailConsentModal onAccept={handleAccept} onDecline={handleDecline} />
+  if (!abierto) return null
+
+  return (
+    <EmailConsentModal
+      textos={respuesta.textos}
+      onGuardado={() => setCerrado(true)}
+      onPosponer={() => { recordarQuePospuso(userId); setCerrado(true) }}
+    />
+  )
 }
 
 // Gate de conexión de calendario: bloquea a un usuario logueado y conectado que NO otorgó
