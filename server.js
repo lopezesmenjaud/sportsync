@@ -11,6 +11,7 @@ const {
   interpretarCuerpo: interpretarCuerpoConsent,
   armarEscritura: armarEscrituraConsent,
   estadoDesdeFila: estadoConsentDesdeFila,
+  textosVigentes: textosConsentVigentes,
 } = require("./src/services/consentimiento");
 const { subscriptionRepository } = require("./src/repositories/subscriptionRepositorySqlite");
 const { tennisPlayerRepository } = require("./src/repositories/tennisPlayerRepositorySqlite");
@@ -2013,7 +2014,7 @@ function columnasDeConsentListas() {
   return consentColumnasListas;
 }
 
-// GET: el consentimiento de QUIEN LLAMA. Tres estados, sin adivinar:
+// GET: el consentimiento de QUIEN LLAMA, más los textos vigentes. Tres estados, sin adivinar:
 //   respondio: false  -> nunca contestó (no hay fila); todo en null.
 //   respondio: true   -> cada permiso true/false, con su versión (null = modal viejo) y su fecha.
 app.get("/api/consent", requireUser(), async (req, res) => {
@@ -2027,7 +2028,8 @@ app.get("/api/consent", requireUser(), async (req, res) => {
         (err, row) => (err ? reject(err) : resolve(row))
       );
     });
-    res.json({ ok: true, ...estadoConsentDesdeFila(fila) });
+    // textos: lo que la app tiene que pintar y la versión que tiene que mandar al guardar.
+    res.json({ ok: true, ...estadoConsentDesdeFila(fila), textos: textosConsentVigentes() });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }

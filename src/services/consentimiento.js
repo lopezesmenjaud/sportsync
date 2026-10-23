@@ -117,4 +117,29 @@ function estadoDesdeFila(fila) {
   };
 }
 
-module.exports = { PERMISOS, COLUMNAS_NUEVAS, interpretarCuerpo, armarEscritura, estadoDesdeFila, motivoVersionInvalida };
+// Las versiones que muestran HOY el perfil y el modal. Cuando cambie un texto, se agrega una versión
+// nueva en textosConsentimiento.json y se cambia aquí; la vieja se queda en el archivo.
+const VERSION_VIGENTE = "2026-10-dos-permisos";
+const VERSION_RECONFIRMACION = "2026-10-dos-permisos-reconfirmacion";
+
+// Los textos que pinta la app, tal cual están aprobados, con la versión que tiene que mandar al
+// guardar. Viajan desde el servidor para que exista UNA sola copia: si la app tuviera la suya y
+// algún día difiriera, la versión guardada ya no diría lo que la persona leyó de verdad.
+// null si alguna versión no está aprobada (la app entonces no muestra la sección).
+function textosVigentes() {
+  const v = TEXTOS.versiones && TEXTOS.versiones[VERSION_VIGENTE];
+  const r = TEXTOS.versiones && TEXTOS.versiones[VERSION_RECONFIRMACION];
+  if (!v || v.aprobada !== true || !r || r.aprobada !== true) return null;
+  return {
+    version: VERSION_VIGENTE,
+    etiquetas: v.etiquetas,
+    modal: v.pantallas.modal,
+    perfil: v.pantallas.perfil,
+    reconfirmacion: { version: VERSION_RECONFIRMACION, ...r.pantallas.perfil },
+  };
+}
+
+module.exports = {
+  PERMISOS, COLUMNAS_NUEVAS, interpretarCuerpo, armarEscritura, estadoDesdeFila, motivoVersionInvalida,
+  textosVigentes, VERSION_VIGENTE, VERSION_RECONFIRMACION,
+};
