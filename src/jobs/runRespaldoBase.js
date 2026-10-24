@@ -255,7 +255,7 @@ function correr(CONFIRM, RETENER) {
   }
 }
 
-module.exports = { respaldarBase };
+module.exports = { respaldarBase, dbPath, dirRespaldos, patronRespaldo };
 
 // Solo si se corre a mano (node src/jobs/runRespaldoBase.js). Importado desde el scheduler no
 // entra aquí: ni lee CONFIRM/RETENER ni toca el código de salida del proceso.
