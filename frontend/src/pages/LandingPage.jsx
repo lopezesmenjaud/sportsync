@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { API_BASE } from '../config'
 import { consumirSesionExpirada } from '../api'
 import { invalidarEstadoGoogle } from '../googleStatus'
@@ -6,14 +6,29 @@ import AvisoPermisoCalendario from '../components/AvisoPermisoCalendario'
 import CalendarConnectModal from '../components/CalendarConnectModal'
 import { useAnuncios } from '../ads'
 
-const TICKER_ITEMS = [
-  'Real Madrid vs Barcelona · Hoy 21:00',
-  'GP de Bahrein · Sáb 15:00',
-  'Lakers vs Warriors · Mié 20:00',
-  'Chiefs vs Eagles · Dom 18:30',
-  'Manchester City vs Arsenal · Mar 20:45',
-  'Verstappen vs Hamilton · GP Miami',
-]
+// Las tarjetas y la cinta muestran partidos REALES, que el navegador pide a
+// /api/portada/partidos (src/routes/portada.js en el backend). Antes eran textos escritos a mano
+// con "Hoy" y "En vivo", que dejaban de ser ciertos al día siguiente.
+//
+// El HTML que se genera al compilar (scripts/generarPortada.mjs) es esta página SIN datos: no
+// lleva ni una tarjeta. Así nada del HTML puede quedarse anunciando un partido que ya se jugó.
+//
+// Fechas SIEMPRE completas y en hora del centro de México, la misma zona que usan las páginas
+// /partido/. Nada de "Hoy", "Mañana" ni "En 2 horas".
+const ZONA = 'America/Mexico_City'
+const FECHA_LARGA = new Intl.DateTimeFormat('es-MX', { timeZone: ZONA, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+const HORA_LARGA = new Intl.DateTimeFormat('es-MX', { timeZone: ZONA, hour: 'numeric', minute: '2-digit', hour12: true })
+const FECHA_CORTA = new Intl.DateTimeFormat('es-MX', { timeZone: ZONA, day: 'numeric', month: 'short', year: 'numeric' })
+const HORA_CORTA = new Intl.DateTimeFormat('es-MX', { timeZone: ZONA, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+
+const fechaDeTarjeta = (iso) => `${FECHA_LARGA.format(new Date(iso))} · ${HORA_LARGA.format(new Date(iso))}`
+const fechaDeCinta = (iso) => `${FECHA_CORTA.format(new Date(iso))} · ${HORA_CORTA.format(new Date(iso))}`
+
+// Lo que ya empezó se descarta en el navegador, con su propio reloj: la respuesta del backend
+// puede tener unos minutos de caché.
+const yaEmpezo = (p, ahora) => !(Date.parse(p.inicioUtc) > ahora)
+
+const COLORES_DE_TARJETA = ['#06D6A0', '#FF5C00', '#c084fc', '#10B1C7']
 
 const FEATURES = [
   { num: '01', title: 'Sincronización automática', desc: 'Tus partidos en Google Calendar sin hacer nada. Si el horario cambia, tu calendario se actualiza solo.' },
@@ -21,13 +36,6 @@ const FEATURES = [
   { num: '03', title: 'Busca boletos', desc: 'En cada partido te dejamos lista la búsqueda en Ticketmaster y StubHub para que encuentres entradas.' },
   { num: '04', title: 'Eventos cerca de ti', desc: 'Comparte tu ubicación o escribe tu ciudad y descubre qué partidos de las ligas de tu país se juegan cerca en los próximos 30 días.' },
   { num: '05', title: 'Planea tu viaje', desc: '¿Viajando? Ingresa fechas y destino para ver qué partidos de las ligas de ese país se juegan durante tu estancia, dentro de los próximos 30 días.' },
-]
-
-const EVENTS = [
-  { sport: 'Fútbol · La Liga', teams: 'Real Madrid vs Barcelona', meta: 'Hoy · 21:00 · Santiago Bernabéu', status: 'En vivo', statusClass: 'status-live' },
-  { sport: 'Fórmula 1', teams: 'GP de Bahrein — Clasificación', meta: 'Sáb · 15:00 · Circuito de Sakhir', status: 'En 2 horas', statusClass: 'status-soon' },
-  { sport: 'NBA', teams: 'Lakers vs Golden State Warriors', meta: 'Mié · 20:00 · Crypto.com Arena', status: 'Programado', statusClass: 'status-sched' },
-  { sport: 'NFL', teams: 'Kansas City Chiefs vs Eagles', meta: 'Dom · 18:30 · Arrowhead Stadium', status: 'Programado', statusClass: 'status-sched' },
 ]
 
 const SPORTS = ['Fútbol', 'NFL', 'NBA', 'MLB', 'Fórmula 1', 'Y más']
@@ -46,7 +54,30 @@ export default function LandingPage() {
   // petición y nunca está vacío. Califica desde el primer render.
   useAnuncios(true)
 
-  const tickerRef = useRef(null)
+  // null = todavía no llegan (o no llegaron). Mientras tanto la página se pinta igual que el HTML
+  // generado: sin tarjetas y sin cinta. Si el backend no responde, se queda así.
+  const [partidos, setPartidos] = useState(null)
+  const [ahora, setAhora] = useState(() => Date.now())
+
+  useEffect(() => {
+    let vigente = true
+    // fetch pelón y no apiFetch: son datos públicos, no hay por qué mandar el token de sesión.
+    fetch(`${API_BASE}/api/portada/partidos`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((datos) => {
+        if (!vigente || !datos) return
+        setPartidos({ tarjetas: Array.isArray(datos.tarjetas) ? datos.tarjetas : [], cinta: Array.isArray(datos.cinta) ? datos.cinta : [] })
+        setAhora(Date.now())
+      })
+      .catch(() => { /* sin partidos: la sección no se muestra */ })
+    // Cada minuto se vuelve a mirar el reloj, para que quien deja la pestaña abierta no siga
+    // viendo un partido que ya empezó.
+    const reloj = setInterval(() => setAhora(Date.now()), 60 * 1000)
+    return () => { vigente = false; clearInterval(reloj) }
+  }, [])
+
+  const tarjetas = (partidos?.tarjetas || []).filter((p) => !yaEmpezo(p, ahora))
+  const cinta = (partidos?.cinta || []).filter((p) => !yaEmpezo(p, ahora))
 
   // Si llegamos aquí porque la sesión se venció, hay que decirlo. Sin esto la persona aterriza en
   // el landing sin explicación y parece que la app la desconectó sola. Se lee una sola vez.
@@ -103,25 +134,44 @@ export default function LandingPage() {
         <AvisoPermisoCalendario discreto />
       </div>
 
-      {/* Ticker */}
-      <div style={{ background: '#142238', padding: '14px 0', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-        <div style={{ display: 'inline-flex', gap: 48, animation: 'ticker 20s linear infinite' }}>
-          {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
-            <span key={i} style={{ fontSize: 13, fontWeight: 500, color: '#fff', flexShrink: 0 }}>{item}</span>
-          ))}
-        </div>
-      </div>
-
-      {/* Events preview */}
-      <div style={{ background: '#0F1A2E', padding: '48px 28px', display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
-        {EVENTS.map((e, i) => (
-          <div key={i} style={{ background: '#142238', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: '18px 20px', minWidth: 200, flex: 1, maxWidth: 220 }}>
-            <div style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: 10, color: i === 0 ? '#06D6A0' : i === 1 ? '#FF5C00' : i === 2 ? '#c084fc' : '#10B1C7' }}>{e.sport}</div>
-            <div style={{ fontSize: 14, fontWeight: 500, color: '#fff', marginBottom: 8, lineHeight: 1.4 }}>{e.teams}</div>
-            <div style={{ fontSize: 12, color: '#8899AA' }}>{e.meta}</div>
-            <div style={{ display: 'inline-block', marginTop: 10, fontSize: 11, padding: '3px 10px', borderRadius: 20, background: e.statusClass === 'status-live' ? 'rgba(6,214,160,0.15)' : e.statusClass === 'status-soon' ? 'rgba(255,92,0,0.15)' : 'rgba(255,255,255,0.08)', color: e.statusClass === 'status-live' ? '#06D6A0' : e.statusClass === 'status-soon' ? '#FF5C00' : 'rgba(255,255,255,0.5)' }}>{e.status}</div>
+      {/* Cinta. Solo existe si hay partidos que anunciar. Va dos veces seguida para que el
+          desplazamiento dé la vuelta sin salto; la segunda copia es solo decorado y se le oculta
+          al lector de pantalla, que si no leería cada partido dos veces. */}
+      {cinta.length > 0 && (
+        <div style={{ background: '#142238', padding: '14px 0', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+          <div style={{ display: 'inline-flex', animation: `ticker ${Math.max(20, cinta.length * 5)}s linear infinite` }}>
+            {[false, true].map((copia) => (
+              <div key={String(copia)} aria-hidden={copia || undefined} style={{ display: 'inline-flex', gap: 48, paddingRight: 48 }}>
+                {cinta.map((p) => (
+                  <span key={p.id} style={{ fontSize: 13, fontWeight: 500, color: '#fff', flexShrink: 0 }}>{p.nombre} · {fechaDeCinta(p.inicioUtc)}</span>
+                ))}
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
+      )}
+
+      {/* Próximos partidos. Cada tarjeta enlaza a su página /partido/, que sirve el backend: por
+          eso <a> y no <Link>. El enlace a /equipos va SIEMPRE, haya partidos o no: es parte del
+          HTML generado. */}
+      <div style={{ background: '#0F1A2E', padding: '48px 28px' }}>
+        {tarjetas.length > 0 && (
+          <>
+            <div style={{ fontSize: 12, color: '#8899AA', textAlign: 'center', marginBottom: 16 }}>Próximos partidos · Horarios del centro de México</div>
+            <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {tarjetas.map((p, i) => (
+                <a key={p.id} href={p.url} style={{ display: 'block', textDecoration: 'none', background: '#142238', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: '18px 20px', minWidth: 200, flex: 1, maxWidth: 220 }}>
+                  <div style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: 10, color: COLORES_DE_TARJETA[i % COLORES_DE_TARJETA.length] }}>{p.competencia}</div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: '#fff', marginBottom: 8, lineHeight: 1.4 }}>{p.nombre}</div>
+                  <div style={{ fontSize: 12, color: '#8899AA', lineHeight: 1.5 }}>{fechaDeTarjeta(p.inicioUtc)}</div>
+                </a>
+              ))}
+            </div>
+          </>
+        )}
+        <p style={{ fontSize: 14, color: '#8899AA', textAlign: 'center', marginTop: tarjetas.length > 0 ? 24 : 0 }}>
+          Horarios de cada equipo → <a href="/equipos" style={{ color: '#10B1C7', fontWeight: 500, textDecoration: 'none' }}>Ver todos los equipos</a>
+        </p>
       </div>
 
       {/* Features */}
