@@ -32,6 +32,7 @@ const { esClaveDeCategoria, categorias: categoriasTenis, esClaveDeCircuito, dond
 const { partidoPublicoHandler, equipoPublicoHandler, sitemapHandler, seguirHandler, dondeVerVerificado, nombreDeCompetencia } = require("./src/routes/partidoPublico");
 const { acercaHandler, contactoHandler, privacyHandler, termsHandler } = require("./src/routes/paginasInfo");
 const { directorioEquiposHandler } = require("./src/routes/directorioEquipos");
+const { portadaPartidosHandler } = require("./src/routes/portada");
 const {
   esClaveDeSuscripcionSelecciones,
   competenciasDeSuscripcion,
@@ -1139,6 +1140,11 @@ app.get("/terms", termsHandler);
 // de Google pregunta aquí. Solo lectura y datos públicos (nombres), sin sesión. La suscripción NO
 // se crea aquí: la crea la app con el POST /subscriptions de siempre.
 app.get("/api/seguir", seguirHandler);
+
+// ── Partidos de la portada ──
+// Las tarjetas y la cinta de fanschedule.com/. Solo lectura y datos públicos, sin sesión. Lo pide
+// el navegador; el HTML de la portada que se genera al compilar no lleva partidos.
+app.get("/api/portada/partidos", portadaPartidosHandler);
 
 // ── Sitemap ──
 // Se genera EN EL MOMENTO de cada petición y NUNCA se escribe a disco: el día que entre una

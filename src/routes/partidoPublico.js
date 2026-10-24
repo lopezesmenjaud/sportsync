@@ -1899,6 +1899,8 @@ module.exports = {
   nombreDeCompetencia,
   momentoDelPartido,
   MOMENTO,
+  // Para los partidos de la portada (src/routes/portada.js): la misma regla que el sitemap.
+  seIndexaPartido,
   esIndexable,
   esc,
   // Para las páginas informativas (src/routes/paginasInfo.js): mismo estilo, barra y pie.
