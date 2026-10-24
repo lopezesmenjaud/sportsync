@@ -93,7 +93,9 @@ export default function LandingPage() {
   }
 
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif', color: '#fff' }}>
+    // data-pagina: la marca con que scripts/verificarBuild.mjs reconoce la portada en el HTML
+    // generado. Si se quita, el build truena a propósito.
+    <div data-pagina="portada" style={{ fontFamily: 'system-ui, sans-serif', color: '#fff' }}>
 
       {sesionExpirada && (
         <div style={{ background: '#F18006', color: '#fff', padding: '12px 28px', fontSize: 14, textAlign: 'center' }}>

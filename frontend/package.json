@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && vite build --ssr src/portadaSSR.jsx --outDir dist-ssr && node scripts/generarPortada.mjs && node scripts/verificarBuild.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

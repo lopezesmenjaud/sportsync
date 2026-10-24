@@ -26,6 +26,6 @@
       "destination": "https://sportsync-awqq.onrender.com/privacy" },
     { "source": "/terms",
       "destination": "https://sportsync-awqq.onrender.com/terms" },
-    { "source": "/(.*)", "destination": "/" }
+    { "source": "/(.*)", "destination": "/app.html" }
   ]
 }

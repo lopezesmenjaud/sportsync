@@ -1,4 +1,6 @@
-const STORAGE_KEY = 'fanschedule_user'
+// Exportada para el script de la portada (scripts/generarPortada.mjs), que lee esta misma llave
+// antes de que cargue React. Así el nombre vive en un solo lugar.
+export const STORAGE_KEY = 'fanschedule_user'
 // Token de sesión opaco que emite el backend en el callback de OAuth. Todavía NO se manda en
 // ninguna petición: esta etapa solo lo captura y lo guarda (fase A4, etapa A).
 const TOKEN_KEY = 'fanschedule_token'
