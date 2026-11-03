@@ -23,10 +23,17 @@
 //
 // La página dice con precisión qué tiene: "las carreras que tenemos registradas", no "el
 // calendario completo", y nunca "la temporada terminó". Medido en producción el 2 nov 2026 (90
-// sesiones de F1): la base EMPIEZA el 22 may 2026 (faltan Australia, China, Japón, Bahréin,
-// Arabia, Miami y Emilia-Romaña) y TERMINA el 29 nov en Catar (falta Abu Dabi, que sí está en
-// f1.json). Llamarlo calendario de la temporada sería prometer de más. Si algún día se rellena la
-// temporada completa, esta redacción sigue siendo cierta.
+// sesiones de F1): la base tiene 18 de las 23 carreras de 2026 (15 corridas + 3 próximas).
+// Faltan cinco, según el calendario real que verificó Julio ese día:
+//   - Australia (6-8 mar), China (13-15 mar), Japón (27-29 mar) y Miami (1-3 may): son de antes
+//     del 22 may, cuando empiezan los datos de la base. El sync baja hoy→+30 días, así que esas
+//     no van a llegar solas.
+//   - Abu Dabi (4-6 dic): llega sola en cuanto entre a la ventana de 30 días del sync.
+// No faltan, aunque lo parezca: Arabia Saudita se canceló, Emilia-Romaña salió del calendario
+// después de 2025, y Baréin sí está (se canceló en abril, se reinstaló y se corrió en Sepang,
+// Malasia, el 2-4 oct; por eso su fecha es de octubre).
+// Llamarlo calendario de la temporada sería prometer de más. Si algún día se rellena la temporada
+// completa, esta redacción sigue siendo cierta.
 //
 // Este módulo NO llama a initializeDatabase(): solo lee la tabla matches.
 
