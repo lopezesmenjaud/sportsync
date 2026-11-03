@@ -154,7 +154,8 @@ function aSlug(texto) {
 // página se queda EXACTAMENTE como hoy, en inglés: el día que llegue un gran premio nuevo que no
 // esté en la tabla, la página sigue funcionando en vez de inventarse un nombre.
 //
-// Da { nombre, slug, indexar }:
+// Da { nombre, slug, indexar, gpSlug, gpNombre, sesion }. Los tres últimos dicen a qué Gran Premio
+// pertenece y qué sesión es (null = la carrera); los usa /formula-1 para agruparlas:
 //   "Azerbaijan Grand Prix"                   -> Gran Premio de Azerbaiyán              (carrera)
 //   "Azerbaijan Grand Prix Qualifying"        -> Clasificación del Gran Premio de ...
 //   "Azerbaijan Grand Prix Sprint Qualifying" -> Clasificación del Sprint del Gran Premio de ...
@@ -168,7 +169,7 @@ function resolverF1(eventName) {
   const resto = texto.slice(gp.base.length).trim();
 
   // Sin resto es la carrera misma.
-  if (!resto) return { nombre: gp.nombre, slug: gp.slug, indexar: true };
+  if (!resto) return { nombre: gp.nombre, slug: gp.slug, indexar: true, gpSlug: gp.slug, gpNombre: gp.nombre, sesion: null };
 
   // EN EL ORDEN DEL ARCHIVO, que no es casual: "Sprint Qualifying" va antes que "Sprint" y que
   // "Qualifying". Al revés, una clasificación del sprint se anunciaría como un sprint a secas.
@@ -181,6 +182,9 @@ function resolverF1(eventName) {
     nombre: `${sesion.nombre} del ${gp.nombre}`,
     slug: `${gp.slug}-${sesion.slug}`,
     indexar: sesion.indexar,
+    gpSlug: gp.slug,
+    gpNombre: gp.nombre,
+    sesion: sesion.slug,
   };
 }
 
@@ -469,6 +473,7 @@ const ESTILOS = `
       justify-content: space-between;
       gap: 16px;
     }
+    .barra-enlaces { display: flex; gap: 16px; }
     .barra-enlace {
       color: var(--azul);
       font-size: 15px;
@@ -657,7 +662,10 @@ function barra() {
   return `    <header class="barra">
       <div class="barra-interior">
         <a class="logo" href="/"><span class="logo-fan">Fan</span><span class="logo-schedule">Schedule</span></a>
-        <a class="barra-enlace" href="/equipos">Equipos</a>
+        <nav class="barra-enlaces">
+          <a class="barra-enlace" href="/formula-1">Fórmula 1</a>
+          <a class="barra-enlace" href="/equipos">Equipos</a>
+        </nav>
       </div>
     </header>`;
 }
@@ -667,6 +675,7 @@ function pie() {
       <nav class="pie-enlaces">
         <a href="/">Inicio</a>
         <a href="/equipos">Equipos</a>
+        <a href="/formula-1">Fórmula 1</a>
         <a href="/acerca">Acerca de</a>
         <a href="/contacto">Contacto</a>
         <a href="/privacy">Privacidad</a>
@@ -1795,7 +1804,11 @@ async function direccionesDelSitemap(ahora = Date.now()) {
   // Las páginas informativas salen de su propio módulo (src/routes/paginasInfo.js). Se pide aquí
   // adentro y no arriba porque ese módulo importa éste: arriba sería un require circular.
   const { RUTAS_INFO } = require("./paginasInfo");
-  const urls = [`${SITIO}/`, `${SITIO}/equipos`, ...RUTAS_INFO.map((ruta) => `${SITIO}${ruta}`)];
+  // /formula-1 entra con la MISMA condición que decide su noindex. Se pide aquí adentro por lo mismo
+  // que paginasInfo: ese módulo importa éste.
+  const { formula1Publicable, RUTA: RUTA_F1 } = require("./formula1");
+  const conF1 = (await formula1Publicable(ahora)) ? [`${SITIO}${RUTA_F1}`] : [];
+  const urls = [`${SITIO}/`, `${SITIO}/equipos`, ...conF1, ...RUTAS_INFO.map((ruta) => `${SITIO}${ruta}`)];
   const fijas = urls.length;
 
   const equipos = equiposConProximos(partidos);
@@ -1915,6 +1928,12 @@ module.exports = {
   MOMENTO,
   // Para los partidos de la portada (src/routes/portada.js): la misma regla que el sitemap.
   seIndexaPartido,
+  // Para /formula-1 (src/routes/formula1.js): los mismos nombres, el mismo cuadro de registro y la
+  // misma página de error que /partido/.
+  resolverF1,
+  cuadroDeRegistro,
+  SCRIPT_CUADRO,
+  paginaNoEncontrada,
   esIndexable,
   esc,
   // Para las páginas informativas (src/routes/paginasInfo.js): mismo estilo, barra y pie.

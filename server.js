@@ -33,6 +33,7 @@ const { partidoPublicoHandler, equipoPublicoHandler, sitemapHandler, seguirHandl
 const { acercaHandler, contactoHandler, privacyHandler, termsHandler } = require("./src/routes/paginasInfo");
 const { directorioEquiposHandler } = require("./src/routes/directorioEquipos");
 const { portadaPartidosHandler } = require("./src/routes/portada");
+const { formula1Handler } = require("./src/routes/formula1");
 const {
   esClaveDeSuscripcionSelecciones,
   competenciasDeSuscripcion,
@@ -1126,6 +1127,12 @@ app.get("/equipo/:slug", equipoPublicoHandler);
 // La puerta a las páginas de equipo: sin él no había ningún enlace desde el sitio hacia ellas y
 // Google las tenía como "descubiertas, sin indexar". Lista los mismos equipos que el sitemap.
 app.get("/equipos", directorioEquiposHandler);
+
+// ── Página PÚBLICA de Fórmula 1 ──
+// Las carreras de F1 que tenemos registradas. La F1 no aparecía en /equipos (un Gran Premio no
+// tiene equipos) y sus páginas /partido/ quedaban sueltas. Vercel la reenvía aquí
+// (frontend/vercel.json), antes del catch-all de la app.
+app.get("/formula-1", formula1Handler);
 
 // ── Páginas informativas PÚBLICAS ──
 // Antes eran componentes de React y un buscador sin JavaScript recibía cero palabras. Texto fijo,

@@ -242,6 +242,8 @@ ${barra()}
       <p class="dato">${totalEquipos} ${totalEquipos === 1 ? "equipo" : "equipos"} en ${
         competencias.length
       } ${competencias.length === 1 ? "competencia" : "competencias"}.</p>
+      <p class="dato">¿Buscas la Fórmula 1? Una carrera no tiene equipos, así que no sale en esta
+      lista: sus horarios están en <a href="/formula-1">Fórmula 1: horarios de las carreras</a>.</p>
 ${indiceHtml}
 ${secciones}${vacio}
     </main>
