@@ -260,6 +260,20 @@ function vistaDelPartido(match) {
     competencia,
     // Las prácticas libres no las busca nadie y son casi cien páginas de relleno al año. Se
     // sirven igual —quien tenga el enlace la ve— pero no entran al índice.
+    //
+    // DEFECTO CONOCIDO, sin corregir a propósito (anotado el 2 nov 2026): falla hacia el lado
+    // INSEGURO. Un evento de F1 que resolverF1 no reconoce (f1 === null: un Gran Premio que no
+    // está en f1.json, o una sesión con un sufijo nuevo) cae en `true` y se INDEXA, con el nombre
+    // del proveedor en inglés. O sea que justo lo que no sabemos nombrar es lo que sale a Google.
+    // Pasó con "São Paulo Grand Prix": la tabla decía "Sao", las tres prácticas entraron al
+    // sitemap en inglés. Es la misma lección que la lista blanca de FUENTES_VERIFICADAS: lo no
+    // reconocido debería ir a noindex hasta que alguien lo mire.
+    // Si se invierte (F1 no reconocido -> false), lo que cambia, y nada más:
+    //   - esas páginas siguen abriendo, pero con noindex y fuera del sitemap;
+    //   - salen de las tarjetas de la portada y de /formula-1 (ésta ya los deja fuera);
+    //   - un Gran Premio NUEVO desaparece de Google en silencio hasta que se agregue a f1.json.
+    //     Por eso invertirlo pide también un console.warn (una vez por nombre) aquí mismo.
+    // Las demás competencias no cambian: f1 solo existe para la clave de F1.
     indexable: f1 ? f1.indexar : true,
     // Clave de atribución del botón de registro. Sale de la competencia ya en su forma pública,
     // así que un partido de Liga MX manda "seo-liga-mx" y no "seo-mexican-primera-league".

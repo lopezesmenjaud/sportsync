@@ -35,6 +35,7 @@
     {"base":"Mexico City Grand Prix","nombre":"Gran Premio de México","slug":"gp-mexico"},
     {"base":"Brazilian Grand Prix","nombre":"Gran Premio de Brasil","slug":"gp-brasil"},
     {"base":"Sao Paulo Grand Prix","nombre":"Gran Premio de Brasil","slug":"gp-brasil"},
+    {"base":"São Paulo Grand Prix","nombre":"Gran Premio de Brasil","slug":"gp-brasil"},
     {"base":"Las Vegas Grand Prix","nombre":"Gran Premio de Las Vegas","slug":"gp-las-vegas"},
     {"base":"Qatar Grand Prix","nombre":"Gran Premio de Catar","slug":"gp-catar"},
     {"base":"Abu Dhabi Grand Prix","nombre":"Gran Premio de Abu Dabi","slug":"gp-abu-dabi"}
