@@ -238,6 +238,10 @@ export default function LandingPage() {
           Equipos
         </a>
         <span style={{ fontSize: 13, color: '#8899AA' }}>·</span>
+        <a href="/formula-1" style={{ fontSize: 13, color: '#8899AA', textDecoration: 'none' }}>
+          Fórmula 1
+        </a>
+        <span style={{ fontSize: 13, color: '#8899AA' }}>·</span>
         <a href="/acerca" style={{ fontSize: 13, color: '#8899AA', textDecoration: 'none' }}>
           Acerca de
         </a>
